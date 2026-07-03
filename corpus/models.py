@@ -145,18 +145,24 @@ class Text(models.Model):
     bibtex_citation = models.TextField(blank=True)
     copyright = models.TextField(blank=True)
     source = models.TextField(blank=True)
-    audio_mode = models.CharField(max_length=32, blank=True)  # diarized|segmented|""
+    # The TEXT @audio attribute: usually a mode (diarized|segmented) but some corpora
+    # put a filename or full URL here, so it is generously sized.
+    audio_mode = models.CharField(max_length=512, blank=True)
     glottocode = models.CharField(max_length=32, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [
+            # One Text per source file. The XML @id is NOT unique per corpus
+            # (e.g. Wikipedias has distinct articles whose ids collide), so the
+            # file path is the natural key.
             models.UniqueConstraint(
-                fields=["corpus", "text_xml_id"], name="uniq_text_per_corpus"
+                fields=["corpus", "source_path"], name="uniq_text_per_corpus_path"
             )
         ]
         indexes = [
             models.Index(fields=["corpus", "language"]),
+            models.Index(fields=["text_xml_id"]),
         ]
 
     def __str__(self) -> str:
