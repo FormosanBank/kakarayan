@@ -1,0 +1,22 @@
+# Canonical reproducible database for local dev / CI / prod parity.
+# Requires Docker. On machines without Docker, point DATABASE_URL at any
+# running PostgreSQL 16 (or 17 — Django is portable across these).
+services:
+  db:
+    image: postgres:16.9
+    environment:
+      POSTGRES_USER: kakarayan
+      POSTGRES_PASSWORD: kakarayan
+      POSTGRES_DB: kakarayan
+    ports:
+      - "5432:5432"
+    volumes:
+      - kakarayan_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kakarayan"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  kakarayan_pgdata:
