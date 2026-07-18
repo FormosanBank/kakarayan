@@ -2,12 +2,12 @@
 
 import pytest
 
-from corpus.models import Token, Translation
+from corpus.models import Token
 from corpus.views.dictionary import (
-    MIN_Q_MEANING,
-    MIN_Q_WORD,
     _XML_LANG_EN,
     _XML_LANG_ZH,
+    MIN_Q_MEANING,
+    MIN_Q_WORD,
     _assemble_dict_results,
     _run_search_meaning,
     _run_search_word,
@@ -100,8 +100,10 @@ class TestDistinctOnDict:
             position=5,
         )
         qs = _run_search_word("kilim", "", "")
-        results, total_count, total_pages = _assemble_dict_results(qs, page=1, preferred_lang=_XML_LANG_EN)
-        kilim_results = [r for r in results if r['token'].surface_norm == "kilim"]
+        results, total_count, total_pages = _assemble_dict_results(
+            qs, page=1, preferred_lang=_XML_LANG_EN
+        )
+        kilim_results = [r for r in results if r["token"].surface_norm == "kilim"]
         assert len(kilim_results) == 1
 
     def test_pagination_returns_different_rows(self, db, amis, dialect_amis, corpus_a, run):
@@ -111,24 +113,37 @@ class TestDistinctOnDict:
         from corpus.views.dictionary import PAGE_SIZE_DICT
 
         text = Text.objects.create(
-            corpus=corpus_a, language=amis, dialect=dialect_amis,
-            ingestion_run=run, text_xml_id="p-test", source_path="p/test.xml", xml_lang="ami",
+            corpus=corpus_a,
+            language=amis,
+            dialect=dialect_amis,
+            ingestion_run=run,
+            text_xml_id="p-test",
+            source_path="p/test.xml",
+            xml_lang="ami",
         )
         for i in range(PAGE_SIZE_DICT + 5):
             surface = f"word{i:03d}"
-            sentence = S.objects.create(text=text, sentence_xml_id=f"p.s{i}", position=i, token_count=1)
+            sentence = S.objects.create(
+                text=text, sentence_xml_id=f"p.s{i}", position=i, token_count=1
+            )
             Token.objects.create(
-                sentence=sentence, surface_norm=surface, surface_standard=surface,
-                language=amis, dialect=dialect_amis, corpus=corpus_a, position=0,
+                sentence=sentence,
+                surface_norm=surface,
+                surface_standard=surface,
+                language=amis,
+                dialect=dialect_amis,
+                corpus=corpus_a,
+                position=0,
             )
 
         qs = _run_search_word("word", "", "")
-        p1, total_count, total_pages = _assemble_dict_results(qs, page=1, preferred_lang=_XML_LANG_EN)
+        p1, total_count, total_pages = _assemble_dict_results(
+            qs, page=1, preferred_lang=_XML_LANG_EN
+        )
         p2, _, _ = _assemble_dict_results(qs, page=2, preferred_lang=_XML_LANG_EN)
 
         assert total_count == PAGE_SIZE_DICT + 5
         assert total_pages == 2
-        p1_ids = {r['token'].pk for r in p1}
-        p2_ids = {r['token'].pk for r in p2}
+        p1_ids = {r["token"].pk for r in p1}
+        p2_ids = {r["token"].pk for r in p2}
         assert p1_ids.isdisjoint(p2_ids)
-

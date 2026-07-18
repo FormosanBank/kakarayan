@@ -1,7 +1,5 @@
 """Tests for the normalization invariants documented in CLAUDE.md."""
 
-import pytest
-
 from corpus.ingestion.normalize import normalize_gloss, normalize_surface, tokenize
 
 
@@ -30,6 +28,7 @@ def test_diacritics_preserved():
 def test_nfc_normalization():
     # Composed vs decomposed forms should produce the same surface_norm
     import unicodedata
+
     composed = "á"
     decomposed = unicodedata.normalize("NFD", composed)
     assert normalize_surface(composed) == normalize_surface(decomposed)

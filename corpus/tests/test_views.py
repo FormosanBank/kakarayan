@@ -2,7 +2,6 @@
 
 import pytest
 
-
 HTMX_HEADERS = {"HTTP_HX_REQUEST": "true"}
 
 
@@ -103,8 +102,9 @@ class TestDictionarySearch:
     def test_meaning_search_zh(self, client, sentence_with_tokens):
         # Single CJK char is valid (min_len=1 for CJK); fixture has xml_lang='zho'
         # Must send zh Accept-Language so direction coercion allows dir=zh.
-        response = client.get("/search/?q=找&dir=zh", **HTMX_HEADERS,
-                              HTTP_ACCEPT_LANGUAGE="zh-Hant,zh;q=0.9")
+        response = client.get(
+            "/search/?q=找&dir=zh", **HTMX_HEADERS, HTTP_ACCEPT_LANGUAGE="zh-Hant,zh;q=0.9"
+        )
         assert "dict-card" in response.content.decode()
 
     def test_meaning_short_query_empty(self, client, sentence_with_tokens):
@@ -127,16 +127,29 @@ class TestDictionarySearch:
 class TestPagination:
     def _create_many_tokens(self, db, amis, dialect_amis, corpus_a, run, n):
         from corpus.models import Sentence, Text, Token
+
         text = Text.objects.create(
-            corpus=corpus_a, language=amis, dialect=dialect_amis,
-            ingestion_run=run, text_xml_id="pg-test", source_path="pg/test.xml", xml_lang="ami",
+            corpus=corpus_a,
+            language=amis,
+            dialect=dialect_amis,
+            ingestion_run=run,
+            text_xml_id="pg-test",
+            source_path="pg/test.xml",
+            xml_lang="ami",
         )
         for i in range(n):
             surface = f"pgwd{i:04d}"
-            sentence = Sentence.objects.create(text=text, sentence_xml_id=f"pg.s{i}", position=i, token_count=1)
+            sentence = Sentence.objects.create(
+                text=text, sentence_xml_id=f"pg.s{i}", position=i, token_count=1
+            )
             Token.objects.create(
-                sentence=sentence, surface_norm=surface, surface_standard=surface,
-                language=amis, dialect=dialect_amis, corpus=corpus_a, position=0,
+                sentence=sentence,
+                surface_norm=surface,
+                surface_standard=surface,
+                language=amis,
+                dialect=dialect_amis,
+                corpus=corpus_a,
+                position=0,
             )
 
     def test_no_pagination_for_small_result_set(self, client, sentence_with_tokens):
@@ -149,24 +162,23 @@ class TestPagination:
         self, client, db, amis, dialect_amis, corpus_a, run
     ):
         from corpus.views.dictionary import PAGE_SIZE_DICT
+
         self._create_many_tokens(db, amis, dialect_amis, corpus_a, run, PAGE_SIZE_DICT + 5)
         response = client.get("/search/?q=pgwd", **HTMX_HEADERS)
         assert "kk-pagination" in response.content.decode()
 
-    def test_page_2_returns_different_results(
-        self, client, db, amis, dialect_amis, corpus_a, run
-    ):
+    def test_page_2_returns_different_results(self, client, db, amis, dialect_amis, corpus_a, run):
         from corpus.views.dictionary import PAGE_SIZE_DICT
+
         self._create_many_tokens(db, amis, dialect_amis, corpus_a, run, PAGE_SIZE_DICT + 5)
         p1 = client.get("/search/?q=pgwd&page=1", **HTMX_HEADERS).content.decode()
         p2 = client.get("/search/?q=pgwd&page=2", **HTMX_HEADERS).content.decode()
         # The two pages render different word tokens
         assert p1 != p2
 
-    def test_current_page_highlighted(
-        self, client, db, amis, dialect_amis, corpus_a, run
-    ):
+    def test_current_page_highlighted(self, client, db, amis, dialect_amis, corpus_a, run):
         from corpus.views.dictionary import PAGE_SIZE_DICT
+
         self._create_many_tokens(db, amis, dialect_amis, corpus_a, run, PAGE_SIZE_DICT + 5)
         response = client.get("/search/?q=pgwd&page=2", **HTMX_HEADERS)
         assert "kk-pagination__page--current" in response.content.decode()
@@ -210,6 +222,7 @@ class TestWordExpand:
 
     def test_audio_player_rendered_for_url_segment(self, client, sentence_with_tokens):
         from corpus.models import AudioSegment
+
         sentence, token = sentence_with_tokens
         AudioSegment.objects.create(sentence=sentence, url="https://example.com/test.mp3")
         response = client.get(f"/word/{token.pk}/expand/", **HTMX_HEADERS)
@@ -219,6 +232,7 @@ class TestWordExpand:
 
     def test_audio_filename_shown_for_file_only_segment(self, client, sentence_with_tokens):
         from corpus.models import AudioSegment
+
         sentence, token = sentence_with_tokens
         AudioSegment.objects.create(sentence=sentence, file="corpora/Amis/audio/test.wav")
         response = client.get(f"/word/{token.pk}/expand/", **HTMX_HEADERS)
@@ -264,8 +278,9 @@ class TestMeaningHighlight:
         assert "<mark" in content
 
     def test_highlight_in_zh_results(self, client, sentence_with_tokens):
-        response = client.get("/search/?q=找&dir=zh", **HTMX_HEADERS,
-                              HTTP_ACCEPT_LANGUAGE="zh-Hant,zh;q=0.9")
+        response = client.get(
+            "/search/?q=找&dir=zh", **HTMX_HEADERS, HTTP_ACCEPT_LANGUAGE="zh-Hant,zh;q=0.9"
+        )
         content = response.content.decode()
         assert "kk-highlight" in content
 

@@ -27,9 +27,7 @@ XML_LANG = "{http://www.w3.org/XML/1998/namespace}lang"
 def _ensure_qc_on_path() -> None:
     repo = settings.FORMOSANBANK_REPO
     if not repo:
-        raise RuntimeError(
-            "FORMOSANBANK_REPO is not set; point it at a FormosanBank checkout."
-        )
+        raise RuntimeError("FORMOSANBANK_REPO is not set; point it at a FormosanBank checkout.")
     qc = str(Path(repo) / "QC")
     if qc not in sys.path:
         sys.path.insert(0, qc)
@@ -46,9 +44,7 @@ def get_corpus_counts():
 
 def corpora_path() -> Path:
     path = settings.CORPORA_PATH or (
-        str(Path(settings.FORMOSANBANK_REPO) / "Corpora")
-        if settings.FORMOSANBANK_REPO
-        else ""
+        str(Path(settings.FORMOSANBANK_REPO) / "Corpora") if settings.FORMOSANBANK_REPO else ""
     )
     if not path:
         raise RuntimeError("CORPORA_PATH / FORMOSANBANK_REPO not configured.")
@@ -65,7 +61,10 @@ def git_commit() -> str:
     try:
         out = subprocess.run(
             ["git", "-C", repo, "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
         return out.stdout.strip()
     except Exception:

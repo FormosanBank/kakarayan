@@ -51,7 +51,7 @@ class LoadStats:
     token_count: int = 0  # canonical FORM-based token count (for reconciliation)
     parse_errors: list = field(default_factory=list)
 
-    def add(self, other: "LoadStats") -> None:
+    def add(self, other: LoadStats) -> None:
         self.texts += other.texts
         self.sentences += other.sentences
         self.words += other.words
@@ -134,9 +134,7 @@ def load_corpus(
     if language_names is None:
         Text.objects.filter(corpus=corpus).delete()
     else:
-        Text.objects.filter(
-            corpus=corpus, language__name__in=language_names
-        ).delete()
+        Text.objects.filter(corpus=corpus, language__name__in=language_names).delete()
 
     for xml_path in parse.discover_corpus_xml(corpus_root):
         try:
@@ -181,8 +179,12 @@ def _load_text(corpus, corpus_root, xml_path, parsed, cache, run, stats) -> None
     # Text-level (untranscribed) audio
     text_audios = [
         TextAudio(
-            text=text, file=a["file"], url=a["url"],
-            start=a["start"], end=a["end"], source=a["source"],
+            text=text,
+            file=a["file"],
+            url=a["url"],
+            start=a["start"],
+            end=a["end"],
+            source=a["source"],
         )
         for a in parsed["text_audios"]
     ]
@@ -214,7 +216,7 @@ def _load_text(corpus, corpus_root, xml_path, parsed, cache, run, stats) -> None
 
     # --- Words (parallel list of parsed dicts) ---
     word_objs, word_dicts = [], []
-    for sd, s_obj in zip(sent_dicts, sentence_objs):
+    for sd, s_obj in zip(sent_dicts, sentence_objs, strict=True):
         for j, wd in enumerate(sd["words"]):
             word_objs.append(
                 Word(
@@ -237,7 +239,7 @@ def _load_text(corpus, corpus_root, xml_path, parsed, cache, run, stats) -> None
 
     # --- Morphemes ---
     morph_objs, morph_dicts = [], []
-    for wd, w_obj in zip(word_dicts, word_objs):
+    for wd, w_obj in zip(word_dicts, word_objs, strict=True):
         for k, md in enumerate(wd["morphemes"]):
             morph_objs.append(
                 Morpheme(
@@ -260,11 +262,11 @@ def _load_text(corpus, corpus_root, xml_path, parsed, cache, run, stats) -> None
 
     # --- Translations (exactly-one-owner) ---
     transl_objs = []
-    for sd, s_obj in zip(sent_dicts, sentence_objs):
+    for sd, s_obj in zip(sent_dicts, sentence_objs, strict=True):
         transl_objs += _translations_for(s_obj, "sentence", sd["translations"])
-    for wd, w_obj in zip(word_dicts, word_objs):
+    for wd, w_obj in zip(word_dicts, word_objs, strict=True):
         transl_objs += _translations_for(w_obj, "word", wd["translations"])
-    for md, m_obj in zip(morph_dicts, morph_objs):
+    for md, m_obj in zip(morph_dicts, morph_objs, strict=True):
         transl_objs += _translations_for(m_obj, "morpheme", md["translations"])
     if transl_objs:
         Translation.objects.bulk_create(transl_objs, batch_size=bs)
@@ -272,11 +274,11 @@ def _load_text(corpus, corpus_root, xml_path, parsed, cache, run, stats) -> None
 
     # --- Transcribed audio segments (exactly-one-owner) ---
     audio_objs = []
-    for sd, s_obj in zip(sent_dicts, sentence_objs):
+    for sd, s_obj in zip(sent_dicts, sentence_objs, strict=True):
         audio_objs += _audio_for(s_obj, "sentence", sd["audios"])
-    for wd, w_obj in zip(word_dicts, word_objs):
+    for wd, w_obj in zip(word_dicts, word_objs, strict=True):
         audio_objs += _audio_for(w_obj, "word", wd["audios"])
-    for md, m_obj in zip(morph_dicts, morph_objs):
+    for md, m_obj in zip(morph_dicts, morph_objs, strict=True):
         audio_objs += _audio_for(m_obj, "morpheme", md["audios"])
     if audio_objs:
         AudioSegment.objects.bulk_create(audio_objs, batch_size=bs)
@@ -314,8 +316,11 @@ def _audio_for(owner, kind: str, audios: list[dict]) -> list[AudioSegment]:
         out.append(
             AudioSegment(
                 **{kind: owner},
-                file=a["file"], url=a["url"],
-                start=a["start"], end=a["end"], source=a["source"],
+                file=a["file"],
+                url=a["url"],
+                start=a["start"],
+                end=a["end"],
+                source=a["source"],
             )
         )
     return out
@@ -328,7 +333,7 @@ def _derive_tokens(
     common = {"corpus": corpus, "language": language, "dialect": dialect}
 
     # word-segmented: one token per word
-    for wd, w_obj in zip(word_dicts, word_objs):
+    for wd, w_obj in zip(word_dicts, word_objs, strict=True):
         std = wd["forms"].get("standard", "")
         orig = wd["forms"].get("original", "")
         norm = normalize_surface(std or orig)
@@ -347,7 +352,7 @@ def _derive_tokens(
         )
 
     # unsegmented sentences: tokenize the FORM
-    for sd, s_obj in zip(sent_dicts, sentence_objs):
+    for sd, s_obj in zip(sent_dicts, sentence_objs, strict=True):
         if sd["words"]:
             continue
         std = sd["forms"].get("standard", "")
@@ -362,10 +367,12 @@ def _derive_tokens(
                     continue
                 tokens.append(
                     Token(
-                        sentence=s_obj, position=i,
+                        sentence=s_obj,
+                        position=i,
                         surface_standard=tok,
                         surface_original=orig_toks[i] if aligned else "",
-                        surface_norm=norm, **common,
+                        surface_norm=norm,
+                        **common,
                     )
                 )
         elif orig:
@@ -375,9 +382,12 @@ def _derive_tokens(
                     continue
                 tokens.append(
                     Token(
-                        sentence=s_obj, position=i,
-                        surface_standard="", surface_original=tok,
-                        surface_norm=norm, **common,
+                        sentence=s_obj,
+                        position=i,
+                        surface_standard="",
+                        surface_original=tok,
+                        surface_norm=norm,
+                        **common,
                     )
                 )
     return tokens

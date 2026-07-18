@@ -44,9 +44,7 @@ class Language(models.Model):
 class Dialect(models.Model):
     """A dialect variety, seeded from FormosanBank's dialects.csv."""
 
-    language = models.ForeignKey(
-        Language, on_delete=models.CASCADE, related_name="dialects"
-    )
+    language = models.ForeignKey(Language, on_delete=models.CASCADE, related_name="dialects")
     name = models.CharField(max_length=128)
     official_name = models.CharField(max_length=128, blank=True)
     chinese_name = models.CharField(max_length=128, blank=True)
@@ -55,9 +53,7 @@ class Dialect(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["language", "name"], name="uniq_dialect_per_language"
-            )
+            models.UniqueConstraint(fields=["language", "name"], name="uniq_dialect_per_language")
         ]
         ordering = ["language__name", "name"]
 
@@ -116,9 +112,7 @@ class IngestionRun(models.Model):
 class Text(models.Model):
     """One ``<TEXT>`` element (one XML file)."""
 
-    corpus = models.ForeignKey(
-        Corpus, on_delete=models.CASCADE, related_name="texts"
-    )
+    corpus = models.ForeignKey(Corpus, on_delete=models.CASCADE, related_name="texts")
     ingestion_run = models.ForeignKey(
         IngestionRun,
         on_delete=models.SET_NULL,
@@ -126,9 +120,7 @@ class Text(models.Model):
         blank=True,
         related_name="texts",
     )
-    language = models.ForeignKey(
-        Language, on_delete=models.PROTECT, related_name="texts"
-    )
+    language = models.ForeignKey(Language, on_delete=models.PROTECT, related_name="texts")
     dialect = models.ForeignKey(
         Dialect,
         on_delete=models.PROTECT,
@@ -172,9 +164,7 @@ class Text(models.Model):
 class TextAudio(models.Model):
     """An untranscribed ``<AUDIO>`` that is a direct child of ``<TEXT>``."""
 
-    text = models.ForeignKey(
-        Text, on_delete=models.CASCADE, related_name="audios"
-    )
+    text = models.ForeignKey(Text, on_delete=models.CASCADE, related_name="audios")
     file = models.CharField(max_length=512, blank=True)
     url = models.URLField(max_length=1024, blank=True)
     start = models.FloatField(null=True, blank=True)
@@ -185,9 +175,7 @@ class TextAudio(models.Model):
 class Sentence(models.Model):
     """A ``<S>`` element."""
 
-    text = models.ForeignKey(
-        Text, on_delete=models.CASCADE, related_name="sentences"
-    )
+    text = models.ForeignKey(Text, on_delete=models.CASCADE, related_name="sentences")
     sentence_xml_id = models.CharField(max_length=256)
     position = models.IntegerField()
 
@@ -211,13 +199,11 @@ class Sentence(models.Model):
 class Word(models.Model):
     """A ``<W>`` element (only in word-segmented corpora)."""
 
-    sentence = models.ForeignKey(
-        Sentence, on_delete=models.CASCADE, related_name="words"
-    )
+    sentence = models.ForeignKey(Sentence, on_delete=models.CASCADE, related_name="words")
     word_xml_id = models.CharField(max_length=256)
     position = models.IntegerField()
-    word_class = models.CharField(max_length=64, blank=True)   # XML @class
-    sclass = models.CharField(max_length=64, blank=True)       # XML @sclass
+    word_class = models.CharField(max_length=64, blank=True)  # XML @class
+    sclass = models.CharField(max_length=64, blank=True)  # XML @sclass
 
     form_original = models.TextField(blank=True)
     form_standard = models.TextField(blank=True)
@@ -235,13 +221,11 @@ class Word(models.Model):
 class Morpheme(models.Model):
     """An ``<M>`` element (only in glossed corpora)."""
 
-    word = models.ForeignKey(
-        Word, on_delete=models.CASCADE, related_name="morphemes"
-    )
+    word = models.ForeignKey(Word, on_delete=models.CASCADE, related_name="morphemes")
     morpheme_xml_id = models.CharField(max_length=256)
     position = models.IntegerField()
     morpheme_class = models.CharField(max_length=64, blank=True)  # XML @class
-    sclass = models.CharField(max_length=64, blank=True)          # XML @sclass
+    sclass = models.CharField(max_length=64, blank=True)  # XML @sclass
 
     form_original = models.TextField(blank=True)
     form_standard = models.TextField(blank=True)
@@ -266,15 +250,24 @@ class Translation(models.Model):
     """
 
     sentence = models.ForeignKey(
-        Sentence, on_delete=models.CASCADE, null=True, blank=True,
+        Sentence,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="translations",
     )
     word = models.ForeignKey(
-        Word, on_delete=models.CASCADE, null=True, blank=True,
+        Word,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="translations",
     )
     morpheme = models.ForeignKey(
-        Morpheme, on_delete=models.CASCADE, null=True, blank=True,
+        Morpheme,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="translations",
     )
 
@@ -313,15 +306,24 @@ class AudioSegment(models.Model):
     """
 
     sentence = models.ForeignKey(
-        Sentence, on_delete=models.CASCADE, null=True, blank=True,
+        Sentence,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="audio_segments",
     )
     word = models.ForeignKey(
-        Word, on_delete=models.CASCADE, null=True, blank=True,
+        Word,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="audio_segments",
     )
     morpheme = models.ForeignKey(
-        Morpheme, on_delete=models.CASCADE, null=True, blank=True,
+        Morpheme,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="audio_segments",
     )
 
@@ -356,11 +358,12 @@ class Token(models.Model):
     surface" query needs no joins to filter.
     """
 
-    sentence = models.ForeignKey(
-        Sentence, on_delete=models.CASCADE, related_name="tokens"
-    )
+    sentence = models.ForeignKey(Sentence, on_delete=models.CASCADE, related_name="tokens")
     word = models.ForeignKey(
-        Word, on_delete=models.CASCADE, null=True, blank=True,
+        Word,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="tokens",
     )
     position = models.IntegerField()
@@ -370,14 +373,13 @@ class Token(models.Model):
     surface_norm = models.TextField()
 
     # Denormalized filters
-    corpus = models.ForeignKey(
-        Corpus, on_delete=models.CASCADE, related_name="tokens"
-    )
-    language = models.ForeignKey(
-        Language, on_delete=models.CASCADE, related_name="tokens"
-    )
+    corpus = models.ForeignKey(Corpus, on_delete=models.CASCADE, related_name="tokens")
+    language = models.ForeignKey(Language, on_delete=models.CASCADE, related_name="tokens")
     dialect = models.ForeignKey(
-        Dialect, on_delete=models.CASCADE, null=True, blank=True,
+        Dialect,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="tokens",
     )
 

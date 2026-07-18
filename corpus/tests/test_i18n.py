@@ -21,9 +21,7 @@ class TestLanguageSwitching:
         content = response.content.decode()
         assert 'lang="zh-hant"' in content or 'lang="zh_Hant"' in content
 
-    def test_zh_hant_ui_uses_chinese_preferred_translation(
-        self, client, sentence_with_tokens
-    ):
+    def test_zh_hant_ui_uses_chinese_preferred_translation(self, client, sentence_with_tokens):
         """When UI is zh-hant, the result card should prefer the zh-Hant translation."""
         # Set language cookie
         client.post("/i18n/set-language/", {"language": "zh-hant", "next": "/"})

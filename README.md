@@ -82,6 +82,28 @@ in `.env`). No corpus data needs to be ingested — the test fixtures build a mi
 object graph directly. The `pg_trgm` and `btree_gin` extensions must exist (created by
 migration `0001`).
 
+## Code quality
+
+```bash
+# Lint (must be clean before committing)
+uv run ruff check .
+
+# Auto-fix lint violations
+uv run ruff check --fix .
+
+# Format
+uv run ruff format .
+
+# Type-check
+uv run mypy corpus config
+
+# Run all pre-commit hooks against the whole codebase
+uv run pre-commit run --all-files
+```
+
+Pre-commit hooks run `ruff` automatically on every `git commit`. Install them once after
+cloning with `uv run pre-commit install`.
+
 ## Ingestion commands
 
 ```bash

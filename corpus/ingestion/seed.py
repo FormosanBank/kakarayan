@@ -25,13 +25,9 @@ def seed_languages() -> dict[str, Language]:
     cc = parse.get_corpus_counts()
     result: dict[str, Language] = {}
     for iso, name in cc.LANG_CODE_TO_NAME.items():
-        lang, _ = Language.objects.update_or_create(
-            name=name, defaults={"iso639_3": iso}
-        )
+        lang, _ = Language.objects.update_or_create(name=name, defaults={"iso639_3": iso})
         result[name] = lang
-    truku, _ = Language.objects.update_or_create(
-        name=TRUKU_NAME, defaults={"iso639_3": TRUKU_ISO}
-    )
+    truku, _ = Language.objects.update_or_create(name=TRUKU_NAME, defaults={"iso639_3": TRUKU_ISO})
     result[TRUKU_NAME] = truku
     return result
 
@@ -69,9 +65,7 @@ def seed_corpora() -> int:
     n = 0
     for corpus_dir in parse.list_corpora():
         name = corpus_dir.name
-        Corpus.objects.update_or_create(
-            name=name, defaults={"slug": slugify(name)}
-        )
+        Corpus.objects.update_or_create(name=name, defaults={"slug": slugify(name)})
         n += 1
     return n
 

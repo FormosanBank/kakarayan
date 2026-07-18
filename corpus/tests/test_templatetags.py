@@ -1,7 +1,5 @@
 """Tests for custom template filters."""
 
-import pytest
-
 from corpus.templatetags.search_extras import highlight
 
 

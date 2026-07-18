@@ -5,10 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Django web app to expose the [FormosanBank](https://github.com/FormosanBank/FormosanBank)
-corpus (16 Formosan indigenous Taiwanese languages). **Milestone 1 (current): corpus
-ingestion** — the data model and the pipeline that loads FormosanBank XML into PostgreSQL.
-Web features (dictionary / concordance search, HTMX UI) come later — `corpus/views.py`,
-`corpus/admin.py`, `corpus/tests.py` are still empty stubs.
+corpus (16 Formosan indigenous Taiwanese languages). Milestone 1: corpus ingestion pipeline.
+Milestone 2 (current): dictionary/concordance search UI with HTMX and bilingual i18n (EN +
+zh-Hant).
 
 ## Commands
 
@@ -28,6 +27,32 @@ uv run pytest corpus/tests.py::test_name         # single test
 `ingest_corpus` requires at least one of `--all`, `--corpus NAME` (repeatable), or
 `--language NAME` (repeatable). `--language` alone loads that language across every
 corpus; with `--corpus` it scopes to that corpus. Re-running is always safe (see below).
+
+## Code quality
+
+```bash
+uv run ruff check .          # lint (E/W/F/I/UP/B rules, line-length 100)
+uv run ruff check --fix .    # lint + auto-fix
+uv run ruff format .         # format (double quotes, line-length 100)
+uv run mypy corpus config    # type-check (non-strict; migrations excluded)
+uv run pytest                # tests + coverage (64% baseline; ingestion pipeline excluded)
+```
+
+**Before finishing any feature:** `ruff check` and `ruff format --check` must pass with zero
+violations. `mypy corpus config` must produce no new errors. Pre-commit hooks enforce ruff
+automatically on every commit (`uv run pre-commit install` once after cloning).
+
+**Ruff rules:** `E`/`W` (style), `F` (pyflakes), `I` (import order), `UP` (pyupgrade),
+`B` (bugbear). `B008` is ignored (Django default-arg pattern). Migrations are excluded.
+Config in `[tool.ruff]` in `pyproject.toml`.
+
+**mypy baseline:** `ignore_missing_imports = true`, `disallow_untyped_defs = false` for
+`corpus/ingestion/*` (internal helpers lack param types — gradual adoption). `django-stubs`
+provides Django ORM types. Config in `[tool.mypy]` + `[tool.django-stubs]` in `pyproject.toml`.
+
+**Coverage baseline:** 64% total. The ingestion pipeline (`loader.py`, `parse.py`,
+`seed.py`, management commands) sits at 0% because it requires a FormosanBank repo checkout.
+The covered code (views, models, normalize, templatetags, tests) is at 87–100%.
 
 ## Configuration
 

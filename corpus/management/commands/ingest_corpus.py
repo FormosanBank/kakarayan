@@ -31,21 +31,27 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--all", action="store_true", help="Ingest every corpus.")
         parser.add_argument(
-            "--corpus", action="append", metavar="NAME",
+            "--corpus",
+            action="append",
+            metavar="NAME",
             help="Restrict to this corpus directory (repeatable).",
         )
         parser.add_argument(
-            "--language", action="append", metavar="NAME",
+            "--language",
+            action="append",
+            metavar="NAME",
             help="Restrict to this display language, e.g. Amis (repeatable). "
-                 "Combine with --corpus, or use alone to load that language across "
-                 "all corpora.",
+            "Combine with --corpus, or use alone to load that language across "
+            "all corpora.",
         )
         parser.add_argument(
-            "--defer-indexes", action="store_true",
+            "--defer-indexes",
+            action="store_true",
             help="Drop GIN trigram indexes before loading and recreate after.",
         )
         parser.add_argument(
-            "--skip-seed", action="store_true",
+            "--skip-seed",
+            action="store_true",
             help="Skip the idempotent reference seed step.",
         )
 
@@ -77,7 +83,9 @@ class Command(BaseCommand):
                 self.stdout.write(f"Ingesting {label} …")
                 with transaction.atomic():
                     stats = loader.load_corpus(
-                        corpus_obj, corpus_root, run=run,
+                        corpus_obj,
+                        corpus_root,
+                        run=run,
                         language_names=language_names,
                     )
                 total.add(stats)
@@ -118,8 +126,7 @@ class Command(BaseCommand):
         unknown = [n for n in names if n not in known]
         if unknown:
             raise CommandError(
-                f"Unknown language(s): {', '.join(unknown)}. "
-                f"Known: {', '.join(sorted(known))}."
+                f"Unknown language(s): {', '.join(unknown)}. Known: {', '.join(sorted(known))}."
             )
         return set(names)
 
