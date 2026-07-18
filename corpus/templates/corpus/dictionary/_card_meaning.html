@@ -1,0 +1,32 @@
+{% load i18n search_extras %}
+<div class="kk-card dict-card">
+  <div class="kk-card__ribbon kk-card__ribbon--blue"></div>
+  <div class="kk-card__body">
+    <div class="kk-card__heading">
+      <span class="kk-badge kk-badge--blue">{{ transl.sentence.text.language.name }}</span>
+      {% if transl.sentence.text.dialect and transl.sentence.text.dialect.name != "unknown" %}
+        <span class="kk-badge kk-badge--neutral">{{ transl.sentence.text.dialect.name }}</span>
+      {% endif %}
+      <span style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--text-tertiary);">{{ transl.sentence.text.corpus.name }}</span>
+    </div>
+
+    {# Matched translation with search term highlighted #}
+    <p class="kk-card__translation">{{ transl.text|highlight:q }}</p>
+
+    {# Formosan sentence — the source text for this translation #}
+    {% if transl.sentence.form_standard or transl.sentence.form_original %}
+      <p class="kk-card__example">{{ transl.sentence.form_standard|default:transl.sentence.form_original|truncatechars:120 }}</p>
+    {% endif %}
+
+    {# Individual Formosan word tokens from the sentence (best-effort; shows what words are in the sentence) #}
+    {% with tokens=transl.sentence.word_tokens %}
+      {% if tokens %}
+        <div class="kk-word-chips" title="{% trans "Words in this sentence" %}">
+          {% for tok in tokens %}
+            <span class="kk-word-chip">{{ tok.surface_standard|default:tok.surface_original }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+  </div>
+</div>

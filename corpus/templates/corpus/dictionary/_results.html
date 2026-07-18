@@ -1,0 +1,49 @@
+{% load i18n %}
+{% if not search_ready %}
+  {% include "corpus/dictionary/_empty.html" with state="prompt" %}
+{% elif direction == 'en' or direction == 'zh' %}
+  {# Meaning search results #}
+  {% if meaning_results %}
+    {% if total_count %}
+      <p class="kk-results-count">{{ total_count }} {% trans "results" %}</p>
+    {% endif %}
+    <div class="kk-results-list">
+      {% for transl in meaning_results %}
+        {% include "corpus/dictionary/_card_meaning.html" %}
+      {% endfor %}
+    </div>
+    {% include "corpus/dictionary/_pagination.html" %}
+  {% else %}
+    {% include "corpus/dictionary/_empty.html" with state="no_results" %}
+  {% endif %}
+{% elif view_mode == 'kwic' %}
+  {# Concordance view #}
+  {% if results %}
+    {% if total_count %}
+      <p class="kk-results-count">{{ total_count }} {% trans "results" %}</p>
+    {% endif %}
+    <div class="kk-concordance-list">
+      {% for entry in results %}
+        {% include "corpus/dictionary/_card_concordance.html" %}
+      {% endfor %}
+    </div>
+    {% include "corpus/dictionary/_pagination.html" %}
+  {% else %}
+    {% include "corpus/dictionary/_empty.html" with state="no_results" %}
+  {% endif %}
+{% else %}
+  {# Dictionary (grouped) view #}
+  {% if results %}
+    {% if total_count %}
+      <p class="kk-results-count">{{ total_count }} {% trans "results" %}</p>
+    {% endif %}
+    <div class="kk-results-list">
+      {% for entry in results %}
+        {% include "corpus/dictionary/_card_dict.html" %}
+      {% endfor %}
+    </div>
+    {% include "corpus/dictionary/_pagination.html" %}
+  {% else %}
+    {% include "corpus/dictionary/_empty.html" with state="no_results" %}
+  {% endif %}
+{% endif %}

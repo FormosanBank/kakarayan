@@ -1,0 +1,109 @@
+{% load i18n static search_extras %}
+<div class="kk-card dict-card dict-card--expanded" id="dict-card-{{ token.pk }}">
+  <div class="kk-card__ribbon kk-card__ribbon--{{ ribbon_color }}"></div>
+  <div class="kk-card__body">
+
+    {# Heading: word + badges #}
+    <div class="kk-card__heading">
+      <span class="kk-card__word">{{ token.surface_standard|default:token.surface_original|highlight:q }}</span>
+      {% if phon %}
+        <span class="kk-phonetic">/{{ phon }}/</span>
+      {% endif %}
+      <span class="kk-badge kk-badge--blue">{{ token.language.name }}</span>
+      {% if token.dialect and token.dialect.name != "unknown" %}
+        <span class="kk-badge kk-badge--neutral">{{ token.dialect.name }}</span>
+      {% endif %}
+      {% if pos %}
+        <span class="kk-badge kk-badge--neutral">{{ pos }}</span>
+      {% endif %}
+    </div>
+
+    {# Occurrence count + corpus attribution #}
+    <p class="kk-card__eyebrow">
+      {% blocktrans count count=occurrence_count %}{{ count }} occurrence{% plural %}{{ count }} occurrences{% endblocktrans %}
+      &nbsp;&middot;&nbsp; {{ token.sentence.text.corpus.name }}
+    </p>
+
+    <hr class="kk-card__divider">
+
+    {# All translations #}
+    {% if all_translations %}
+      <div class="kk-translations">
+        {% for t in all_translations %}
+          <div class="kk-translation-item">
+            <span class="kk-translation-item__lang">{{ t.xml_lang }}</span>
+            <span class="kk-translation-item__text">{{ t.text }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {# Example sentence #}
+    {% if token.sentence.form_standard or token.sentence.form_original %}
+      <hr class="kk-card__divider">
+      <p class="kk-card__eyebrow">{% trans "Example" %}</p>
+      <p class="kk-card__example">{{ token.sentence.form_standard|default:token.sentence.form_original|highlight:q }}</p>
+    {% endif %}
+
+    {# Morpheme breakdown #}
+    {% if morphemes %}
+      <hr class="kk-card__divider">
+      <p class="kk-card__eyebrow">{% trans "Morphemes" %}</p>
+      <table class="kk-gloss-table">
+        <thead>
+          <tr>
+            <th>{% trans "Form" %}</th>
+            <th>{% trans "Gloss" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for m in morphemes %}
+            <tr>
+              <td>{{ m.form_standard|default:m.form_original }}</td>
+              <td>
+                {% for gt in m.gloss_translations %}
+                  {{ gt.text }}{% if not forloop.last %} / {% endif %}
+                {% empty %}
+                  —
+                {% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    {# Audio #}
+    {% if audio_segments %}
+      <hr class="kk-card__divider">
+      <p class="kk-card__eyebrow">{% trans "Audio" %}</p>
+      {% for seg in audio_segments %}
+        {% if seg.url %}
+          <audio class="kk-audio-player" controls src="{{ seg.url }}">
+            {% trans "Your browser does not support audio playback." %}
+          </audio>
+        {% else %}
+          <span class="kk-audio-link">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+            {% trans "Audio file" %}: <code class="kk-audio-filename">{{ seg.file }}</code>
+          </span>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+
+    {# Actions #}
+    <div class="kk-card__actions" style="margin-top:8px;">
+      <a class="kk-btn kk-btn--ghost kk-btn--sm"
+         href="{% url 'dictionary' %}?q={{ token.surface_norm }}&lang={{ token.language.name }}&view=kwic">
+        {% trans "See all occurrences" %}
+      </a>
+      <button class="kk-btn kk-btn--ghost kk-btn--sm"
+              hx-get="{% url 'word-collapse' token.pk %}?q={{ q }}&dir={{ direction }}"
+              hx-target="#dict-card-{{ token.pk }}"
+              hx-swap="outerHTML"
+              hx-indicator="#htmx-indicator">
+        {% trans "Hide details" %}
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,11 @@
+{% load i18n static %}
+<div class="kk-empty-state">
+  <img src="{% static 'corpus/assets/icon-tribal-dictionary.svg' %}" class="kk-empty-state__icon" width="40" height="40" alt="">
+  {% if state == "no_results" %}
+    <p class="kk-empty-state__title">{% trans "No results" %}</p>
+    <p class="kk-empty-state__body">{% blocktrans with q=q %}No results for "{{ q }}". Try a different spelling or search by meaning.{% endblocktrans %}</p>
+  {% else %}
+    <p class="kk-empty-state__title">{% trans "Search the corpus" %}</p>
+    <p class="kk-empty-state__body">{% trans "Type at least 2 characters to search across 16 Formosan languages." %}</p>
+  {% endif %}
+</div>

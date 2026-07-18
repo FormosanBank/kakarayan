@@ -9,6 +9,7 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "lxml>=5.0",
     "django-environ>=0.11",
+    "django-htmx>=1.27.0",
 ]
 
 [dependency-groups]

@@ -1,0 +1,804 @@
+/* Kakarayan — Component styles
+   Ported from the Kakarayan Design System .dc.html components into reusable CSS classes. */
+
+/* ================================================================
+   LAYOUT
+   ================================================================ */
+
+.kk-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 48px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.kk-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.kk-topbar__wordmark {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  letter-spacing: var(--tracking-tight);
+}
+
+.kk-topbar__beta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--brand-primary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  background: var(--blue-50);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.kk-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.kk-page {
+  background: var(--bg-page);
+  min-height: 100vh;
+}
+
+.kk-container {
+  max-width: var(--container-narrow);
+  padding: 0 48px;
+}
+
+.kk-container--wide {
+  max-width: var(--container-max);
+}
+
+@media (max-width: 640px) {
+  .kk-topbar { padding: 16px 20px; }
+  .kk-container { padding: 0 20px; }
+}
+
+/* ================================================================
+   HTMX LOADING INDICATOR
+   ================================================================ */
+
+#htmx-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--brand-primary);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--duration-slow) var(--ease-standard);
+  z-index: 9999;
+  opacity: 0;
+}
+
+.htmx-request #htmx-indicator,
+.htmx-request#htmx-indicator {
+  opacity: 1;
+  animation: kk-loading-bar 1.4s var(--ease-standard) infinite;
+}
+
+@keyframes kk-loading-bar {
+  0%   { transform: scaleX(0); }
+  40%  { transform: scaleX(0.6); }
+  100% { transform: scaleX(1); }
+}
+
+/* ================================================================
+   HERO
+   ================================================================ */
+
+.kk-hero {
+  padding: 40px 48px 24px;
+}
+
+.kk-hero__title {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  line-height: var(--leading-snug);
+}
+
+.kk-hero__subtitle {
+  font-size: var(--text-md);
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 560px;
+  line-height: var(--leading-normal);
+}
+
+/* Full-width weave pattern strip between hero and search panel */
+.kk-weave-divider {
+  width: 100%;
+  height: 14px;
+  background: url('../assets/weave-pattern.svg') repeat-x center;
+  background-size: auto 14px;
+  opacity: 0.7;
+  margin: 20px 0 28px;
+}
+
+/* ================================================================
+   SEARCH CONTROLS
+   ================================================================ */
+
+.kk-search-panel {
+  padding: 0 48px 32px;
+}
+
+.kk-search-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.kk-search-row__input-wrap {
+  flex: 1;
+}
+
+.kk-filter-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+  .kk-search-panel { padding: 0 20px 24px; }
+  .kk-search-row { flex-wrap: wrap; }
+}
+
+/* ================================================================
+   INPUT
+   ================================================================ */
+
+.kk-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.kk-input {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  outline: none;
+  width: 100%;
+  transition: border-color var(--duration-base) var(--ease-standard),
+              box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.kk-input:focus-visible {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--blue-100);
+}
+
+.kk-input--error {
+  border-color: var(--error-500);
+}
+
+.kk-helper {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: 5px;
+}
+
+/* ================================================================
+   SELECT
+   ================================================================ */
+
+.kk-select {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  padding: 8px 32px 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-raised);
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color var(--duration-base) var(--ease-standard);
+}
+
+.kk-select:focus-visible {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--blue-100);
+}
+
+/* ================================================================
+   BUTTON
+   ================================================================ */
+
+.kk-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard),
+              border-color var(--duration-fast) var(--ease-standard);
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.kk-btn--primary {
+  background: var(--brand-primary);
+  color: var(--text-on-brand);
+  border-color: var(--brand-primary);
+}
+
+.kk-btn--primary:hover {
+  background: var(--brand-primary-hover);
+  border-color: var(--brand-primary-hover);
+}
+
+.kk-btn--primary:active {
+  background: var(--brand-primary-active);
+}
+
+.kk-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-default);
+}
+
+.kk-btn--ghost:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.kk-btn--sm {
+  padding: 6px 14px;
+  font-size: var(--text-sm);
+}
+
+/* ================================================================
+   TOGGLE GROUP (radio-button style)
+   ================================================================ */
+
+.kk-toggle-group {
+  display: inline-flex;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-surface-raised);
+}
+
+.kk-toggle-group input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.kk-toggle-group label {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+  border-right: 1px solid var(--border-default);
+  user-select: none;
+}
+
+.kk-toggle-group label:last-of-type {
+  border-right: none;
+}
+
+.kk-toggle-group input[type="radio"]:checked + label {
+  background: var(--blue-50);
+  color: var(--brand-primary);
+  font-weight: var(--weight-semibold);
+}
+
+.kk-toggle-group label:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   BADGE
+   ================================================================ */
+
+.kk-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.kk-badge--blue {
+  background: var(--blue-50);
+  color: var(--blue-700);
+}
+
+.kk-badge--gold {
+  background: var(--gold-100);
+  color: var(--gold-700);
+}
+
+.kk-badge--red {
+  background: var(--red-100);
+  color: var(--red-700);
+}
+
+.kk-badge--green {
+  background: var(--green-100);
+  color: var(--green-700);
+}
+
+.kk-badge--clay {
+  background: var(--clay-50);
+  color: var(--clay-700);
+}
+
+.kk-badge--neutral {
+  background: var(--neutral-100);
+  color: var(--neutral-600);
+}
+
+/* ================================================================
+   CARD (dictionary result)
+   ================================================================ */
+
+.kk-card {
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.kk-card__ribbon {
+  height: 9px;
+  width: 100%;
+  background-repeat: repeat-x;
+  background-size: auto 9px;
+}
+
+.kk-card__ribbon--blue  { background-image: url('../assets/weave-pattern-blue.svg'); }
+.kk-card__ribbon--gold  { background-image: url('../assets/weave-pattern-gold.svg'); }
+.kk-card__ribbon--red   { background-image: url('../assets/weave-pattern-red.svg'); }
+.kk-card__ribbon--green { background-image: url('../assets/weave-pattern-green.svg'); }
+.kk-card__ribbon--clay  { background-image: url('../assets/weave-pattern-clay.svg'); }
+
+.kk-card__body {
+  padding: 22px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kk-card__heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kk-card__word {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.kk-card__translation {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+.kk-card__example {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+  font-style: italic;
+  line-height: var(--leading-normal);
+}
+
+.kk-card__example mark {
+  background: var(--blue-100);
+  color: var(--blue-800);
+  font-style: normal;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.kk-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* Expanded card sections */
+.kk-card__detail-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.kk-card__eyebrow {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  margin-bottom: 6px;
+}
+
+.kk-card__divider {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 8px 0;
+}
+
+.kk-phonetic {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* Morpheme gloss table */
+.kk-gloss-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  margin-top: 4px;
+}
+
+.kk-gloss-table th {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--text-tertiary);
+  text-align: left;
+  padding: 4px 8px 4px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-weight: var(--weight-medium);
+}
+
+.kk-gloss-table td {
+  padding: 6px 8px 6px 0;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+}
+
+.kk-gloss-table tr:last-child td {
+  border-bottom: none;
+}
+
+.kk-gloss-table td:first-child {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   CONCORDANCE ROW
+   ================================================================ */
+
+.kk-concordance-row {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.kk-concordance-row:last-child {
+  border-bottom: none;
+}
+
+.kk-concordance-row__sentence {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  line-height: var(--leading-normal);
+  margin-bottom: 4px;
+}
+
+.kk-concordance-row__sentence mark {
+  background: var(--blue-100);
+  color: var(--blue-800);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.kk-concordance-row__meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.kk-concordance-row__translation {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+/* ================================================================
+   RESULTS CONTAINER
+   ================================================================ */
+
+.kk-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.kk-results-count {
+  font-size: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.kk-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kk-concordance-list {
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 0 24px;
+}
+
+/* ================================================================
+   EMPTY / PROMPT STATE
+   ================================================================ */
+
+.kk-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.kk-empty-state__icon {
+  opacity: 0.4;
+}
+
+.kk-empty-state__title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.kk-empty-state__body {
+  font-size: var(--text-base);
+  color: var(--text-tertiary);
+  max-width: 320px;
+  margin: 0;
+  line-height: var(--leading-normal);
+}
+
+/* ================================================================
+   PAGINATION
+   ================================================================ */
+
+.kk-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 0;
+}
+
+.kk-pagination__page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface-raised);
+  color: var(--text-secondary);
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.kk-pagination__page:hover {
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+}
+
+.kk-pagination__page--current {
+  background: var(--brand-primary);
+  color: var(--text-on-brand);
+  border-color: var(--brand-primary);
+  cursor: default;
+}
+
+.kk-pagination__page--current:hover {
+  background: var(--brand-primary);
+  color: var(--text-on-brand);
+}
+
+.kk-pagination__ellipsis {
+  padding: 0 4px;
+  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  user-select: none;
+}
+
+/* ================================================================
+   LANGUAGE SWITCHER (topbar)
+   ================================================================ */
+
+.kk-lang-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kk-lang-switcher select {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  padding: 4px 4px 4px 0;
+}
+
+.kk-lang-switcher select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* ================================================================
+   TRANSLATIONS STACKED LIST (expanded card)
+   ================================================================ */
+
+.kk-translations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kk-translation-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.kk-translation-item__lang {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+.kk-translation-item__text {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  line-height: var(--leading-normal);
+}
+
+/* ================================================================
+   AUDIO LINK
+   ================================================================ */
+
+.kk-audio-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-sm);
+  color: var(--brand-primary);
+  text-decoration: none;
+}
+
+.kk-audio-link:hover {
+  text-decoration: underline;
+}
+
+.kk-audio-player {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+}
+
+.kk-audio-filename {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+/* ================================================================
+   SEARCH HIGHLIGHT
+   ================================================================ */
+
+mark.kk-highlight {
+  background: color-mix(in srgb, var(--brand-accent, #f0b429) 35%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* ================================================================
+   WORD CHIPS (meaning search: individual Formosan tokens)
+   ================================================================ */
+
+.kk-word-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.kk-word-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--radius-full, 999px);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--surface-subtle, #f9fafb);
+  white-space: nowrap;
+}

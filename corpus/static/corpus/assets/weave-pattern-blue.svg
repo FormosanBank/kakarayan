@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="28" viewBox="0 0 240 28">
+  <defs>
+    <pattern id="band" width="30" height="28" patternUnits="userSpaceOnUse">
+      <rect width="30" height="28" fill="none"></rect>
+      <rect x="0" y="0" width="30" height="3" fill="#1b2430"></rect>
+      <rect x="0" y="25" width="30" height="3" fill="#1b2430"></rect>
+      <polygon points="15,4 27,14 15,24 3,14" fill="none" stroke="oklch(0.55 0.155 250)" stroke-width="2.4"></polygon>
+      <circle cx="15" cy="14" r="2.6" fill="oklch(0.56 0.19 28)"></circle>
+      <polygon points="0,10 6,14 0,18" fill="oklch(0.72 0.14 85)"></polygon>
+      <polygon points="30,10 24,14 30,18" fill="oklch(0.55 0.115 145)"></polygon>
+    </pattern>
+  </defs>
+  <rect width="240" height="28" fill="url(#band)"></rect>
+</svg>

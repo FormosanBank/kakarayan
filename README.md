@@ -3,9 +3,13 @@
 Web application for exposing the [FormosanBank](https://github.com/FormosanBank/FormosanBank)
 corpus of the 16 Formosan (indigenous Taiwanese) languages. Built on **Django + HTMX**.
 
-**Current milestone: corpus ingestion.** This repo currently contains the data model and
-the pipeline that loads the FormosanBank XML corpus into PostgreSQL. Web features (the
-first will be a dictionary / concordance search) come in later milestones.
+The primary audience is language learners and researchers. The interface is available in
+both English and Traditional Chinese (繁體中文), with search across Formosan word forms and
+their English or Chinese translations.
+
+**Current milestone: dictionary search.** The app exposes a bilingual dictionary and
+concordance search across all 16 languages. Earlier work established the data model and
+the pipeline that loads the FormosanBank XML corpus into PostgreSQL.
 
 The corpus tables are a **derived read-model** of the FormosanBank XML — they are rebuilt
 by the ingestion command and never hand-edited. The XML in the FormosanBank repo stays
@@ -40,6 +44,43 @@ uv run python manage.py migrate
 uv run python manage.py seed_reference
 uv run python manage.py ingest_corpus --all
 ```
+
+## Running the development server
+
+```bash
+# Start Postgres first (if using Docker)
+docker compose up -d db
+
+# Run the app (hot-reload by default)
+uv run python manage.py runserver
+```
+
+Open `http://localhost:8000/` in a browser. The dictionary search page loads immediately;
+results require a populated corpus (see ingestion commands below).
+
+To switch the interface language, use the language selector in the top-right corner of
+the page. Supported: English (`en`) and Traditional Chinese (`zh-hant`).
+
+## Running tests
+
+```bash
+# Full suite (~1 s, no external dependencies required)
+uv run pytest
+
+# Single test module
+uv run pytest corpus/tests/test_views.py
+
+# Single test
+uv run pytest corpus/tests/test_views.py::TestDictionarySearch::test_meaning_search_en
+
+# With verbose output
+uv run pytest -v
+```
+
+Tests use `pytest-django` and an in-process PostgreSQL database (the same one configured
+in `.env`). No corpus data needs to be ingested — the test fixtures build a minimal
+object graph directly. The `pg_trgm` and `btree_gin` extensions must exist (created by
+migration `0001`).
 
 ## Ingestion commands
 
@@ -85,4 +126,23 @@ corpus/
   management/commands/
     seed_reference.py
     ingest_corpus.py
+  views/
+    dictionary.py           word + meaning search, HTMX card expand, pagination
+  templates/corpus/
+    base.html               topbar, language switcher, HTMX wiring
+    dictionary/             index, results partial, card partials, pagination
+  static/corpus/
+    css/tokens.css          design-system custom properties (colors, type, spacing)
+    css/components.css      component classes (.kk-card, .kk-pagination, …)
+    js/htmx.min.js          HTMX 2.0.4 (served locally, no CDN)
+    assets/                 weave-pattern SVGs (5 accent colours)
+  tests/
+    conftest.py             shared DB fixtures
+    test_normalize.py       normalization invariants
+    test_search.py          query helper functions
+    test_views.py           HTTP + HTMX response behaviour, pagination
+    test_i18n.py            language switching, bilingual UI
+locale/
+  en/LC_MESSAGES/           English UI catalog
+  zh_Hant/LC_MESSAGES/      Traditional Chinese translations
 ```

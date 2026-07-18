@@ -1,0 +1,36 @@
+{% load i18n search_extras %}
+{% with token=entry.token ribbon_color=entry.ribbon_color translations=entry.translations %}
+<div class="kk-card dict-card" id="dict-card-{{ token.pk }}">
+  <div class="kk-card__ribbon kk-card__ribbon--{{ ribbon_color }}"></div>
+  <div class="kk-card__body">
+    <div class="kk-card__heading">
+      <span class="kk-card__word">{{ token.surface_standard|default:token.surface_original|highlight:q }}</span>
+      <span class="kk-badge kk-badge--blue">{{ token.language.name }}</span>
+      {% if token.dialect and token.dialect.name != "unknown" %}
+        <span class="kk-badge kk-badge--neutral">{{ token.dialect.name }}</span>
+      {% endif %}
+      {% if token.word_id and token.word.word_class %}
+        <span class="kk-badge kk-badge--neutral">{{ token.word.word_class }}</span>
+      {% endif %}
+    </div>
+
+    {% if translations %}
+      <p class="kk-card__translation">{{ translations.0.text }}</p>
+    {% endif %}
+
+    {% if token.sentence.form_standard or token.sentence.form_original %}
+      <p class="kk-card__example">{{ token.sentence.form_standard|default:token.sentence.form_original|truncatechars:120|highlight:q }}</p>
+    {% endif %}
+
+    <div class="kk-card__actions">
+      <button class="kk-btn kk-btn--ghost kk-btn--sm"
+              hx-get="{% url 'word-expand' token.pk %}?q={{ q }}&dir={{ direction }}"
+              hx-target="#dict-card-{{ token.pk }}"
+              hx-swap="outerHTML"
+              hx-indicator="#htmx-indicator">
+        {% trans "Show details" %}
+      </button>
+    </div>
+  </div>
+</div>
+{% endwith %}

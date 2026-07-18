@@ -1,0 +1,168 @@
+{% extends "corpus/base.html" %}
+{% load i18n static %}
+{% get_current_language as CURRENT_LANG %}
+
+{% block title %}{% trans "Dictionary" %} — Kakarayan{% endblock %}
+
+{% block content %}
+<div class="kk-hero kk-container">
+  <h1 class="kk-hero__title">{% trans "Language tools for every Formosan tribe" %}</h1>
+  <p class="kk-hero__subtitle">{% trans "Dictionary search across 16 indigenous languages of Taiwan." %}</p>
+</div>
+<div class="kk-weave-divider"></div>
+
+<div class="kk-search-panel kk-container">
+  {# Search direction toggle #}
+  <div class="kk-filter-row" style="margin-bottom:12px;">
+    <span style="font-size:var(--text-sm);color:var(--text-tertiary);">{% trans "Search by" %}</span>
+    <div class="kk-toggle-group">
+      <input type="radio" name="dir-toggle" id="dir-word" value="word" {% if direction != 'en' and direction != 'zh' %}checked{% endif %}>
+      <label for="dir-word">{% trans "Word" %}</label>
+      {% if CURRENT_LANG != "zh-hant" %}
+        <input type="radio" name="dir-toggle" id="dir-en" value="en" {% if direction == 'en' %}checked{% endif %}>
+        <label for="dir-en">{% trans "English meaning" %}</label>
+      {% endif %}
+      {% if CURRENT_LANG == "zh-hant" %}
+        <input type="radio" name="dir-toggle" id="dir-zh" value="zh" {% if direction == 'zh' %}checked{% endif %}>
+        <label for="dir-zh">中文意思</label>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Search row #}
+  <div class="kk-search-row">
+    <div class="kk-search-row__input-wrap">
+      <label class="kk-label" for="search-input">{% trans "Search" %}</label>
+      <input
+        id="search-input"
+        class="kk-input"
+        type="search"
+        name="q"
+        value="{{ q }}"
+        placeholder="{% if direction == 'en' %}{% trans 'e.g. looking for, person…' %}{% elif direction == 'zh' %}例：找人、看見…{% else %}{% trans 'e.g. mainu, kilim…' %}{% endif %}"
+        autocomplete="off"
+        data-search-param
+        hx-get="{% url 'dictionary-search' %}"
+        hx-trigger="input delay:300ms, keyup[key=='Enter'], force-search"
+        hx-target="#results"
+        hx-push-url="true"
+        hx-include="[data-search-param]"
+        hx-indicator="#htmx-indicator"
+      >
+    </div>
+  </div>
+
+  {# Filters #}
+  <div class="kk-filter-row">
+    <div>
+      <label class="kk-label" for="filter-lang">{% trans "Language" %}</label>
+      <select
+        id="filter-lang"
+        class="kk-select"
+        name="lang"
+        data-search-param
+        hx-get="{% url 'dictionary-search' %}"
+        hx-trigger="change"
+        hx-target="#results"
+        hx-push-url="true"
+        hx-include="[data-search-param]"
+      >
+        <option value="">{% trans "All languages" %}</option>
+        {% for l in languages %}
+          <option value="{{ l }}" {% if l == lang %}selected{% endif %}>{{ l }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="kk-label" for="filter-corpus">{% trans "Corpus" %}</label>
+      <select
+        id="filter-corpus"
+        class="kk-select"
+        name="corpus"
+        data-search-param
+        hx-get="{% url 'dictionary-search' %}"
+        hx-trigger="change"
+        hx-target="#results"
+        hx-push-url="true"
+        hx-include="[data-search-param]"
+      >
+        <option value="">{% trans "All corpora" %}</option>
+        {% for c in corpora %}
+          <option value="{{ c }}" {% if c == corpus_name %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="kk-label" for="filter-translation">{% trans "Translation" %}</label>
+      <select
+        id="filter-translation"
+        class="kk-select"
+        name="translation"
+        data-search-param
+        hx-get="{% url 'dictionary-search' %}"
+        hx-trigger="change"
+        hx-target="#results"
+        hx-push-url="true"
+        hx-include="[data-search-param]"
+      >
+        <option value="" {% if not translation_lang %}selected{% endif %}>{% trans "Any" %}</option>
+        <option value="eng" {% if translation_lang == "eng" %}selected{% endif %}>English</option>
+        <option value="zho" {% if translation_lang == "zho" %}selected{% endif %}>中文</option>
+      </select>
+    </div>
+  </div>
+
+  {# Hidden inputs so hx-include picks them up #}
+  <input type="hidden" name="dir" data-search-param id="hidden-dir" value="{{ direction }}">
+  <input type="hidden" name="view" data-search-param id="hidden-view" value="{{ view_mode }}">
+
+  {# View mode toggle — always visible; only affects search when a query is active #}
+  <div class="kk-results-header">
+    <div class="kk-toggle-group" style="margin-top:4px;">
+      <input type="radio" name="view-toggle" id="view-dict" value="dict" {% if view_mode != 'kwic' %}checked{% endif %}>
+      <label for="view-dict">{% trans "Dictionary" %}</label>
+      <input type="radio" name="view-toggle" id="view-kwic" value="kwic" {% if view_mode == 'kwic' %}checked{% endif %}>
+      <label for="view-kwic">{% trans "Concordance" %}</label>
+    </div>
+  </div>
+</div>
+
+{# Results region #}
+<div id="results" class="kk-container kk-container--wide" style="padding-bottom:64px;">
+  {% include "corpus/dictionary/_results.html" %}
+</div>
+
+<script>
+(function () {
+  var searchInput = document.getElementById('search-input');
+
+  function fireSearch() {
+    // Use a custom event that the search input listens for via hx-trigger="force-search"
+    htmx.trigger(searchInput, 'force-search');
+  }
+
+  // Sync direction radio with hidden input and re-trigger search
+  document.querySelectorAll('input[name="dir-toggle"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      document.getElementById('hidden-dir').value = this.value;
+      // Update placeholder
+      var placeholders = {
+        'en': '{% trans "e.g. looking for, person…" %}',
+        'zh': '例：找人、看見…',
+        'word': '{% trans "e.g. mainu, kilim…" %}'
+      };
+      searchInput.placeholder = placeholders[this.value] || placeholders['word'];
+      fireSearch();
+    });
+  });
+
+  // Sync view mode radio with hidden input and immediately re-trigger search
+  document.querySelectorAll('input[name="view-toggle"]').forEach(function (radio) {
+    radio.addEventListener('change', function () {
+      document.getElementById('hidden-view').value = this.value;
+      fireSearch();
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% if page_range %}
+<nav class="kk-pagination" aria-label="Search results pages">
+  {% for p in page_range %}
+    {% if p is None %}
+      <span class="kk-pagination__ellipsis">…</span>
+    {% elif p == page %}
+      <span class="kk-pagination__page kk-pagination__page--current" aria-current="page">{{ p }}</span>
+    {% else %}
+      <button class="kk-pagination__page"
+              hx-get="{% url 'dictionary-search' %}?q={{ q|urlencode }}&lang={{ lang|urlencode }}&corpus={{ corpus_name|urlencode }}&dir={{ direction }}&view={{ view_mode }}&page={{ p }}"
+              hx-target="#results"
+              hx-push-url="true"
+              hx-indicator="#htmx-indicator">{{ p }}</button>
+    {% endif %}
+  {% endfor %}
+</nav>
+{% endif %}
