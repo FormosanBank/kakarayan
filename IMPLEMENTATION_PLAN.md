@@ -72,6 +72,15 @@ knowledge.
   markup in provenance even when relational views simplify them.
 - Never silently repair canonical source data during publication.
 - Validation failures must stop publication or explicitly quarantine affected records.
+- Resolve the requested public ref from the remote and record the immutable commit; do not
+  assume an existing local checkout is current.
+- Read the checked-out tree at that commit, not deleted files from Git history.
+- Use an explicit input allowlist for canonical XML, reviewed metadata, public documentation,
+  schemas, and required QC code. Never package logs, caches, environments, coverage output,
+  local configuration, or unrelated `CodeAndDocs` contents accidentally.
+- Do not execute corpus audio-download scripts or pull Git LFS/Hugging Face media as part of
+  ordinary site publication. Media acquisition requires an explicit rights-compatible
+  release mode.
 
 ### 3.4 Existing Kakarayan work
 
@@ -131,6 +140,22 @@ Important existing invariants:
 - A stable record locator therefore includes corpus, source path, local ID, and ordinal.
 - FormosanBank's XML and QC rules remain authoritative.
 
+Additional source-schema facts that must survive the static projection:
+
+- `TEXT` can carry `citation`, `BibTeX_citation`, `copyright`, `source`, `audio`,
+  `glottocode`, and `dialect` attributes in addition to `id` and `xml:lang`.
+- `W` and `M` can carry `class` and `sclass`.
+- `FORM` can carry `kindOf` and notes.
+- `TRANSL` can carry `xml:lang`, `kindOf`, version, and notes.
+- `AUDIO` can carry file/URL references and start/end values.
+- FORM, PHON, TRANSL, AUDIO, W, and M sibling order is not guaranteed by the schema.
+- `kindOf="original"` preserves source orthographic choices; `kindOf="standard"` is
+  FormosanBank's comparable standard-orthography projection. The UI and every export must
+  label them accurately and must not imply the standard form is the source transcription.
+- Canonical token counts use the standard sentence FORM with original fallback and count
+  whitespace chunks containing at least one Unicode letter or digit. Reuse the current
+  public QC rule rather than creating a competing definition.
+
 The implementation must inspect the current repository rather than assuming the snapshot
 described here has not changed.
 
@@ -183,6 +208,10 @@ kakarayan/
     __init__.py
     cli.py
     config.py
+    metadata/
+      README.md
+      corpora.toml
+      languages.toml
     discovery.py
     xml_records.py
     identifiers.py
@@ -231,6 +260,7 @@ kakarayan/
   build/                         generated and gitignored
     pages/
     releases/
+  IMPLEMENTATION_STATUS.md       durable progress/recovery record during implementation
 ```
 
 Keep the structure coherent rather than mechanically creating every file in advance.
@@ -240,6 +270,15 @@ Create a file only when it has a real responsibility and tests or consumers.
 
 Small test fixtures may be committed. Full derived datasets may not be committed to the
 main source branch.
+
+`publisher/metadata/` is a reviewed presentation and rights overlay, not an alternative
+corpus source. Every entry must cite the public FormosanBank path or external authority it
+summarizes. Discovery must fail when a new corpus lacks an explicit reviewed entry rather
+than inventing descriptions, translations, or distribution permissions.
+
+`IMPLEMENTATION_STATUS.md` must remain concise and factual. It records completed phases,
+the last verified commit, exact checks and full-build measurements, open external blockers,
+and the next concrete slice. It is not a transcript or scratchpad.
 
 ## 7. Technology decisions
 
@@ -301,6 +340,24 @@ uv run python -m publisher build \
 
 Also support validation-only and format-specific development commands.
 
+Build reproducibility must include environment-sensitive details:
+
+- Accept an explicit `SOURCE_DATE_EPOCH`; default it deterministically from the pinned source
+  commit rather than wall-clock time.
+- Run serialization in UTC with a fixed locale.
+- Sort input paths and rows by documented keys.
+- Use LF line endings for generated text.
+- Fix archive entry timestamps, permissions, owners, and ordering.
+- Separate the human publication timestamp from the deterministic content build timestamp.
+- Record Python, Node, publisher, application, schema, and important library versions.
+- Demonstrate that two clean builds from identical commits and inputs produce identical
+  checksums.
+
+The publisher CLI must also consume a browser-generated export recipe for selections too
+large to execute safely in the browser. The documented local command must work against
+either a public release bundle or a local public FormosanBank checkout and must produce the
+same logical selection and provenance as the browser builder.
+
 ### 7.3 Cross-origin and browser constraints
 
 Interactive query files must be served from the Pages origin.
@@ -349,6 +406,11 @@ Every table must have:
 - Source ordinal when needed to disambiguate.
 - Language identity and ISO code where resolvable.
 - Dialect where resolvable.
+
+For every projected XML element, preserve a namespaced raw-attribute map and source child
+ordinal in addition to convenient typed columns. Unknown future attributes must survive the
+projection and appear in hierarchical JSON/SQLite metadata without being silently dropped.
+Do not treat XML namespace prefixes as stable; preserve namespace URIs and local names.
 
 ### 8.2 Deterministic identifiers
 
@@ -436,6 +498,12 @@ Do not use `iso639_3` as the primary key.
 - `speaker`
 - `genre`
 - `date`
+- `citation`
+- `bibtex_citation`
+- `copyright`
+- `source`
+- `audio_source`
+- `glottocode`
 - `metadata_json`
 - source-order fields
 
@@ -473,6 +541,8 @@ Do not silently retain only the first tier.
 - repeatable phonology
 - translations/glosses
 - audio references
+- `class`
+- `sclass`
 - morpheme count
 
 #### `morphemes`
@@ -485,6 +555,8 @@ Do not silently retain only the first tier.
 - repeatable phonology
 - glosses/translations
 - audio references
+- `class`
+- `sclass`
 
 #### `forms`
 
@@ -495,6 +567,7 @@ Do not silently retain only the first tier.
 - `value`
 - `value_nfc`
 - `search_normalized`
+- `notes`
 - `ordinal`
 - `inline_markup_json`
 
@@ -506,6 +579,7 @@ Do not silently retain only the first tier.
 - `kind`
 - `value`
 - `value_nfc`
+- `notes`
 - `ordinal`
 
 #### `translations`
@@ -515,6 +589,8 @@ Do not silently retain only the first tier.
 - `owner_id`
 - `language`
 - `kind`
+- `version`
+- `notes`
 - `value`
 - `value_nfc`
 - `search_normalized`
@@ -525,8 +601,11 @@ Do not silently retain only the first tier.
 - `audio_id`
 - `owner_type`
 - `owner_id`
-- `reference`
+- `file_reference`
+- `url_reference`
 - `resolved_url` when safely derivable
+- `start_raw`
+- `end_raw`
 - `start_seconds`
 - `end_seconds`
 - `duration_seconds`
@@ -534,6 +613,9 @@ Do not silently retain only the first tier.
 - `availability_status`
 - `rights_status`
 - `ordinal`
+
+Preserve raw timing strings. Parse with decimal arithmetic, reject non-finite and negative
+durations, and document any millisecond rounding required by EAF, VTT, or SRT.
 
 #### `tokens`
 
@@ -581,6 +663,41 @@ Publish:
 - Column dictionaries for CSV/TSV/XLSX.
 - Format-specific caveats.
 - Schema version and changelog.
+
+### 8.6 Curated presentation metadata
+
+Corpus discovery alone cannot supply safe bilingual descriptions, rights conclusions, and
+audience-facing format guidance.
+
+Maintain a small reviewed metadata overlay in `publisher/metadata/`.
+
+For every corpus it must record:
+
+- Stable display slug and aliases.
+- English display name and reviewed description.
+- Traditional Chinese display name and reviewed description when available.
+- Explicit fallback behavior when a reviewed translation is unavailable.
+- Public source paths and URLs supporting the summary.
+- Required corpus and upstream citations.
+- Rights status and the evidence used to assign it.
+- Community/contributor attribution and culturally relevant notices supplied by the source.
+- Tier and format exceptions that cannot be inferred mechanically.
+
+For every display language it must record reviewed names, autonym where sourced, ISO code,
+dialect disambiguation, and provenance.
+
+Do not scrape the GitBook at runtime.
+
+Do not silently use stale translated GitBook content.
+
+Do not machine-translate corpus descriptions, rights, or community notices without explicit
+maintainer approval and visible disclosure.
+
+Discovery and the overlay must reconcile in both directions:
+
+- Every discovered corpus and display language has one reviewed entry.
+- Every overlay entry resolves to current public source data.
+- Removed or renamed corpora produce a build failure requiring review.
 
 ## 9. Publication manifests
 
@@ -640,6 +757,54 @@ The release manifest maps every prepared artifact to:
 
 The manifest must validate before publication.
 
+### 9.4 Version retention, cache safety, and atomic publication
+
+Interactive querying and historical prepared downloads have different retention rules.
+
+- The Pages artifact must always contain one complete current interactive data release.
+- It may contain one previous interactive release only if the 900 MiB budget remains met.
+- Older releases remain discoverable as prepared downloads through immutable GitHub
+  Releases, but the UI must not imply that arbitrary browser queries are available for
+  historical releases whose interactive shards are no longer on Pages.
+- The release selector must distinguish `interactive` from `prepared downloads only`.
+
+All interactive asset paths must include the immutable data-release ID and content hash.
+
+The small application bootstrap points to one current catalogue.
+
+Never reuse a shard URL for different bytes.
+
+The application must verify:
+
+- Manifest schema compatibility.
+- Application/data compatibility.
+- Expected size and content hash metadata.
+- That all selected shards belong to the same data release.
+
+Publishing must be two-phase and recoverable:
+
+1. Build and validate all outputs in a clean directory.
+2. Create a draft GitHub data release.
+3. Upload all release assets and verify remote names, sizes, and checksums.
+4. Upload the release manifest last and publish the immutable release.
+5. Assemble Pages from the exact validated interactive bundle.
+6. Deploy Pages as one artifact so application, catalogue, and shards change atomically.
+7. Run post-deployment smoke checks before declaring success.
+
+Never mutate an already published data release. A correction receives a new release ID.
+
+Do not use expiring Actions artifacts as the long-term source of Pages data.
+
+The Pages workflow may download the exact interactive bundle from a published Kakarayan
+release during Actions execution, where browser CORS is irrelevant, and then include it
+same-origin in the Pages artifact.
+
+Document rollback:
+
+- Re-run deployment with the last known-good application and data-release IDs.
+- Keep the prior release immutable.
+- Do not delete the failed release until maintainers have evidence needed for diagnosis.
+
 ## 10. Static search architecture
 
 ### 10.1 Search modes
@@ -675,8 +840,16 @@ Allow:
 - Presence of word segmentation.
 - Presence of morpheme segmentation.
 - Presence of unclear markup.
+- Text/source, genre, date, or speaker only where reviewed source metadata provides them.
+- Presence of valid time alignment versus untimed audio reference.
+- Sentence/token/word/morpheme count ranges.
+- Word/morpheme `class` and `sclass` where present.
+- Missing-versus-present values for selected tiers and fields.
 
 Selections with no compatible records must explain why.
+
+Generate filter options from manifest facets rather than hard-coding values. Clearly mark
+metadata coverage so absence is not interpreted as a meaningful negative claim.
 
 ### 10.3 Index design
 
@@ -724,6 +897,20 @@ Run it inside a Worker.
 
 Support cancellation and discard stale results when search parameters change.
 
+Run regular expressions through an engine with bounded, non-backtracking behavior such as
+DuckDB's RE2-compatible implementation. Bound query length and scope, enforce a time/work
+budget, and terminate/recreate a Worker that does not cancel promptly. Never evaluate
+untrusted patterns through JavaScript expressions susceptible to catastrophic backtracking.
+
+Fuzzy search must operate over a scoped vocabulary, document its distance/ranking rule, and
+cap candidate work.
+
+Random samples must accept and display a seed. The same data release, recipe, and seed must
+produce the same sample.
+
+Artifact ordering must use documented code-point/stable-key ordering. Locale-aware display
+sorting may be offered separately and must not change reproducible export order.
+
 ### 10.5 Result behavior
 
 Results must include:
@@ -745,6 +932,12 @@ Use deterministic pagination or virtualization.
 Changing filters must not mix results from an earlier asynchronous query.
 
 Search state must be serializable into a shareable URL.
+
+Report exact counts when they have actually been computed. If a fast preview uses a manifest
+estimate or sample, label it as approximate and provide a path to calculate the exact count.
+
+Bound serialized URL state. Search scopes may use the URL; large builder configurations must
+use a validated recipe file rather than producing fragile multi-kilobyte links.
 
 ## 11. Public site information architecture
 
@@ -848,6 +1041,10 @@ Explain dependencies such as:
 - Round-trip and lossiness notes.
 - Examples small enough to understand.
 - Recommended formats by use case.
+- Copyable loading examples for Python/pandas or PyArrow, R/Arrow or readr, DuckDB SQL,
+  SQLite, spreadsheet software, ELAN, and Praat where applicable.
+- A minimal worked example that traces one sentence from XML through relational tables and
+  back to its source locator.
 
 ### 11.10 Citation, rights, and provenance
 
@@ -880,6 +1077,48 @@ Explain dependencies such as:
 - Offline state.
 - Unsupported format explanation.
 - Link to prepared packages when local custom export is too large.
+
+### 11.13 Discoverability, no-script access, and diagnostics
+
+- Provide meaningful page title, description, canonical URL, Open Graph metadata, favicon,
+  and a generated sitemap for stable informational routes.
+- Prevent query-state variants from becoming misleading duplicate search-engine pages.
+- Provide a useful `<noscript>` block with project explanation, latest prepared-download
+  links, citation, rights, documentation, and the GitHub repository.
+- Do not claim that concordance or custom export works without JavaScript.
+- Provide a "copy/download diagnostics" action containing only application version, data
+  release, browser capabilities, failed public asset URL, and sanitized error details.
+- Never include search history, private filesystem paths, or corpus content beyond the
+  record the user explicitly chooses to report.
+- Link errors to a prefilled public issue URL when it remains within safe URL-length limits.
+- Provide a visible contact/takedown path for rights holders and source communities.
+
+### 11.14 Lightweight linguistic summaries
+
+For a deliberately scoped language/corpus/tier selection, provide:
+
+- Frequency lists for source-exact and normalized forms.
+- Frequency lists for translations and glosses where meaningful.
+- Type, token, and type/token counts with a warning that type/token ratio is length-sensitive.
+- One- through five-token n-gram tables when the source tokenization supports them.
+- Concordance-result distribution by corpus, display language, dialect, and available tier.
+- Bounded left/right collocate counts around a selected token.
+- A documented association score only if its formula, minimum-frequency rule, and edge cases
+  are tested and shown; raw counts must always remain available.
+- Reproducible sampling with a visible seed.
+- CSV/TSV/JSON export of every summary table.
+
+Use the same normalization, tokenization, filters, release ID, and recipe model as search and
+downloads.
+
+Make an accessible data table the primary representation. Small charts may supplement the
+table but may not be the only way to read or export results.
+
+Estimate work before running n-gram or collocation analysis. Bound the scope, keep it in a
+Worker, support cancellation, and offer a local-recipe path when it exceeds browser limits.
+
+Do not present descriptive corpus frequencies as claims about speakers, communities,
+language vitality, grammaticality, or population-wide usage.
 
 ## 12. Export and download capabilities
 
@@ -914,9 +1153,22 @@ All browser exports must:
 - Estimate memory and output size before execution.
 - Refuse unsafe selections with an alternative prepared package.
 
+Stream query results and serialization where browser support permits so output is not held
+in multiple full-size in-memory copies. Retain a bounded Blob fallback for browsers without
+stream-to-file support. Test the fallback separately and set its limit conservatively.
+
+The recipe must contain no executable code. Validate it against the versioned schema, reject
+unknown fields, bound list and string sizes, and show the resolved selection before running
+it in either the browser or local CLI.
+
 ### 12.2 Prepared release formats
 
 Generate and validate:
+
+Provide ZIP for broadly accessible multi-file packages. A `.tar.zst` variant may be offered
+for efficient research workflows, but it must not be the only way to obtain a required
+format. Split oversized packages deterministically and publish a part manifest with
+checksums and reconstruction instructions.
 
 #### Canonical XML
 
@@ -1042,6 +1294,37 @@ Publication must fail closed for ambiguous bulk redistribution.
 
 Metadata and source links may still be displayed where allowed.
 
+The rights registry must preserve, not reinterpret, the current public FormosanBank
+`LICENSE.md`, `AI-USE-ADDENDUM.md`, `NOTICE-AI.md`, corpus README restrictions, XML-root
+copyright/citation attributes, dataset cards, and stricter upstream notices.
+
+Use this evidence precedence:
+
+1. A record/component-specific notice.
+2. A corpus-specific README, dataset card, license, or source notice.
+3. Central FormosanBank terms and AI-use addendum.
+4. `unknown_requires_review` when the result remains ambiguous.
+
+Do not attempt automated legal interpretation of prose. Encode a reviewed conclusion in
+the checked-in metadata overlay and retain links to all evidence.
+
+Carry the current noncommercial-AI, attribution, provenance, TDM-reservation, and
+license-notice requirements into:
+
+- Human-readable site terms.
+- Corpus and download pages.
+- Every package README.
+- Release descriptions and manifests.
+- Dataset cards.
+- HTML metadata and link relations where a standard applies.
+- Machine-readable TDM/RSL/content-signal files where technically applicable.
+
+GitHub Pages project sites cannot control origin-root `robots.txt` or
+`/.well-known/tdmrep.json` for the entire `formosanbank.github.io` origin. Include
+project-scoped signals, document that limitation, and provide the exact root-level files
+that the FormosanBank organization-site or custom-domain maintainer must install. Never
+claim a project-scoped file protects the whole origin.
+
 ### 13.2 UI requirements
 
 Show rights:
@@ -1059,19 +1342,38 @@ the underlying license.
 
 ### 13.3 Code-license prerequisite
 
-The repository did not contain a `LICENSE` file at planning time.
+Kakarayan did not contain a `LICENSE` file at planning time. FormosanBank's central
+`LICENSE.md` also states that its code and scripts receive no additional software license
+unless a file or directory says otherwise.
 
 Before publishing the final PR, the maintainer must confirm:
 
 - Permission to extend and redistribute Kakarayan.
+- Permission and terms for importing, copying, adapting, or executing FormosanBank QC code
+  as part of the Kakarayan publisher.
 - Attribution for the original researcher's work.
-- The code license to add.
+- The Kakarayan code license and any notices required for reused FormosanBank code.
 - Ownership of the GitHub Pages deployment and release process.
 
 Do not choose a code license on the maintainer's behalf.
 
 If this remains unresolved, implementation can be completed, but the PR must be clearly
 blocked from public deployment rather than silently assigning a license.
+
+### 13.4 Community and cultural responsibility
+
+Public availability does not erase community interests in Indigenous language materials.
+
+- Preserve community, speaker, collector, and contributor attribution provided by sources.
+- Surface culturally sensitive or access notices without minimizing them.
+- Do not infer speaker identity, demographic traits, locations, vitality, or cultural
+  categories absent from reviewed source metadata.
+- Do not rank languages or corpora by quality, importance, or completeness.
+- Provide a direct correction, rights, and takedown contact path.
+- Make it possible to withdraw a corpus from new prepared releases without breaking the
+  provenance record for prior releases.
+- Record reviewer-needed cultural and terminology questions in the status document and PR;
+  do not silently invent an answer.
 
 ## 14. Internationalization and typography
 
@@ -1134,12 +1436,21 @@ Do not add:
 - Cookies.
 - Server logs beyond GitHub's unavoidable hosting behavior.
 
+Do not upload corpus text, audio, metadata, or generated indexes to third-party AI,
+translation, analytics, error-reporting, or hosted-search services.
+
+Do not build semantic embeddings or AI-derived annotations for this product. Search must
+use transparent lexical, relational, and documented linguistic projections.
+
 Security requirements:
 
 - Treat all corpus strings and metadata as untrusted text.
+- Parse XML with external-entity resolution and network access disabled; enforce realistic
+  file, tree-depth, text, and expansion limits without rejecting valid current corpora.
 - Do not use unsanitized HTML insertion.
 - Validate and bound all URL-derived query state.
 - Sanitize archive paths to prevent traversal.
+- Reject unsafe symlinks and paths that escape the pinned checkout or build directory.
 - Prevent formula execution in spreadsheet-oriented exports.
 - Set a restrictive CSP through a meta tag where compatible with required Workers/Wasm.
 - Avoid remote executable scripts and fonts.
@@ -1148,6 +1459,12 @@ Security requirements:
 - Pin GitHub Actions to immutable commit SHAs where practical.
 - Give workflows the minimum permissions needed.
 - Never expose repository tokens to pull-request code.
+- Never use `pull_request_target` to execute pull-request code.
+- Run FormosanBank checkout, QC imports, XML parsing, and artifact generation in a job with
+  read-only repository permissions and no deployment environment or write credentials.
+- Give release/Pages write permission only to a later trusted job that consumes a
+  checksummed validated artifact and does not execute upstream scripts or generated content.
+- Use protected-environment approval for publication if the organization supports it.
 
 ## 17. Performance and storage budgets
 
@@ -1228,10 +1545,17 @@ Steps:
 - Verify base path, manifests, checksums, size budget, and links.
 - Upload a Pages artifact.
 - Deploy through the official Pages action.
+- Read the deployment output URL and run a post-deployment smoke test for HTML, hashed
+  assets, Wasm/Worker loading, catalogue compatibility, a representative search, byte-range
+  retrieval, direct download links, and the 404 page.
 
 Use the `github-pages` environment and least-privilege permissions.
 
 Concurrency must cancel obsolete deployments without interrupting a newer deployment.
+
+The smoke test must tolerate only documented CDN propagation behavior and must fail the
+workflow on persistent asset/version mismatch. Document how to redeploy the previous
+known-good application/data pair.
 
 ### 19.3 `publish-data.yml`
 
@@ -1247,11 +1571,12 @@ For a real release:
 - Check out the exact public FormosanBank ref.
 - Confirm clean and resolved commit.
 - Run full validation.
-- Generate all required artifacts.
+- Generate all required artifacts in partitions that remain within standard-runner disk.
 - Run checksums and format validators.
 - Enforce size limits.
-- Create or update a clearly named Kakarayan data release.
-- Upload assets.
+- Create a clearly named draft Kakarayan data release.
+- Upload assets with bounded retry and verify remote size/checksum metadata.
+- Publish only after every asset and manifest validates.
 - Produce a Pages-compatible interactive bundle and manifest.
 
 Do not make a scheduled job automatically publish a changed upstream commit without
@@ -1259,6 +1584,14 @@ validation and maintainer intent.
 
 A scheduled workflow may report that a newer FormosanBank commit exists, but real data
 publication should remain explicit.
+
+Publication must be idempotent:
+
+- A dry run never creates or mutates a release.
+- Re-running against an existing published release verifies it and exits without mutation.
+- A partial draft may be resumed only after verifying every existing asset.
+- A conflicting asset or manifest fails and requires a new release ID.
+- Intermediate Actions artifacts use short retention and are not cited as public releases.
 
 ### 19.4 Release naming
 
@@ -1294,6 +1627,11 @@ Do not imply the FormosanBank repository itself was released on that date unless
 - Check counts against independently calculated summaries.
 - Fail on unexpected data loss.
 
+Define every public statistic precisely. In particular, distinguish audio references from
+unique media files, timed segments from untimed references, and transcribed duration from
+total media duration. Never sum overlapping segments as unique media duration without
+labeling the metric.
+
 ### 20.2 Artifact validation
 
 - JSON validates against schemas.
@@ -1308,6 +1646,10 @@ Do not imply the FormosanBank repository itself was released on that date unless
 - VTT/SRT timing is ordered and valid.
 - Archives list only safe relative paths.
 - SHA-256 values match after publication assembly.
+- Generated files contain no absolute local paths, usernames, temporary URLs, credentials,
+  Actions tokens, runner paths, or private repository names.
+- A range-capable static test server proves representative Parquet partial reads.
+- A post-deployment check proves the actual Pages CDN and MIME behavior used by the app.
 
 ### 20.3 Cross-representation reconciliation
 
@@ -1392,8 +1734,10 @@ The sequence below is intended to minimize rework while still delivering one pul
 - Run the current test/lint/type-check baseline.
 - Record failures that predate the branch.
 - Inspect the current public FormosanBank checkout and applicable instructions.
+- Inspect central license, AI-use, TDM, corpus-specific, XML-root, and media notices.
 - Recalculate the source inventory.
 - Confirm code-license/maintainer status or record the publication blocker.
+- Create `IMPLEMENTATION_STATUS.md` with the baseline commit, checks, blockers, and next slice.
 
 Exit condition:
 
@@ -1409,6 +1753,7 @@ Exit condition:
 - Define table schemas.
 - Define catalogue, search, release, and recipe schemas.
 - Define rights vocabulary.
+- Create the reviewed corpus/language metadata overlay and evidence links.
 - Define format-support matrix.
 - Build representative fixtures covering difficult XML structures.
 
@@ -1506,6 +1851,7 @@ Exit condition:
 - Implement interlinear expansion.
 - Implement audio playback.
 - Implement result sorting, sampling, and pagination/virtualization.
+- Implement scoped frequency, distribution, n-gram, and collocation summaries.
 - Port shared golden search behavior.
 
 Exit condition:
@@ -1557,6 +1903,8 @@ Exit condition:
 - Add deterministic caching.
 - Add dry-run release build.
 - Add artifact and Pages size reports.
+- Add immutable draft-release publication, atomic Pages assembly, post-deployment smoke
+  checks, and documented rollback.
 
 Exit condition:
 
@@ -1632,6 +1980,67 @@ When blocked:
 - Ask the maintainer only when a decision changes rights, public behavior, or architecture
   materially.
 
+### 23.1 Durable progress and context-recovery protocol
+
+This is a long-running implementation. Do not rely on conversation memory.
+
+At the start of every resumed session or after context compaction:
+
+1. Read `GOAL.md`.
+2. Read this implementation plan.
+3. Read `IMPLEMENTATION_STATUS.md`.
+4. Run `git status --short --branch`.
+5. Inspect the recent feature-branch commits.
+6. Verify the last recorded checks against the current commit.
+7. Resume the first incomplete acceptance item; do not restart completed work.
+
+After every coherent commit, update `IMPLEMENTATION_STATUS.md` with:
+
+- Current branch and commit.
+- Completed plan phases and definition-of-done items.
+- Exact commands that most recently passed.
+- Full-data artifact sizes and performance measurements when available.
+- Open failures classified as code, source-data, governance, or external-service issues.
+- The next smallest concrete slice.
+
+Keep evidence in repository files or reproducible command output, not only commentary.
+
+If a build is interrupted, inspect and validate partial output before deleting or resuming
+it. Generated output remains disposable; source and reviewed metadata do not.
+
+Never mark a phase complete because code exists. Mark it complete only after its exit
+condition and recorded checks pass.
+
+### 23.2 Upstream synchronization and conflict safety
+
+The branch begins from the Kakarayan commit recorded in Git history, but `main` may advance
+during a long implementation.
+
+- Fetch `origin` periodically and before opening the PR.
+- Do not reset or discard work to match upstream.
+- Do not overwrite unrelated maintainer changes.
+- If the branch has not been shared, a clean rebase is acceptable after inspecting the diff.
+- If the branch has been pushed or shared, prefer a non-destructive merge unless the
+  maintainer explicitly authorizes rewriting history.
+- Re-run all impacted checks after resolving conflicts.
+- Re-review permissions and deployment guards if upstream workflow files changed.
+
+### 23.3 Blocker and persistence policy
+
+Licensing approval, Pages repository settings, external terminology review, or remote
+service availability may require maintainer action.
+
+An external blocker does not authorize stopping independent implementation.
+
+- Finish all code, fixtures, tests, generated dry runs, documentation, and PR preparation
+  that do not depend on the blocked decision.
+- Record the exact blocker, evidence, owner, and smallest required action.
+- Provide a safe default that does not publish or redistribute ambiguous material.
+- Do not substitute a different architecture or silently reduce scope.
+- Do not declare the whole implementation complete while a required definition-of-done
+  item remains blocked.
+- Do not repeatedly ask the same question when no new evidence exists.
+
 ## 24. Testing commands and developer experience
 
 The final repository must offer a small documented command surface.
@@ -1693,9 +2102,11 @@ The implementation is complete only when all of the following are true:
 - It runs correctly at the `/kakarayan/` project path.
 - Every public, valid corpus is represented.
 - Every display language is represented distinctly.
+- Every corpus/language has reviewed presentation metadata and source evidence.
 - English and Traditional Chinese are complete.
 - Corpus and language discovery are complete.
 - Concordance and dictionary modes are complete.
+- Scoped linguistic summaries and their exports are complete.
 - Search modes and filters are complete.
 - Interlinear display and source provenance are complete.
 - Dataset-builder selection, preview, estimation, and download are complete.
@@ -1706,8 +2117,10 @@ The implementation is complete only when all of the following are true:
 - Search results pass shared golden cases.
 - All manifests and schemas validate.
 - Checksums validate.
+- Two clean builds from identical inputs produce identical checksums.
 - All applicable specialist formats validate.
 - Rights and citations are visible and machine-readable.
+- Central, corpus, component, AI-use, TDM, and community notices are preserved.
 - No private data or private path is present.
 - No runtime backend or database is required.
 - No paid service is required.
@@ -1718,7 +2131,10 @@ The implementation is complete only when all of the following are true:
 - CI is green.
 - Pull requests do not publish.
 - Main-only deployment guards are present.
+- Data releases are immutable, Pages deployment is atomic, and rollback is documented.
+- Historical prepared-only releases are distinguished from the current interactive release.
 - Documentation allows a new contributor to reproduce the build.
+- `IMPLEMENTATION_STATUS.md` accurately records the final verification state.
 - The full diff has been reviewed and cleaned.
 - The PR is opened but not merged.
 
@@ -1732,6 +2148,7 @@ This pull request does not:
 - Accept private corpora.
 - Edit canonical FormosanBank data in the browser.
 - Replace FormosanBank's QC process.
+- Provide semantic/embedding/AI-generated search or annotation.
 - Provide server-side arbitrary export jobs.
 - Clip or transcode large audio collections in the browser.
 - Guarantee availability of externally hosted media.

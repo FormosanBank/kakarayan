@@ -48,13 +48,20 @@ Do not stop at a plan, scaffold, mockup, prototype, or partial corpus.
 
 - Read only the public `FormosanBank/FormosanBank` repository.
 - Never access or publish private corpus repositories.
+- Resolve the requested remote ref; do not assume a local FormosanBank checkout is current.
 - Pin every build to an exact FormosanBank commit.
+- Read that commit's tree, not deleted history, and allowlist publishable source paths.
+- Do not pull LFS/Hugging Face audio unless an explicit rights-compatible release requires it.
 - Treat FormosanBank XML as canonical.
 - Treat Kakarayan tables, indexes, manifests, and packages as derived.
 - Package canonical XML byte-for-byte from source files.
 - Never regenerate archival XML from Django models or relational tables.
 - Retain repository, commit, corpus, source path, local ID, and ordinal provenance.
 - Preserve repeated tiers, attributes, source order, inline markup, descendant text, and tails.
+- Preserve per-text citation, BibTeX, copyright, source, audio, glottocode, and dialect.
+- Preserve word/morpheme class attributes and tier notes, versions, languages, and raw timing.
+- Label original source orthography separately from FormosanBank standard orthography.
+- Reuse FormosanBank's canonical language-resolution and token-counting rules.
 - Never silently repair or discard malformed source data.
 - Fail publication or quarantine affected records with a visible report.
 
@@ -83,6 +90,8 @@ Do not stop at a plan, scaffold, mockup, prototype, or partial corpus.
   selection.
 - Preview, schema, counts, rights, estimated size, progress, cancellation, and fallback.
 - Prepared-download browsing by release, corpus, language, tier, and format.
+- Scoped frequency, distribution, n-gram, collocation, and seeded-sampling summaries with
+  accessible tables, documented limits, and exports.
 - Complete format guide, data model, citation, rights, methodology, about, 404, offline,
   empty, loading, unsupported, and failure states.
 
@@ -134,6 +143,11 @@ Do not invent POS, dependencies, lexical analysis, or grammatical structure.
 - Resolve data locations through validated manifests.
 - Never hard-code current inventory counts or generated filenames.
 - Generate deterministic identifiers, ordering, archives, schemas, and checksums.
+- Use content-hashed, release-scoped interactive paths and never reuse a URL for new bytes.
+- Keep historical releases downloadable without promising historical interactive querying.
+- Publish immutable data releases before atomically deploying their Pages bundle.
+- Verify deployed Wasm, Workers, manifests, byte ranges, search, and downloads.
+- Document rollback to the previous application/data pair.
 
 ## Rights, attribution, privacy, and security
 
@@ -141,17 +155,22 @@ Do not invent POS, dependencies, lexical analysis, or grammatical structure.
 - Model corpus, component, and media rights explicitly.
 - Fail closed on ambiguous bulk redistribution.
 - Display rights and citations on pages, in the builder, and inside packages.
+- Preserve central, corpus, XML-root, media, noncommercial-AI, and TDM notices.
+- Use a reviewed metadata/rights registry with evidence links; do not infer law from prose.
+- Propagate machine-readable rights signals and document GitHub Pages root-path limitations.
 - Preserve attribution to Kakarayan's original researcher and FormosanBank contributors.
 - Do not choose a code license without maintainer authority.
 - Treat unresolved code-license approval as a deployment blocker, not an assumption.
 - Collect no user data.
 - Add no analytics, advertising, authentication, tracking, or application cookies.
+- Send no corpus data to hosted AI/translation/search services and build no semantic index.
 - Treat corpus strings and URL state as untrusted.
 - Do not insert unsanitized HTML.
 - Sanitize archive paths and spreadsheet-oriented exports.
 - Bundle executable assets locally.
 - Use least-privilege, immutable workflow dependencies where practical.
 - Never expose write tokens to pull-request code.
+- Never execute upstream corpus/QC code in a job holding release or Pages write credentials.
 
 ## Quality gates
 
@@ -190,24 +209,28 @@ Do not invent POS, dependencies, lexical analysis, or grammatical structure.
 2. Read repository instructions, README, architecture, ingestion, models, views, templates,
    styles, translations, and tests.
 3. Confirm the feature branch and cleanly identify pre-existing work.
-4. Run and record the existing baseline checks.
-5. Inspect the current public FormosanBank repository and recalculate its inventory.
-6. Study difficult XML examples before finalizing contracts.
-7. Re-read the relevant plan phase.
-8. Select the smallest coherent vertical slice that advances the real product.
-9. Define concrete acceptance checks for that slice.
-10. Implement production behavior, not placeholders.
-11. Add or update focused tests.
-12. Run the narrowest relevant checks.
-13. Fix root causes instead of weakening validation.
-14. Run broader impacted checks.
-15. Inspect the slice diff and remove debug or accidental output.
-16. Commit the coherent slice on the feature branch.
-17. Record measured results and durable architecture decisions.
-18. Move immediately to the next incomplete slice.
-19. Repeat until every phase and definition-of-done item is satisfied.
+4. Create/read `IMPLEMENTATION_STATUS.md` as the durable recovery record.
+5. Run and record the existing baseline checks.
+6. Inspect the current public FormosanBank repository and recalculate its inventory.
+7. Study difficult XML examples before finalizing contracts.
+8. Re-read the relevant plan phase.
+9. Select the smallest coherent vertical slice that advances the real product.
+10. Define concrete acceptance checks for that slice.
+11. Implement production behavior, not placeholders.
+12. Add or update focused tests.
+13. Run the narrowest relevant checks.
+14. Fix root causes instead of weakening validation.
+15. Run broader impacted checks.
+16. Inspect the slice diff and remove debug or accidental output.
+17. Commit the coherent slice on the feature branch.
+18. Update status with commit, passed checks, measurements, blockers, and next slice.
+19. Move immediately to the next incomplete slice.
+20. Repeat until every phase and definition-of-done item is satisfied.
 
 Do not defer all integration and validation until the end.
+
+After context compaction or a resumed session, re-read the goal, plan, status, branch state,
+and recent commits; verify the last checkpoint and resume instead of restarting.
 
 Do not stop because one test passes, one language works, or the interface renders.
 
@@ -219,6 +242,9 @@ When blocked, gather evidence, try safe in-scope alternatives, and continue inde
 
 Escalate only decisions requiring maintainer authority, such as licensing, rights, or a
 materially different architecture.
+
+An external blocker does not justify stopping unrelated implementation or marking the goal
+complete; finish everything independently possible and record the exact required action.
 
 ## Final verification loop
 
