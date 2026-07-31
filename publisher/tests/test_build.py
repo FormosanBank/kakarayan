@@ -11,6 +11,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from jsonschema import ValidationError
 from openpyxl import load_workbook
 
 from publisher.build import BuildError, build_release
@@ -153,6 +154,35 @@ def test_output_directory_must_be_empty(public_repo: Path, tmp_path: Path) -> No
 def test_source_commit_must_match(public_repo: Path, tmp_path: Path) -> None:
     with pytest.raises(BuildError, match="expected"):
         build_release(public_repo, tmp_path / "output", expected_commit="0" * 40)
+
+
+def test_model_catalog_is_validated_before_corpus_projection(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "output"
+    incomplete_catalog: dict[str, object] = {
+        "schema_version": "1.0.0",
+        "generated_at": "2024-01-02T03:04:05Z",
+        "provider": "Hugging Face",
+        "models": [
+            {
+                "id": "model_formosanbank_example",
+                "repository": "FormosanBank/example",
+                "task": "translation",
+                "url": "https://huggingface.co/FormosanBank/example",
+                "license": "unknown",
+                "languages": ["ami"],
+                "limitations": "Machine output.",
+            }
+        ],
+        "services": [],
+    }
+
+    with pytest.raises(ValidationError, match="framework"):
+        build_release(public_repo, output, model_catalog=incomplete_catalog)
+
+    assert not (output / "tables").exists()
 
 
 def test_database_can_be_packaged_for_github_releases(

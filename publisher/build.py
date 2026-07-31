@@ -1031,6 +1031,7 @@ def build_release(
         "services": [],
     }
     models = {**models, "generated_at": generated_at}
+    validate_document(models, schema_dir / "model-catalog.schema.json")
     orthography = build_orthography_catalog(repo, source.commit)
     content_path = Path(__file__).resolve().parents[1] / "content" / "manifest.json"
     content = cast(dict[str, object], json.loads(content_path.read_text(encoding="utf-8")))
@@ -1140,7 +1141,6 @@ def build_release(
 
     validate_document(catalog, schema_dir / "catalog.schema.json")
     validate_document(rights, schema_dir / "rights.schema.json")
-    validate_document(models, schema_dir / "model-catalog.schema.json")
     validate_document(orthography, schema_dir / "orthography.schema.json")
     validate_document(content, schema_dir / "content.schema.json")
     validate_document(search_manifest, schema_dir / "search-manifest.schema.json")
