@@ -15,6 +15,8 @@ def verify_site(root: Path, *, total_limit: int, file_limit: int) -> dict[str, i
         "index.html",
         "404.html",
         "manifest.webmanifest",
+        "robots.txt",
+        "sitemap.xml",
         "sw.js",
         "api/v1/meta.json",
         "api/v1/search/manifest.json",

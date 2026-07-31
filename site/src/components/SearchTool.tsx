@@ -1,4 +1,11 @@
-import {useEffect, useMemo, useRef, useState, type FormEvent} from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   matchingIndexes,
   matchingShards,
@@ -7,9 +14,12 @@ import {
 } from "../data";
 import {downloadExport, type ExportFormat} from "../exports";
 import {useI18n} from "../i18n";
-import {Link, useSearchParams} from "../routing";
+import {useSearchParams} from "../routing";
 import {cardFromRecord, saveCard} from "../study";
 import type {AppData, SearchRecord} from "../types";
+import {Diagnostics} from "./Diagnostics";
+import {CandidateGroups} from "./CandidateGroups";
+import {SearchResultCard} from "./SearchResultCard";
 
 const VALID_MODES: SearchMode[] = [
   "source",
@@ -43,14 +53,19 @@ export function SearchTool({
   );
   const [records, setRecords] = useState<SearchRecord[]>([]);
   const [scanned, setScanned] = useState(0);
+  const [matches, setMatches] = useState(0);
   const [truncated, setTruncated] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(learner ? 60 : 200);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const [resultView, setResultView] = useState<"occurrences" | "candidates">("occurrences");
   const [exporting, setExporting] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const initialStarted = useRef(false);
+  const hasInitialQuery = useRef(Boolean(params.get("q") && initialLanguage));
 
   const relevantCorpora = useMemo(
     () =>
@@ -75,8 +90,7 @@ export function SearchTool({
     [],
   );
 
-  async function runSearch(event: FormEvent) {
-    event.preventDefault();
+  const performSearch = useCallback(async (limit: number, updateUrl: boolean) => {
     if (!languageId || !query.trim()) return;
     controller.current?.abort();
     const nextController = new AbortController();
@@ -85,19 +99,28 @@ export function SearchTool({
     setError("");
     setNotice("");
     setSearched(false);
-    setParams({q: query.trim(), language: languageId, ...(corpusId && {corpus: corpusId}), mode});
+    if (updateUrl) {
+      setParams({
+        q: query.trim(),
+        language: languageId,
+        ...(corpusId && {corpus: corpusId}),
+        mode,
+      });
+    }
     try {
       const result = await searchRecords(
         shards,
         query,
         mode,
         nextController.signal,
-        learner ? 60 : 200,
+        limit,
         indexes,
       );
       setRecords(result.records);
       setScanned(result.scanned);
+      setMatches(result.matches);
       setTruncated(result.truncated);
+      setVisibleLimit(limit);
       setSearched(true);
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
@@ -105,6 +128,31 @@ export function SearchTool({
     } finally {
       if (controller.current === nextController) setBusy(false);
     }
+  }, [
+    corpusId,
+    indexes,
+    languageId,
+    mode,
+    query,
+    setParams,
+    shards,
+  ]);
+
+  useEffect(() => {
+    if (!hasInitialQuery.current || initialStarted.current) return;
+    initialStarted.current = true;
+    void performSearch(learner ? 60 : 200, false);
+  }, [learner, performSearch]);
+
+  useEffect(() => {
+    const recordId = params.get("record");
+    if (!searched || !recordId) return;
+    document.getElementById(`record-${recordId}`)?.scrollIntoView({block: "center"});
+  }, [params, searched, records]);
+
+  function runSearch(event: FormEvent) {
+    event.preventDefault();
+    void performSearch(learner ? 60 : 200, true);
   }
 
   async function addToDeck(record: SearchRecord) {
@@ -199,7 +247,12 @@ export function SearchTool({
           download or choose another scope.
         </p>
       )}
-      {error && <p className="callout callout--error">{error}</p>}
+      {error && (
+        <div className="callout callout--error">
+          <p>{error}</p>
+          <Diagnostics releaseId={data.meta.release_id} error={new Error(error)} />
+        </div>
+      )}
       {notice && (
         <p className="callout callout--success" role="status">
           {notice}
@@ -209,9 +262,9 @@ export function SearchTool({
       {(records.length > 0 || (!busy && searched)) && (
         <div className="results-heading" aria-live="polite">
           <p>
-            <strong>{records.length}</strong> {t("search.results")} · {scanned.toLocaleString()}{" "}
-            records scanned
-            {truncated && " · first 200 shown"}
+            <strong>{matches.toLocaleString()}</strong> {t("search.results")} · showing{" "}
+            {records.length.toLocaleString()} · {scanned.toLocaleString()} candidate records
+            checked
           </p>
           {records.length > 0 && (
             <div className="result-export">
@@ -268,89 +321,75 @@ export function SearchTool({
         <div className="empty-state">{t("search.noResults")}</div>
       )}
 
-      <div className="result-list">
-        {records.map((record) => (
-          <article className="result-card" key={record.id}>
-            <div className="result-card__scope">
-              <span>{data.languages.find((item) => item.id === record.language_id)?.name}</span>
-              {record.dialect && <span>{record.dialect}</span>}
-              <span>{data.corpora.find((item) => item.id === record.corpus_id)?.name}</span>
-            </div>
-            <h3>{record.standard || record.original || "Untranscribed sentence"}</h3>
-            {record.original && record.original !== record.standard && (
-              <dl className="tier-pair">
-                <div>
-                  <dt>{t("search.original")}</dt>
-                  <dd lang={record.language_id}>{record.original}</dd>
-                </div>
-                <div>
-                  <dt>{t("search.standard")}</dt>
-                  <dd lang={record.language_id}>{record.standard}</dd>
-                </div>
-              </dl>
-            )}
-            {(record.phonology.length > 0 ||
-              record.tier_translations.some((item) => item.owner_type !== "sentence")) && (
-              <details className="tier-details">
-                <summary>Word, morpheme, and phonology tiers</summary>
-                {record.phonology.map((item) => (
-                  <p key={`${item.owner_type}-${item.owner_id}-${item.position}`}>
-                    <strong>PHON · {item.owner_type}</strong> {item.text}
-                  </p>
-                ))}
-                {record.tier_translations
-                  .filter((item) => item.owner_type !== "sentence")
-                  .map((item) => (
-                    <p key={`${item.owner_type}-${item.owner_id}-${item.position}`}>
-                      <strong>
-                        {item.kind || "TRANSL"} · {item.owner_type}
-                      </strong>{" "}
-                      {item.text}
-                    </p>
-                  ))}
-                {record.words.map((word) => (
-                  <p key={word.id}>
-                    <strong>W {word.position + 1}</strong>
-                    {word.class && ` · class ${word.class}`}
-                    {word.sclass && ` · sclass ${word.sclass}`}
-                    {word.morphemes.length > 0 &&
-                      ` · ${word.morphemes.length} morpheme${word.morphemes.length === 1 ? "" : "s"}`}
-                  </p>
-                ))}
-              </details>
-            )}
-            <div className="translations">
-              {record.translations.map((translation, index) => (
-                <p key={`${translation.xml_lang}-${index}`} lang={translation.xml_lang}>
-                  <span>{translation.xml_lang || "translation"}</span>
-                  {translation.text}
-                </p>
-              ))}
-            </div>
-            <footer>
-              <code>{record.xml_id}</code>
-              <a
-                href={`https://github.com/FormosanBank/FormosanBank/blob/${data.meta.source.commit}/${record.source_path}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Source XML
-              </a>
-              <button className="text-button" onClick={() => addToDeck(record)}>
-                {t("search.save")}
-              </button>
-              {learner && (
-                <Link
-                  className="text-button"
-                  to={`/search?q=${encodeURIComponent(query)}&language=${record.language_id}`}
-                >
-                  {t("search.research")}
-                </Link>
-              )}
-            </footer>
-          </article>
-        ))}
-      </div>
+      {records.length > 0 && (
+        <div className="segmented result-view">
+          <button
+            aria-pressed={resultView === "occurrences"}
+            onClick={() => setResultView("occurrences")}
+          >
+            Concordance occurrences
+          </button>
+          <button
+            aria-pressed={resultView === "candidates"}
+            disabled={!["source", "exact", "prefix", "contains", "fuzzy"].includes(mode)}
+            onClick={() => setResultView("candidates")}
+          >
+            Headword candidates
+          </button>
+        </div>
+      )}
+      {resultView === "candidates" &&
+      ["source", "exact", "prefix", "contains", "fuzzy"].includes(mode) ? (
+        <CandidateGroups
+          data={data}
+          records={records}
+          query={query}
+          mode={mode}
+          onSave={addToDeck}
+          onOpen={(record) => {
+            setResultView("occurrences");
+            window.setTimeout(
+              () =>
+                document
+                  .getElementById(`record-${record.id}`)
+                  ?.scrollIntoView({block: "center"}),
+              0,
+            );
+          }}
+        />
+      ) : (
+        <div className="result-list">
+          {records.map((record) => (
+            <SearchResultCard
+              data={data}
+              key={record.id}
+              record={record}
+              query={query}
+              mode={mode}
+              learner={learner}
+              onSave={addToDeck}
+              onNotice={setNotice}
+            />
+          ))}
+        </div>
+      )}
+      {truncated && (
+        <div className="pagination-actions">
+          <p>
+            Results are in deterministic source order. Browser display is capped at 2,000;
+            use Dataset builder for a bounded export.
+          </p>
+          {visibleLimit < 2_000 && (
+            <button
+              className="button button--quiet"
+              disabled={busy}
+              onClick={() => void performSearch(Math.min(visibleLimit + 200, 2_000), false)}
+            >
+              Show next {Math.min(200, 2_000 - visibleLimit)}
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

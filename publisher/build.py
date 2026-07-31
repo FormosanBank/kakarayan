@@ -353,6 +353,19 @@ def _build_catalog(
                 (corpus_id,),
             )
         ]
+        citation, bibtex, source_note, copyright_note, citation_count = connection.execute(
+            """
+            SELECT
+              COALESCE(MAX(NULLIF(citation, '')), ''),
+              COALESCE(MAX(NULLIF(bibtex_citation, '')), ''),
+              COALESCE(MAX(NULLIF(source, '')), ''),
+              COALESCE(MAX(NULLIF(copyright, '')), ''),
+              COUNT(DISTINCT NULLIF(citation, ''))
+            FROM texts
+            WHERE corpus_id = ?
+            """,
+            (corpus_id,),
+        ).fetchone()
         corpora.append(
             {
                 "id": corpus_id,
@@ -361,12 +374,29 @@ def _build_catalog(
                 "languages": languages,
                 "rights_id": rights_by_corpus[name],
                 "counts": dict(corpus_counts[corpus_id]),
+                "citation": citation,
+                "bibtex_citation": bibtex,
+                "source": source_note,
+                "copyright": copyright_note,
+                "citation_count": citation_count,
             }
         )
     languages = language_rows()
     for language in languages:
         counts = dict(language_counts[str(language["id"])])
         language["counts"] = counts
+        language["dialects"] = [
+            str(row[0])
+            for row in connection.execute(
+                """
+                SELECT DISTINCT dialect
+                FROM texts
+                WHERE language_id = ? AND dialect != ''
+                ORDER BY dialect
+                """,
+                (language["id"],),
+            )
+        ]
         if counts.get("audio", 0):
             cast(list[str], language["capabilities"]).append("audio")
     return {
@@ -392,13 +422,14 @@ def _search_records(
         sentence_id = str(row[0])
         records[sentence_id] = {
             "id": sentence_id,
-            "corpus_id": row[1],
-            "language_id": row[2],
-            "dialect": row[3],
-            "source_path": row[4],
-            "xml_id": row[5],
-            "standard": row[6],
-            "original": row[7],
+            "text_id": row[1],
+            "corpus_id": row[2],
+            "language_id": row[3],
+            "dialect": row[4],
+            "source_path": row[5],
+            "xml_id": row[6],
+            "standard": row[7],
+            "original": row[8],
             "translations": [],
             "tokens": [],
             "forms": [],
@@ -587,6 +618,7 @@ def _write_search_data(
     query = """
         SELECT
           s.id,
+          t.id,
           t.corpus_id,
           t.language_id,
           t.dialect,
@@ -734,7 +766,7 @@ def _write_search_data(
     with (search_dir / "sentences.jsonl").open("w", encoding="utf-8", newline="\n") as stream:
         reset_terms()
         for row in connection.execute(query):
-            scope = (str(row[1]), str(row[2]))
+            scope = (str(row[2]), str(row[3]))
             if current_scope != scope:
                 flush()
                 write_index()
@@ -807,11 +839,10 @@ def _artifact_facets(
     rights_ids: list[str],
     catalog: Mapping[str, object],
 ) -> dict[str, object]:
-    corpora = [
-        cast(dict[str, object], corpus)
-        for corpus in cast(list[object], catalog["corpora"])
-        if corpus["rights_id"] in rights_ids
+    corpus_rows = [
+        cast(dict[str, object], corpus) for corpus in cast(list[object], catalog["corpora"])
     ]
+    corpora = [corpus for corpus in corpus_rows if corpus["rights_id"] in rights_ids]
     corpus_ids = sorted(str(corpus["id"]) for corpus in corpora)
     language_ids = sorted(
         {

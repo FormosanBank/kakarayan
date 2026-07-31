@@ -19,6 +19,9 @@ interface Artifact {
   language_ids: string[];
   corpus_ids: string[];
   tiers: string[];
+  compression?: "gzip";
+  content_bytes?: number;
+  content_sha256?: string;
 }
 
 interface DownloadsCatalog {
@@ -197,6 +200,33 @@ export function Downloads({data}: {data: AppData}) {
                   {`curl -L --fail --output '${artifact.path.split("/").pop()}' '${artifact.download_url}'\n` +
                     `printf '%s  %s\\n' '${artifact.sha256}' '${artifact.path.split("/").pop()}' | sha256sum --check -`}
                 </pre>
+              </details>
+              <details>
+                <summary>Citation, scope, and rights</summary>
+                <p>
+                  Scope: <code>{artifact.scope}</code>. Source commit{" "}
+                  <code>{data.meta.source.commit}</code>. Release{" "}
+                  <code>{manifest?.release_id}</code>.
+                </p>
+                {artifact.compression && (
+                  <p>
+                    Compression: {artifact.compression}. Decoded size{" "}
+                    {artifact.content_bytes ? size(artifact.content_bytes) : "not reported"};
+                    decoded SHA-256 <code>{artifact.content_sha256 ?? "not reported"}</code>.
+                  </p>
+                )}
+                <ul>
+                  {artifact.rights_ids.map((id) => {
+                    const rights = data.rights.entries.find((entry) => entry.id === id);
+                    return (
+                      <li key={id}>
+                        <code>{id}</code>:{" "}
+                        {rights?.attribution || "No reviewed attribution statement"}; license{" "}
+                        {rights?.license_expression ?? "not established"}.
+                      </li>
+                    );
+                  })}
+                </ul>
               </details>
             </div>
             <div>

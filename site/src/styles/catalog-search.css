@@ -369,6 +369,55 @@
   align-items: end;
 }
 
+.result-view {
+  margin: 0.8rem 0 1rem;
+}
+
+.candidate-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.candidate-groups > article {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  background: var(--paper-light);
+}
+
+.candidate-groups h3 {
+  font-family: var(--serif);
+  font-size: 1.6rem;
+}
+
+.candidate-stats {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.candidate-stats div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.candidate-stats dt {
+  color: var(--ink-soft);
+  font-size: 0.67rem;
+  text-transform: uppercase;
+}
+
+.candidate-stats dd {
+  margin: 0;
+  font-family: var(--mono);
+}
+
+.candidate-links {
+  display: flex;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  padding-top: 0.8rem;
+  border-top: 1px dotted var(--line);
+}
+
 .result-export label {
   display: grid;
   gap: 0.25rem;
@@ -385,6 +434,21 @@
 .result-list {
   display: grid;
   gap: 1rem;
+}
+
+.pagination-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 0;
+  color: var(--ink-soft);
+}
+
+.pagination-actions p {
+  max-width: 58rem;
+  margin: 0;
+  font-size: 0.78rem;
 }
 
 .result-card {
@@ -425,6 +489,25 @@
   margin-bottom: 0.7rem;
   font-family: var(--serif);
   font-size: 1.55rem;
+}
+
+.kwic {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  padding: 0.65rem 0.8rem;
+  margin-bottom: 0.8rem;
+  border-left: 3px solid var(--gold);
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.kwic mark {
+  padding: 0 0.18rem;
+  color: var(--ink-dark);
+  background: #f4d98b;
+  font-weight: 800;
 }
 
 .tier-pair {
@@ -708,4 +791,37 @@
 
 .tier-details p {
   margin: 0.55rem 0 0;
+}
+
+.interlinear-table {
+  max-height: 22rem;
+  margin-top: 0.8rem;
+}
+
+.interlinear-table td {
+  min-width: 9rem;
+}
+
+.audio-evidence {
+  padding: 0.8rem;
+  margin: 1rem 0;
+  border: 1px solid var(--line);
+}
+
+.audio-evidence summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.audio-evidence > div {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto minmax(220px, 1fr);
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.7rem 0;
+  border-bottom: 1px dotted var(--line);
+}
+
+.audio-evidence audio {
+  width: 100%;
 }

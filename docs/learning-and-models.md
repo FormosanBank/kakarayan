@@ -38,17 +38,28 @@ which updates interval and due time on the device.
 The deck supports:
 
 - Due-card review.
+- Recognition and production directions.
+- New, learning, review, and due queue counts.
+- User-created decks, tags, and manual prompts.
 - JSON backup.
 - Validated JSON restore.
-- Anki-compatible TSV export.
+- Anki-compatible TSV and ordinary CSV export.
 - Formula-safe text fields.
+- Explicit single-card and full local reset controls.
 
 There is no login, cloud synchronization, leaderboard, or hidden learner telemetry.
 
 ## Pronunciation recording
 
 The browser MediaRecorder API captures a learner's voice after explicit microphone
-permission. A recording can be played, downloaded, deleted, or optionally sent for ASR.
+permission. A recording or selected local audio file can be played, downloaded, deleted,
+or optionally sent for ASR. Type, size, and duration are checked before upload. The chosen
+registered model, license, provider, and limitation notice remain visible.
+
+An optional trusted reference can be compared with the automatic hypothesis using plain
+word edit counts. This is explicitly labeled as text comparison rather than pronunciation
+scoring. The hypothesis can be copied, downloaded, or saved as a machine-output-tagged
+local study card.
 
 Recording availability depends on browser support and permission. A lack of recording or
 ASR capability does not disable corpus examples or the study deck.

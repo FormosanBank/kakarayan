@@ -56,6 +56,14 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   );
   expect(searchAssets.some((url) => url.includes("/indexes/"))).toBe(true);
   expect(searchAssets.some((url) => url.includes("/shards/"))).toBe(true);
+  await expect(page.getByText(/candidate records checked/)).toContainText("1 attestations");
+  await expect(page.locator(".kwic mark")).toContainText("lima");
+  await page.getByRole("button", {name: "Headword candidates"}).click();
+  await expect(page.getByText(/not reviewed dictionary entries/)).toBeVisible();
+  await page.getByRole("button", {name: "Concordance occurrences"}).click();
+  await page.getByRole("link", {name: "Stable record link"}).first().click();
+  await page.reload();
+  await expect(page.locator(".result-card").first()).toContainText("lima");
 });
 
 test("scoped RE2 search runs without weakening the content security policy", async ({
@@ -81,23 +89,26 @@ test("dataset recipes and worker summaries are available without a backend", asy
   await page
     .getByRole("combobox", {name: "Language", exact: true})
     .selectOption({label: "Amis"});
+  await page.getByLabel("Record unit").selectOption("word");
   await page.getByRole("button", {name: "Preview"}).click();
   await expect(
     page.getByRole("heading", {name: "Preview in deterministic source order"}),
   ).toBeVisible();
+  await expect(page.getByText(/projected word rows/)).toBeVisible();
   await page.getByLabel("Format").selectOption("recipe");
   const recipeDownload = page.waitForEvent("download");
-  await page.getByRole("button", {name: "Download"}).click();
+  await page.getByRole("button", {name: "Download", exact: true}).click();
   const recipe = await recipeDownload;
   expect(recipe.suggestedFilename()).toMatch(/-recipe\.json$/);
   const recipePath = await recipe.path();
   expect(recipePath).not.toBeNull();
   const document = JSON.parse(await readFile(recipePath as string, "utf8")) as {
     release_id: string;
-    selection: {language_ids: string[]};
+    selection: {language_ids: string[]; record_unit: string};
   };
   expect(document.release_id).toMatch(/^fb-20240102-/);
   expect(document.selection.language_ids).toEqual(["lang_amis"]);
+  expect(document.selection.record_unit).toBe("word");
 
   await page.getByRole("tab", {name: "Linguistic summaries"}).click();
   await page
@@ -118,7 +129,7 @@ test("lazy DuckDB-Wasm export creates a real Parquet file", async ({page}, testI
   await expect(page.locator(".result-card").first()).toBeVisible();
   await page.getByLabel("Export").selectOption("parquet");
   const parquetDownload = page.waitForEvent("download");
-  await page.getByRole("button", {name: "Download"}).click();
+  await page.getByRole("button", {name: "Download", exact: true}).click();
   const parquet = await parquetDownload;
   expect(parquet.suggestedFilename()).toMatch(/\.parquet$/);
   const parquetPath = await parquet.path();

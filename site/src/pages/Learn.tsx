@@ -52,7 +52,7 @@ export function Learn({data}: {data: AppData}) {
         {tab === "deck" && (
           <StudyDeck languages={data.languages} currentRelease={data.meta.release_id} />
         )}
-        {tab === "practice" && <Recorder catalog={data.models} />}
+        {tab === "practice" && <Recorder catalog={data.models} languages={data.languages} />}
         {tab === "translation" && <TranslationTool catalog={data.models} />}
         {tab === "orthography" && (
           <OrthographyTool

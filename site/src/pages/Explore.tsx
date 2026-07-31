@@ -55,6 +55,11 @@ export function Explore({data}: {data: AppData}) {
                 <p>
                   ISO <code>{language.iso639_3}</code>
                 </p>
+                <p>
+                  {language.dialects.length
+                    ? language.dialects.slice(0, 4).join(" · ")
+                    : "No dialect label supplied"}
+                </p>
                 <div className="capabilities">
                   {language.capabilities.map((capability) => (
                     <span key={capability}>{capability}</span>

@@ -3,6 +3,8 @@ import {useCallback, useEffect, useMemo, useState, type ChangeEvent} from "react
 import {useI18n} from "../i18n";
 import {
   cardsAsAnkiTsv,
+  cardsAsCsv,
+  clearCards,
   deleteCard,
   exportBackup,
   listCards,
@@ -41,6 +43,8 @@ export function StudyDeck({
   const [deck, setDeck] = useState("Personal");
   const [languageId, setLanguageId] = useState(languages[0]?.id ?? "");
   const [tags, setTags] = useState("");
+  const [direction, setDirection] =
+    useState<StudyCard["direction"]>("recognition");
   const [filter, setFilter] = useState("");
   const reload = useCallback(() => {
     listCards().then(
@@ -61,6 +65,13 @@ export function StudyDeck({
     [cards, now],
   );
   const current = due[0];
+  const queues = {
+    new: cards.filter((card) => card.repetitions === 0 && card.lapses === 0).length,
+    learning: cards.filter(
+      (card) => card.intervalDays === 0 && (card.repetitions > 0 || card.lapses > 0),
+    ).length,
+    review: cards.filter((card) => card.intervalDays > 0).length,
+  };
   const staleCards = cards.filter(
     (card) => card.source && card.source.releaseId !== currentRelease,
   );
@@ -117,6 +128,7 @@ export function StudyDeck({
           deck,
           languageId,
           tags: tags.split(/[\s,]+/u),
+          direction,
         }),
       );
       setFront("");
@@ -126,6 +138,12 @@ export function StudyDeck({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
+  }
+
+  async function resetAll() {
+    if (!window.confirm("Delete every Kakarayan study card from this browser?")) return;
+    await clearCards();
+    reload();
   }
 
   return (
@@ -147,6 +165,15 @@ export function StudyDeck({
           >
             Anki TSV
           </button>
+          <button
+            className="button button--quiet"
+            onClick={() =>
+              download(cardsAsCsv(cards), "kakarayan-study.csv", "text/csv;charset=utf-8")
+            }
+            disabled={!cards.length}
+          >
+            CSV
+          </button>
           <label className="button button--quiet file-button">
             {t("deck.import")}
             <input type="file" accept="application/json,.json" onChange={restore} />
@@ -154,6 +181,26 @@ export function StudyDeck({
         </div>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
+      {cards.length > 0 && (
+        <dl className="queue-summary">
+          <div>
+            <dt>Due</dt>
+            <dd>{due.length}</dd>
+          </div>
+          <div>
+            <dt>New</dt>
+            <dd>{queues.new}</dd>
+          </div>
+          <div>
+            <dt>Learning</dt>
+            <dd>{queues.learning}</dd>
+          </div>
+          <div>
+            <dt>Review</dt>
+            <dd>{queues.review}</dd>
+          </div>
+        </dl>
+      )}
       {staleCards.length > 0 && (
         <p className="callout callout--warning">
           {staleCards.length} cited card{staleCards.length === 1 ? "" : "s"} came from an
@@ -187,6 +234,18 @@ export function StudyDeck({
             </select>
           </label>
           <label className="field">
+            Direction
+            <select
+              value={direction}
+              onChange={(event) =>
+                setDirection(event.target.value as StudyCard["direction"])
+              }
+            >
+              <option value="recognition">Recognition: prompt to meaning</option>
+              <option value="production">Production: meaning to prompt</option>
+            </select>
+          </label>
+          <label className="field">
             Tags
             <input
               value={tags}
@@ -208,14 +267,16 @@ export function StudyDeck({
       {current && (
         <article className="review-card">
           <span>{current.deck} · local card</span>
-          <h3>{current.front}</h3>
+          <h3>{current.direction === "production" ? current.back : current.front}</h3>
           {!showAnswer ? (
             <button className="button button--primary" onClick={() => setShowAnswer(true)}>
               Show answer
             </button>
           ) : (
             <>
-              <div className="review-answer">{current.back}</div>
+              <div className="review-answer">
+                {current.direction === "production" ? current.front : current.back}
+              </div>
               <div className="grade-row" aria-label="Review grade">
                 {(["again", "hard", "good", "easy"] as Grade[]).map((gradeValue) => (
                   <button key={gradeValue} onClick={() => grade(gradeValue)}>
@@ -229,6 +290,9 @@ export function StudyDeck({
             <small>
               Source {current.source.recordId} · release {current.source.releaseId}
             </small>
+          )}
+          {current.audioReferences.length > 0 && (
+            <small>{current.audioReferences.length} source audio reference(s) retained</small>
           )}
         </article>
       )}
@@ -253,6 +317,9 @@ export function StudyDeck({
               </li>
             ))}
           </ul>
+          <button className="button button--danger" onClick={resetAll}>
+            Delete all local cards
+          </button>
         </details>
       )}
     </section>

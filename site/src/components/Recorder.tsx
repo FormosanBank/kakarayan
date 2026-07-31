@@ -2,7 +2,8 @@ import {useEffect, useMemo, useRef, useState, type ChangeEvent} from "react";
 
 import {transcribe, type ServiceStage} from "../modelServices";
 import {wordError} from "../recorderMetrics";
-import type {ModelCatalog} from "../types";
+import {makeManualCard, saveCard} from "../study";
+import type {Language, ModelCatalog} from "../types";
 
 const ASR_LANGUAGES = [
   "Amis",
@@ -23,16 +24,24 @@ const ASR_LANGUAGES = [
   "Yami / Tao",
 ];
 
-export function Recorder({catalog}: {catalog: ModelCatalog}) {
+export function Recorder({
+  catalog,
+  languages,
+}: {
+  catalog: ModelCatalog;
+  languages: Language[];
+}) {
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
   const controller = useRef<AbortController | null>(null);
   const audioUrlRef = useRef("");
+  const recordStartedAt = useRef(0);
   const [recording, setRecording] = useState(false);
   const [audio, setAudio] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState("");
   const [audioName, setAudioName] = useState("kakarayan-recording.webm");
+  const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [language, setLanguage] = useState("Amis");
   const [consent, setConsent] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -40,6 +49,15 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
   const [status, setStatus] = useState("");
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
   const service = catalog.services.find((item) => item.space === "FormosanBank/formosan_asr");
+  const modelSlug =
+    language === "Yami / Tao"
+      ? "yami"
+      : language.toLocaleLowerCase().replaceAll(/[^a-z]+/gu, "-");
+  const model = catalog.models.find(
+    (item) =>
+      item.task === "automatic-speech-recognition" &&
+      item.repository.toLocaleLowerCase().endsWith(`-${modelSlug}`),
+  );
   const comparison = useMemo(
     () => (reference.trim() && transcript ? wordError(reference, transcript) : null),
     [reference, transcript],
@@ -54,16 +72,29 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
     [],
   );
 
-  function setLocalAudio(blob: Blob, name: string) {
+  function setLocalAudio(blob: Blob, name: string, knownDuration: number | null = null) {
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     const url = URL.createObjectURL(blob);
     audioUrlRef.current = url;
     setAudio(blob);
     setAudioUrl(url);
     setAudioName(name);
+    setAudioDuration(knownDuration);
     setTranscript("");
     setStatus("");
     setStage("idle");
+    const probe = document.createElement("audio");
+    probe.preload = "metadata";
+    probe.src = url;
+    probe.onloadedmetadata = () => {
+      if (
+        audioUrlRef.current === url &&
+        Number.isFinite(probe.duration) &&
+        probe.duration > 0
+      ) {
+        setAudioDuration(probe.duration);
+      }
+    };
   }
 
   function loadAudioFile(event: ChangeEvent<HTMLInputElement>) {
@@ -95,12 +126,14 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
       };
       next.onstop = () => {
         const blob = new Blob(chunks.current, {type: next.mimeType || "audio/webm"});
-        setLocalAudio(blob, "kakarayan-recording.webm");
+        const duration = Math.max(0, (performance.now() - recordStartedAt.current) / 1_000);
+        setLocalAudio(blob, "kakarayan-recording.webm", duration);
         media.getTracks().forEach((track) => track.stop());
         stream.current = null;
         setRecording(false);
       };
       next.start();
+      recordStartedAt.current = performance.now();
       setRecording(true);
     } catch (cause) {
       setStatus(
@@ -118,12 +151,17 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
     setAudio(null);
     setAudioUrl("");
     setTranscript("");
+    setAudioDuration(null);
     setStatus("Local recording deleted.");
     setStage("idle");
   }
 
   async function runAsr() {
-    if (!audio || !consent) return;
+    if (!audio || !consent || !model || audioDuration === null) return;
+    if (audioDuration > 600) {
+      setStatus("Audio must be 10 minutes or shorter.");
+      return;
+    }
     controller.current?.abort();
     const next = new AbortController();
     controller.current = next;
@@ -171,6 +209,27 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
     }
   }
 
+  async function saveTranscript() {
+    if (!transcript) return;
+    const targetLanguage = languages.find(
+      (item) => item.name.toLocaleLowerCase() === language.toLocaleLowerCase(),
+    );
+    try {
+      await saveCard(
+        makeManualCard({
+          front: reference.trim() || `Automatic ${language} transcript`,
+          back: transcript,
+          deck: "Pronunciation practice",
+          languageId: targetLanguage?.id ?? "",
+          tags: ["asr", "machine-output"],
+        }),
+      );
+      setStatus("Automatic transcript saved as a local card.");
+    } catch (cause) {
+      setStatus(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
   const running = !["idle", "complete", "cancelled", "error"].includes(stage);
   return (
     <section className="model-tool" aria-labelledby="recording-heading">
@@ -211,6 +270,11 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
             <button className="button button--quiet" onClick={removeRecording}>
               Delete
             </button>
+            <small>
+              {audioDuration === null
+                ? "Reading audio duration…"
+                : `${audioDuration.toFixed(1)} seconds · ${((audio?.size ?? 0) / 1024 ** 2).toFixed(1)} MiB`}
+            </small>
           </>
         )}
       </div>
@@ -228,6 +292,17 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
               ))}
             </select>
           </label>
+          {model ? (
+            <p className="model-disclosure">
+              Model: <a href={model.url}>{model.repository}</a> · license {model.license} ·{" "}
+              {model.limitations}
+            </p>
+          ) : (
+            <p className="callout callout--warning">
+              This release has no registered public ASR model for {language}. Recording,
+              playback, and download remain available.
+            </p>
+          )}
           <label className="field">
             Optional human reference transcript
             <textarea
@@ -252,7 +327,13 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
           <div className="button-row">
             <button
               className="button button--primary"
-              disabled={!consent || running}
+              disabled={
+                !consent ||
+                running ||
+                !model ||
+                audioDuration === null ||
+                audioDuration > 600
+              }
               onClick={runAsr}
             >
               Transcribe
@@ -279,6 +360,9 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
             </button>
             <button className="button button--quiet" onClick={downloadTranscript}>
               Download text
+            </button>
+            <button className="button button--quiet" onClick={saveTranscript}>
+              Save to local deck
             </button>
           </div>
           {comparison && (

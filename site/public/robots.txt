@@ -23,4 +23,6 @@ Disallow: /
 User-agent: *
 Allow: /
 
+Sitemap: https://formosanbank.github.io/kakarayan/sitemap.xml
+
 Content-Signal: search=yes, ai-train=no, ai-input=no

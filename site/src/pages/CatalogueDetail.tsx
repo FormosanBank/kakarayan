@@ -2,6 +2,15 @@ import {PageIntro, StatusBadge} from "../components/Layout";
 import {Link} from "../routing";
 import type {AppData, Corpus, Counts, Language} from "../types";
 
+function downloadText(value: string, name: string, mediaType: string) {
+  const url = URL.createObjectURL(new Blob([`${value.trim()}\n`], {type: mediaType}));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function CountsGrid({counts}: {counts: Counts}) {
   const entries = Object.entries(counts).filter(([, value]) => value !== undefined);
   return (
@@ -48,6 +57,10 @@ export function LanguageDetail({
             <span key={capability}>{capability}</span>
           ))}
         </div>
+        <p>
+          <strong>Published dialect labels:</strong>{" "}
+          {language.dialects.join(", ") || "none supplied in this release"}.
+        </p>
         <p>
           Counts describe this release, not the number of speakers, dialect vitality, or
           completeness of the language.
@@ -110,8 +123,58 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           Display languages:{" "}
           {languages.map((language) => language.name).join(", ") || "not resolved"}.
         </p>
+        <p>
+          <strong>Source statement:</strong>{" "}
+          {corpus.source || "No separate source statement was supplied."}
+        </p>
+        <p>
+          <strong>Copyright statement:</strong>{" "}
+          {corpus.copyright || "Consult corpus and central rights evidence."}
+        </p>
       </section>
       <section className="detail-section">
+        <h2>Citation and machine-readable records</h2>
+        <p>{corpus.citation || "No corpus citation string was supplied in source metadata."}</p>
+        <p>
+          This catalogue found {corpus.citation_count.toLocaleString()} distinct non-empty
+          citation string{corpus.citation_count === 1 ? "" : "s"} across source texts.
+          Prepared text tables retain every text-level value.
+        </p>
+        <div className="button-row">
+          {corpus.bibtex_citation && (
+            <button
+              className="button button--quiet"
+              onClick={() =>
+                downloadText(corpus.bibtex_citation, `${corpus.id}.bib`, "application/x-bibtex")
+              }
+            >
+              Download source BibTeX
+            </button>
+          )}
+          {corpus.citation && (
+            <button
+              className="button button--quiet"
+              onClick={() =>
+                downloadText(
+                  [
+                    "TY  - GEN",
+                    `T1  - ${corpus.name}`,
+                    `N1  - ${corpus.citation}`,
+                    `UR  - https://github.com/FormosanBank/FormosanBank/tree/${data.meta.source.commit}/${corpus.source_path}`,
+                    `Y2  - ${data.meta.generated_at.slice(0, 10)}`,
+                    "ER  -",
+                  ].join("\n"),
+                  `${corpus.id}.ris`,
+                  "application/x-research-info-systems",
+                )
+              }
+            >
+              Download RIS
+            </button>
+          )}
+        </div>
+      </section>
+      <section className="detail-section" id="rights">
         <h2>Rights and attribution</h2>
         <StatusBadge value={rights?.redistribution ?? "review_required"} />
         <p>{rights?.attribution || "No reviewed attribution statement is published."}</p>
@@ -142,6 +205,15 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         <p>
           Public repository visibility is not a blanket license. Retain corpus-specific
           notices and source citations with every derived record.
+        </p>
+      </section>
+      <section className="detail-section">
+        <h2>Known limitations</h2>
+        <p>
+          Counts describe records projected from this pinned public source, not language
+          completeness or speaker populations. Empty fields mean the source did not supply
+          that tier or Kakarayan could not map it defensibly. Audio references are not
+          guaranteed to resolve on the public web.
         </p>
       </section>
     </div>

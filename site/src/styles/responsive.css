@@ -58,6 +58,15 @@
 }
 
 @media (max-width: 720px) {
+  .audio-evidence > div {
+    grid-template-columns: 1fr;
+  }
+
+  .pagination-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .builder,
   .summaries {
     padding: 1rem;

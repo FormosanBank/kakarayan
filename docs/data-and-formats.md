@@ -95,10 +95,16 @@ catalogue.
 
 ## Browser selections
 
-The research workbench can export at most 10,000 sentence records. It supports CSV, TSV,
-JSON, JSON Lines, Parquet, plain text, interlinear text, audio-reference TSV, and a
-non-executable recipe. The user chooses fields before preview and export. Formula-like
-values are protected in delimited files.
+The research workbench can project at most 10,000 text, sentence, word, morpheme, token, or
+audio-reference rows from bounded sentence shards. It supports CSV, TSV, JSON, JSON Lines,
+Parquet, plain text, interlinear text, audio-reference TSV, and a non-executable recipe.
+The user chooses the record unit and fields before preview and export. Formula-like values
+are protected in delimited files.
+
+Text rows group the selected sentences by stable text ID. Word and morpheme rows retain
+their parent sentence context and source locator. Token rows use the release tokenization.
+Audio rows remain references and never copy protected media. Empty projections honestly
+mean the source records do not contain that structure.
 
 Parquet is produced locally through lazy, single-threaded DuckDB-Wasm. Its first use
 downloads the large WebAssembly chunk, while other formats do not. The builder reports
@@ -173,8 +179,8 @@ text, audio references, or a reproducible recipe. Browser exports are bounded to
 selection and are not a substitute for bulk packages.
 
 Recipes are declarative JSON validated by `schemas/export-recipe.schema.json`. They pin the
-release, query mode, language and corpus scopes, selected IDs, row bound, fields, output
-format, and spreadsheet protection. They contain no executable code.
+release, query mode, language and corpus scopes, record unit, selected IDs, row bound,
+fields, output format, and spreadsheet protection. They contain no executable code.
 
 Execute a recipe against a compatible release:
 

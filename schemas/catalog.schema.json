@@ -40,7 +40,7 @@
     },
     "language": {
       "type": "object",
-      "required": ["id", "name", "iso639_3", "names", "capabilities", "counts"],
+      "required": ["id", "name", "iso639_3", "names", "capabilities", "counts", "dialects"],
       "properties": {
         "id": {"type": "string", "pattern": "^lang_[a-z0-9_]+$"},
         "name": {"type": "string", "minLength": 1},
@@ -62,19 +62,37 @@
           },
           "uniqueItems": true
         },
+        "dialects": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
         "counts": {"$ref": "#/$defs/counts"}
       },
       "additionalProperties": false
     },
     "corpus": {
       "type": "object",
-      "required": ["id", "name", "source_path", "languages", "rights_id", "counts"],
+      "required": [
+        "id",
+        "name",
+        "source_path",
+        "languages",
+        "rights_id",
+        "counts",
+        "citation",
+        "bibtex_citation",
+        "source",
+        "copyright",
+        "citation_count"
+      ],
       "properties": {
         "id": {"type": "string", "pattern": "^corpus_[a-z0-9_]+$"},
         "name": {"type": "string", "minLength": 1},
         "source_path": {"type": "string", "pattern": "^Corpora/"},
         "languages": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
         "rights_id": {"type": "string", "pattern": "^rights_"},
+        "citation": {"type": "string"},
+        "bibtex_citation": {"type": "string"},
+        "source": {"type": "string"},
+        "copyright": {"type": "string"},
+        "citation_count": {"type": "integer", "minimum": 0},
         "counts": {"$ref": "#/$defs/counts"}
       },
       "additionalProperties": false

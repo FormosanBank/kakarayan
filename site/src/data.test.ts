@@ -3,6 +3,7 @@ import type {SearchIndexDocument, SearchRecord} from "./types";
 
 const record: SearchRecord = {
   id: "sentence_1",
+  text_id: "text_1",
   corpus_id: "corpus_fixture",
   language_id: "lang_amis",
   dialect: "Xiuguluan",

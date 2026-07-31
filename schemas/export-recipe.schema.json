@@ -22,7 +22,8 @@
         "language_ids",
         "corpus_ids",
         "record_ids",
-        "max_rows"
+        "max_rows",
+        "record_unit"
       ],
       "properties": {
         "query": {"type": "string", "maxLength": 256},
@@ -58,7 +59,10 @@
           "maxItems": 10000,
           "uniqueItems": true
         },
-        "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000000}
+        "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "record_unit": {
+          "enum": ["text", "sentence", "word", "morpheme", "token", "audio"]
+        }
       },
       "additionalProperties": false
     },
@@ -67,6 +71,7 @@
       "items": {
         "enum": [
           "id",
+          "text_id",
           "standard",
           "original",
           "translations",
@@ -81,7 +86,7 @@
         ]
       },
       "minItems": 1,
-      "maxItems": 12,
+      "maxItems": 13,
       "uniqueItems": true
     },
     "format": {

@@ -9,11 +9,16 @@ import {
   type SearchMode,
 } from "../data";
 import {downloadExport, type ExportFormat} from "../exports";
+import {
+  projectRecordUnits,
+  type RecordUnit,
+} from "../recordUnits";
 import {Link} from "../routing";
 import type {AppData, SearchRecord} from "../types";
 
 const FIELDS = [
   "id",
+  "text_id",
   "standard",
   "original",
   "translations",
@@ -43,6 +48,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const [corpusId, setCorpusId] = useState("");
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("exact");
+  const [recordUnit, setRecordUnit] = useState<RecordUnit>("sentence");
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [maxRows, setMaxRows] = useState(1_000);
   const [fields, setFields] = useState<string[]>(FIELDS.slice(0, 8));
@@ -77,17 +83,20 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const overMemoryBudget = estimate.uncompressedBytes > 1024 ** 3;
 
   async function recordsForExport(signal: AbortSignal): Promise<SearchRecord[]> {
+    let sourceRecords: SearchRecord[];
     if (query.trim()) {
       if (estimate.uncompressedBytes > 512 * 1024 ** 2) {
         throw new Error(
           "A filtered browser export would scan more than 512 MiB. Narrow the corpus or use a prepared package.",
         );
       }
-      return (
+      sourceRecords = (
         await searchRecords(shards, query.trim(), mode, signal, maxRows, indexes)
       ).records;
+    } else {
+      sourceRecords = await loadPreviewRecords(shards, signal, maxRows);
     }
-    return loadPreviewRecords(shards, signal, maxRows);
+    return projectRecordUnits(sourceRecords, recordUnit).slice(0, maxRows);
   }
 
   async function runPreview() {
@@ -98,7 +107,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     setBusy("preview");
     setError("");
     try {
-      const records = query.trim()
+      const sourceRecords = query.trim()
         ? (
             await searchRecords(
               shards,
@@ -110,7 +119,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
             )
           ).records
         : await loadPreviewRecords(shards, next.signal, 12);
-      setPreview(records);
+      setPreview(projectRecordUnits(sourceRecords, recordUnit).slice(0, 12));
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -138,6 +147,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
           languageId,
           corpusId,
           fields,
+          recordUnit,
         },
         format,
         next.signal,
@@ -173,7 +183,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
       </div>
       <div className="builder__grid">
         <div className="builder__controls">
-          <h2>Build a bounded sentence dataset</h2>
+          <h2>Build a bounded linguistic dataset</h2>
           <div className="form-grid">
             <label className="field">
               Language
@@ -202,6 +212,23 @@ export function DatasetBuilder({data}: {data: AppData}) {
                     {corpus.name}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="field">
+              Record unit
+              <select
+                value={recordUnit}
+                onChange={(event) => {
+                  setRecordUnit(event.target.value as RecordUnit);
+                  setPreview([]);
+                }}
+              >
+                <option value="text">Text</option>
+                <option value="sentence">Sentence</option>
+                <option value="word">Word</option>
+                <option value="morpheme">Morpheme</option>
+                <option value="token">Token</option>
+                <option value="audio">Audio reference</option>
               </select>
             </label>
             <label className="field">
@@ -249,7 +276,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
           </fieldset>
           <div className="form-grid">
             <label className="field">
-              Row cap
+              Output row cap
               <select
                 value={maxRows}
                 onChange={(event) => setMaxRows(Number(event.target.value))}
@@ -309,7 +336,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
           <p className="eyebrow">Selection estimate</p>
           <dl>
             <div>
-              <dt>Sentences in scope</dt>
+              <dt>Source sentences in scope</dt>
               <dd>{estimate.records.toLocaleString()}</dd>
             </div>
             <div>
@@ -321,13 +348,14 @@ export function DatasetBuilder({data}: {data: AppData}) {
               <dd>{size(estimate.uncompressedBytes)}</dd>
             </div>
             <div>
-              <dt>Output bound</dt>
+              <dt>{recordUnit} row bound</dt>
               <dd>{Math.min(maxRows, estimate.records).toLocaleString()} rows</dd>
             </div>
           </dl>
           <p>
             The estimate covers source shards, not the final file. Queries may return fewer
-            rows. Ordering follows source path and sentence order.
+            rows. Word, morpheme, token, and audio totals are known after the bounded source
+            records load. Ordering follows source path and tier order.
           </p>
           {overMemoryBudget && (
             <p className="callout callout--warning">
@@ -348,6 +376,11 @@ export function DatasetBuilder({data}: {data: AppData}) {
       {preview.length > 0 && (
         <div className="builder__preview">
           <h2>Preview in deterministic source order</h2>
+          <p>
+            Showing {preview.length.toLocaleString()} projected {recordUnit} row
+            {preview.length === 1 ? "" : "s"}. Empty units mean the selected source lacks that
+            structure.
+          </p>
           <div className="table-scroll" tabIndex={0}>
             <table>
               <thead>

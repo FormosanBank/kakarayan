@@ -22,7 +22,14 @@ def test_release_and_site_verification(public_repo: Path, tmp_path: Path) -> Non
 
     site = tmp_path / "site"
     assemble(release.output, site)
-    for name in ("index.html", "404.html", "manifest.webmanifest", "sw.js"):
+    for name in (
+        "index.html",
+        "404.html",
+        "manifest.webmanifest",
+        "robots.txt",
+        "sitemap.xml",
+        "sw.js",
+    ):
         (site / name).write_text(name, encoding="utf-8")
     result = verify_site(site, total_limit=1_000_000, file_limit=1_000_000)
     assert result["files"] > 4

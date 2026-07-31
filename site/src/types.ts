@@ -26,6 +26,7 @@ export interface Language {
   iso639_3: string;
   names: {"en": string; "zh-Hant": string; autonym: string};
   capabilities: string[];
+  dialects: string[];
   counts: Counts;
 }
 
@@ -35,6 +36,11 @@ export interface Corpus {
   source_path: string;
   languages: string[];
   rights_id: string;
+  citation: string;
+  bibtex_citation: string;
+  source: string;
+  copyright: string;
+  citation_count: number;
   counts: Counts;
 }
 
@@ -70,6 +76,12 @@ export interface ModelEntry {
   license: string;
   languages: string[];
   direction: string | null;
+  framework: string;
+  model_family: string;
+  artifact_bytes: number | null;
+  evaluation_metrics: Array<{name: string; value: string | number | boolean | null}>;
+  license_source: string;
+  intended_use: string;
   last_modified: string | null;
   limitations: string;
   training_lineage: string;
@@ -205,6 +217,7 @@ export interface SearchWord {
 
 export interface SearchRecord {
   id: string;
+  text_id: string;
   corpus_id: string;
   language_id: string;
   dialect: string;

@@ -394,9 +394,20 @@
   background: #fbf0d4;
 }
 
-.model-grid > article > a {
+.model-card__links {
+  display: flex;
+  gap: 0.8rem;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+
+.model-card__links a {
   margin-top: auto;
   font-weight: 800;
+}
+
+.model-grid details {
+  margin-bottom: 1rem;
 }
 
 .service-register {

@@ -141,6 +141,156 @@ def _recipe_record(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _owner_record(
+    record: dict[str, Any],
+    owner_type: str,
+    owner_id: str,
+) -> dict[str, Any]:
+    forms = [
+        item
+        for item in record["forms"]
+        if item["owner_type"] == owner_type and item["owner_id"] == owner_id
+    ]
+    standard = next(
+        (str(item["text"]) for item in forms if item["kind"] == "standard"),
+        "",
+    )
+    original = next(
+        (str(item["text"]) for item in forms if item["kind"] == "original"),
+        "",
+    )
+    return {
+        **record,
+        "id": owner_id,
+        "source_xml_id": "",
+        "xml_id": "",
+        "standard": standard,
+        "original": original,
+        "forms": forms,
+        "phonology": [
+            item
+            for item in record["phonology"]
+            if item["owner_type"] == owner_type and item["owner_id"] == owner_id
+        ],
+        "tier_translations": [
+            item
+            for item in record["tier_translations"]
+            if item["owner_type"] == owner_type and item["owner_id"] == owner_id
+        ],
+        "audio": [
+            item
+            for item in record["audio"]
+            if item["owner_type"] == owner_type and item["owner_id"] == owner_id
+        ],
+    }
+
+
+def _project_record(record: dict[str, Any], unit: str) -> list[dict[str, Any]]:
+    if unit == "sentence":
+        return [record]
+    if unit == "word":
+        result = []
+        for word in record["words"]:
+            projected = _owner_record(record, "word", str(word["id"]))
+            tokens = [item for item in record["tokens"] if item["word_id"] == word["id"]]
+            token = tokens[0] if tokens else None
+            projected.update(
+                {
+                    "xml_id": word["xml_id"],
+                    "standard": projected["standard"]
+                    or (str(token["normalized"]) if token else ""),
+                    "original": projected["original"] or (str(token["surface"]) if token else ""),
+                    "tokens": tokens,
+                    "words": [word],
+                }
+            )
+            result.append(projected)
+        return result
+    if unit == "morpheme":
+        result = []
+        for word in record["words"]:
+            for morpheme in word["morphemes"]:
+                projected = _owner_record(record, "morpheme", str(morpheme["id"]))
+                projected.update(
+                    {
+                        "xml_id": morpheme["xml_id"],
+                        "tokens": [
+                            item for item in record["tokens"] if item["word_id"] == word["id"]
+                        ],
+                        "words": [{**word, "morphemes": [morpheme]}],
+                    }
+                )
+                result.append(projected)
+        return result
+    if unit == "token":
+        return [
+            {
+                **record,
+                "id": f"{record['id']}--token-{token['position']}",
+                "source_xml_id": "",
+                "xml_id": "",
+                "standard": token["normalized"],
+                "original": token["surface"],
+                "translations": [],
+                "tokens": [token],
+                "forms": [
+                    item
+                    for item in record["forms"]
+                    if item["owner_type"] == "word" and item["owner_id"] == token["word_id"]
+                ],
+                "phonology": [
+                    item
+                    for item in record["phonology"]
+                    if item["owner_type"] == "word" and item["owner_id"] == token["word_id"]
+                ],
+                "tier_translations": [
+                    item
+                    for item in record["tier_translations"]
+                    if item["owner_type"] == "word" and item["owner_id"] == token["word_id"]
+                ],
+                "words": [word for word in record["words"] if word["id"] == token["word_id"]],
+                "audio": [
+                    item
+                    for item in record["audio"]
+                    if item["owner_type"] == "word" and item["owner_id"] == token["word_id"]
+                ],
+            }
+            for token in record["tokens"]
+        ]
+    if unit == "audio":
+        return [
+            {
+                **record,
+                "id": (
+                    f"{record['id']}--audio-{audio['owner_type']}-"
+                    f"{audio['owner_id']}-{audio['position']}"
+                ),
+                "audio": [audio],
+            }
+            for audio in record["audio"]
+        ]
+    raise BuildError(f"Unsupported recipe record unit: {unit}")
+
+
+def _append_text(target: dict[str, Any], record: dict[str, Any]) -> None:
+    target["standard"] = "\n".join(
+        value for value in (target["standard"], record["standard"]) if value
+    )
+    target["original"] = "\n".join(
+        value for value in (target["original"], record["original"]) if value
+    )
+    for field in (
+        "translations",
+        "tokens",
+        "forms",
+        "phonology",
+        "tier_translations",
+        "words",
+        "audio",
+    ):
+        target[field].extend(record[field])
+
+
 def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]]:
     manifest = json.loads((release / "release-manifest.json").read_text(encoding="utf-8"))
     if manifest["release_id"] != recipe["release_id"]:
@@ -150,6 +300,7 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
     languages = set(selection["language_ids"])
     corpora = set(selection["corpus_ids"])
     match = str(selection["match"])
+    record_unit = str(selection.get("record_unit", "sentence"))
     pattern: regex.Pattern[str] | None = None
     if match == "regex":
         try:
@@ -159,7 +310,8 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
             )
         except regex.error as error:
             raise BuildError(f"Invalid recipe regular expression: {error}") from error
-    result = []
+    result: list[dict[str, Any]] = []
+    texts: dict[str, dict[str, Any]] = {}
     scanned = 0
     for line in _record_lines(release):
         record = _recipe_record(json.loads(line))
@@ -172,14 +324,44 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
             raise BuildError(
                 "Recipe regex and fuzzy searches are limited to 200,000 scoped records"
             )
+        if record_unit == "text":
+            text_id = str(record["text_id"])
+            selected = (
+                text_id in record_ids
+                if record_ids
+                else _matches(record, selection["query"], match, pattern)
+            )
+            if not selected:
+                continue
+            if text_id not in texts:
+                texts[text_id] = {
+                    **record,
+                    "id": text_id,
+                    "source_xml_id": "",
+                    "xml_id": "",
+                    "translations": list(record["translations"]),
+                    "tokens": list(record["tokens"]),
+                    "forms": list(record["forms"]),
+                    "phonology": list(record["phonology"]),
+                    "tier_translations": list(record["tier_translations"]),
+                    "words": list(record["words"]),
+                    "audio": list(record["audio"]),
+                }
+            else:
+                _append_text(texts[text_id], record)
+            continue
+        projected = _project_record(record, record_unit)
         if record_ids:
-            selected = record["id"] in record_ids
-        else:
-            selected = _matches(record, selection["query"], match, pattern)
-        if selected:
-            result.append(record)
-            if len(result) >= selection["max_rows"]:
-                break
+            result.extend(item for item in projected if item["id"] in record_ids)
+        elif _matches(record, selection["query"], match, pattern):
+            result.extend(projected)
+        if len(result) >= selection["max_rows"] or (
+            record_ids and {item["id"] for item in result} == record_ids
+        ):
+            break
+    if record_unit == "text":
+        result = list(texts.values())
+    result = result[: selection["max_rows"]]
     if record_ids and {record["id"] for record in result} != record_ids:
         raise BuildError("Recipe record_ids are not all present in the pinned release and scope")
     return result

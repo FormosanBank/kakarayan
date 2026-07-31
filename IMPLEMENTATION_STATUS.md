@@ -134,6 +134,16 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   grading.
 - [x] Add manual local study cards, decks, tags, inventory filtering, and stale source
   release warnings.
+- [x] Complete browser text, sentence, word, morpheme, token, and audio-reference record
+  projections and carry the record unit through validated, locally executable recipes.
+- [x] Add exact match counts, deterministic progressive result display, KWIC, interlinear
+  tables, resolvable audio, stable record links, citation actions, and transparent automatic
+  headword candidate groups.
+- [x] Complete local study directions, queue counts, CSV export, audio references, and
+  confirmed full reset; add ASR duration validation, model disclosure, and transcript cards.
+- [x] Add corpus citation/source metadata, BibTeX and RIS download, dialect inventories,
+  richer public model-card metadata, dynamic document metadata, a sitemap, useful
+  no-script links, and privacy-bounded diagnostics.
 - [x] Complete one full release-only benchmark against pinned public FormosanBank commit
   `40fd519cd82295bd7824e207990d277b871ad47f`: 487,354 sentences, 8,214,390 tokens,
   no publisher warnings, 5.4 GiB output, 9.1 GiB peak memory, and 20 minutes 28 seconds.

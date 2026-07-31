@@ -1,4 +1,10 @@
-import {cardsAsAnkiTsv, makeManualCard, scheduleCard, type StudyCard} from "./study";
+import {
+  cardsAsAnkiTsv,
+  cardsAsCsv,
+  makeManualCard,
+  scheduleCard,
+  type StudyCard,
+} from "./study";
 
 const card: StudyCard = {
   id: "card-1",
@@ -7,6 +13,8 @@ const card: StudyCard = {
   back: "five",
   languageId: "lang_amis",
   tags: ["corpus_fixture"],
+  direction: "recognition",
+  audioReferences: [],
   source: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -36,6 +44,7 @@ describe("local study scheduling", () => {
 
   it("protects tabular exports from formulas", () => {
     expect(cardsAsAnkiTsv([{...card, front: "=1+1"}])).toContain("'=1+1");
+    expect(cardsAsCsv([{...card, front: "=1+1"}])).toContain("'=1+1");
   });
 
   it("normalizes manual card tags and keeps personal cards source-free", () => {

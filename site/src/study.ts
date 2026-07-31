@@ -9,6 +9,8 @@ export interface StudyCard {
   back: string;
   languageId: string;
   tags: string[];
+  direction: "recognition" | "production";
+  audioReferences: string[];
   source: {
     releaseId: string;
     recordId: string;
@@ -65,6 +67,14 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error("Cannot open local study data"));
   });
+}
+
+function normalizeCard(card: StudyCard): StudyCard {
+  return {
+    ...card,
+    direction: card.direction ?? "recognition",
+    audioReferences: card.audioReferences ?? [],
+  };
 }
 
 export function scheduleCard(card: StudyCard, grade: Grade, now: Date): StudyCard {
@@ -128,6 +138,10 @@ export function cardFromRecord(record: SearchRecord, releaseId: string): StudyCa
     back,
     languageId: record.language_id,
     tags: [record.corpus_id, record.dialect].filter(Boolean),
+    direction: "recognition",
+    audioReferences: record.audio
+      .map((item) => item.url || item.source || item.file)
+      .filter(Boolean),
     source: {
       releaseId,
       recordId: record.id,
@@ -150,6 +164,7 @@ export function makeManualCard(
     languageId: string;
     deck: string;
     tags: string[];
+    direction?: "recognition" | "production";
   },
   now = new Date(),
 ): StudyCard {
@@ -164,6 +179,8 @@ export function makeManualCard(
     back,
     languageId: value.languageId,
     tags: [...new Set(value.tags.map((tag) => tag.trim()).filter(Boolean))].sort(),
+    direction: value.direction ?? "recognition",
+    audioReferences: [],
     source: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -179,7 +196,8 @@ export async function listCards(): Promise<StudyCard[]> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readonly");
-    return await requestResult(transaction.objectStore(STORE).getAll());
+    const cards = await requestResult<StudyCard[]>(transaction.objectStore(STORE).getAll());
+    return cards.map(normalizeCard);
   } finally {
     database.close();
   }
@@ -207,6 +225,17 @@ export async function deleteCard(id: string): Promise<void> {
   }
 }
 
+export async function clearCards(): Promise<void> {
+  const database = await openDatabase();
+  try {
+    const transaction = database.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).clear();
+    await transactionDone(transaction);
+  } finally {
+    database.close();
+  }
+}
+
 export async function exportBackup(): Promise<StudyBackup> {
   return {schemaVersion: 1, exportedAt: new Date().toISOString(), cards: await listCards()};
 }
@@ -220,7 +249,14 @@ function isCard(value: unknown): value is StudyCard {
     typeof candidate.back === "string" &&
     typeof candidate.dueAt === "string" &&
     typeof candidate.ease === "number" &&
-    Array.isArray(candidate.tags)
+    Array.isArray(candidate.tags) &&
+    candidate.tags.every((tag) => typeof tag === "string") &&
+    (candidate.direction === undefined ||
+      candidate.direction === "recognition" ||
+      candidate.direction === "production") &&
+    (candidate.audioReferences === undefined ||
+      (Array.isArray(candidate.audioReferences) &&
+        candidate.audioReferences.every((value) => typeof value === "string")))
   );
 }
 
@@ -234,7 +270,9 @@ export async function restoreBackup(value: unknown): Promise<number> {
   try {
     const transaction = database.transaction(STORE, "readwrite");
     const store = transaction.objectStore(STORE);
-    for (const card of backup.cards) store.put(card);
+    for (const card of backup.cards) {
+      store.put(normalizeCard(card));
+    }
     await transactionDone(transaction);
   } finally {
     database.close();
@@ -256,6 +294,31 @@ export function cardsAsAnkiTsv(cards: StudyCard[]): string {
         card.tags.join(" "),
         card.source?.recordId ?? "",
       ].join("\t"),
+    ),
+  ].join("\n");
+}
+
+function csvCell(value: string): string {
+  const safe = spreadsheetCell(value);
+  return /[",\r\n]/u.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
+}
+
+export function cardsAsCsv(cards: StudyCard[]): string {
+  return [
+    "front,back,direction,deck,tags,source_release,source_record,audio_references",
+    ...cards.map((card) =>
+      [
+        card.front,
+        card.back,
+        card.direction,
+        card.deck,
+        card.tags.join(" "),
+        card.source?.releaseId ?? "",
+        card.source?.recordId ?? "",
+        card.audioReferences.join(" "),
+      ]
+        .map(csvCell)
+        .join(","),
     ),
   ].join("\n");
 }

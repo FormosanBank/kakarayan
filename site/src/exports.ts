@@ -1,4 +1,5 @@
 import type {SearchMode} from "./data";
+import type {RecordUnit} from "./recordUnits";
 import type {SearchRecord} from "./types";
 
 export type ExportFormat =
@@ -22,6 +23,7 @@ export interface ExportRecipe {
     corpus_ids: string[];
     record_ids: string[];
     max_rows: number;
+    record_unit: RecordUnit;
   };
   fields: string[];
   format: ExportFormat;
@@ -35,6 +37,7 @@ export interface ExportContext {
   languageId: string;
   corpusId: string;
   fields?: string[];
+  recordUnit?: RecordUnit;
 }
 
 interface RenderedExport {
@@ -45,6 +48,7 @@ interface RenderedExport {
 
 export const COLUMNS = [
   "id",
+  "text_id",
   "standard",
   "original",
   "translations",
@@ -103,6 +107,7 @@ export function makeRecipe(
       corpus_ids: context.corpusId ? [context.corpusId] : [],
       record_ids: records.map((record) => record.id),
       max_rows: records.length,
+      record_unit: context.recordUnit ?? "sentence",
     },
     fields: context.fields ?? COLUMNS,
     format,

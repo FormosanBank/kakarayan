@@ -1,6 +1,7 @@
 import {useEffect} from "react";
 
 import {Layout} from "./components/Layout";
+import {Diagnostics} from "./components/Diagnostics";
 import {useAppData} from "./data";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
@@ -35,6 +36,7 @@ function Unavailable({error, retry}: {error: Error; retry: () => void}) {
         shown.
       </p>
       <code>{error.message}</code>
+      <Diagnostics releaseId={null} error={error} />
       <div className="button-row">
         <button className="button button--primary" onClick={retry}>
           {t("common.retry")}
@@ -91,6 +93,54 @@ function RoutedApp({data}: {data: NonNullable<ReturnType<typeof useAppData>["dat
 
 function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
   const path = useRoutePath();
+  const {locale, t} = useI18n();
+  const detailName = path.startsWith("/languages/")
+    ? data.languages.find(
+        (item) => item.id === decodeURIComponent(path.slice("/languages/".length)),
+      )?.name
+    : path.startsWith("/corpora/")
+      ? data.corpora.find(
+          (item) => item.id === decodeURIComponent(path.slice("/corpora/".length)),
+        )?.name
+      : undefined;
+  const routeTitle =
+    detailName ??
+    ({
+      "/": t("home.title"),
+      "/learn": t("learn.title"),
+      "/explore": t("explore.title"),
+      "/search": t("search.title"),
+      "/downloads": t("download.title"),
+      "/developers": t("developers.title"),
+      "/models": t("models.title"),
+      "/about": t("about.title"),
+    }[path] ??
+      "Page not found");
+  const routeDescription =
+    path === "/search"
+      ? t("search.lede")
+      : path === "/learn"
+        ? t("learn.lede")
+        : path === "/downloads"
+          ? t("download.lede")
+          : t("home.lede");
+  useEffect(() => {
+    document.title = `${routeTitle} | Kakarayan`;
+    document.querySelector('meta[name="description"]')?.setAttribute("content", routeDescription);
+    document.querySelector('meta[property="og:title"]')?.setAttribute("content", routeTitle);
+    document
+      .querySelector('meta[property="og:description"]')
+      ?.setAttribute("content", routeDescription);
+    document
+      .querySelector('meta[property="og:locale"]')
+      ?.setAttribute("content", locale === "zh-Hant" ? "zh_TW" : "en_US");
+    document
+      .querySelector('meta[name="robots"]')
+      ?.setAttribute(
+        "content",
+        `${path === "/search" ? "noindex" : "index"},follow,noai,noimageai`,
+      );
+  }, [locale, path, routeDescription, routeTitle]);
   const page = (() => {
     if (path.startsWith("/languages/")) {
       const id = decodeURIComponent(path.slice("/languages/".length));

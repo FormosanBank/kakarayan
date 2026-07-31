@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 from jsonschema import ValidationError
@@ -21,6 +22,7 @@ def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
             "corpus_ids": [],
             "record_ids": [],
             "max_rows": 100,
+            "record_unit": "sentence",
         },
         "fields": [
             "id",
@@ -58,6 +60,12 @@ def test_recipe_resolves_and_exports(public_repo: Path, tmp_path: Path) -> None:
     parquet_output = tmp_path / "selection.parquet"
     write_recipe_export(records, parquet_recipe, parquet_output)
     assert parquet_output.read_bytes()[:4] == b"PAR1"
+
+    word_recipe = _recipe(release.release_id)
+    cast(dict[str, object], word_recipe["selection"])["record_unit"] = "word"
+    word_records = resolve_recipe(release.output, word_recipe)
+    assert [record["xml_id"] for record in word_records] == ["w-one", "w-two"]
+    assert word_records[0]["standard"] == "lima"
 
 
 def test_recipe_runs_against_release_only_hierarchical_packages(

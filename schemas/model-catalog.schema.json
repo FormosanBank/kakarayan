@@ -21,7 +21,21 @@
   "$defs": {
     "model": {
       "type": "object",
-      "required": ["id", "repository", "task", "url", "license", "languages", "limitations"],
+      "required": [
+        "id",
+        "repository",
+        "task",
+        "url",
+        "license",
+        "languages",
+        "limitations",
+        "framework",
+        "model_family",
+        "artifact_bytes",
+        "evaluation_metrics",
+        "license_source",
+        "intended_use"
+      ],
       "properties": {
         "id": {"type": "string", "pattern": "^model_"},
         "repository": {"type": "string", "pattern": "^FormosanBank/"},
@@ -30,6 +44,23 @@
         "license": {"type": "string"},
         "languages": {"type": "array", "items": {"type": "string"}, "minItems": 1},
         "direction": {"type": ["string", "null"]},
+        "framework": {"type": "string"},
+        "model_family": {"type": "string"},
+        "artifact_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "evaluation_metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "properties": {
+              "name": {"type": "string"},
+              "value": {"type": ["string", "number", "integer", "boolean", "null"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "license_source": {"type": "string"},
+        "intended_use": {"type": "string"},
         "last_modified": {"type": ["string", "null"], "format": "date-time"},
         "limitations": {"type": "string"},
         "training_lineage": {"type": "string"},

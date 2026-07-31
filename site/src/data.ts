@@ -336,6 +336,7 @@ export function recordMatches(record: SearchRecord, query: string, mode: SearchM
 export interface SearchResult {
   records: SearchRecord[];
   scanned: number;
+  matches: number;
   truncated: boolean;
 }
 
@@ -388,6 +389,7 @@ export async function searchRecords(
   let records: SearchRecord[] = [];
   const fuzzyScores = new Map<string, number>();
   let scanned = 0;
+  let matchesCount = 0;
   let truncated = false;
   for (const shard of selectedShards) {
     if (signal?.aborted) throw new DOMException("Search cancelled", "AbortError");
@@ -403,6 +405,7 @@ export async function searchRecords(
           ].some((value) => regex?.test(value.normalize("NFC")))
         : recordMatches(record, query, mode);
       if (matches) {
+        matchesCount += 1;
         if (mode === "fuzzy") fuzzyScores.set(record.id, fuzzyDistance(record, query));
         if (mode === "fuzzy" || records.length < limit) records.push(record);
         else truncated = true;
@@ -419,7 +422,7 @@ export async function searchRecords(
     truncated = records.length > limit;
     records = records.slice(0, limit);
   }
-  return {records, scanned, truncated};
+  return {records, scanned, matches: matchesCount, truncated};
 }
 
 export interface ScopeEstimate {

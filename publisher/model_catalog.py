@@ -29,6 +29,24 @@ FORMOSAN_CODES = {
     "xnb",
     "xsy",
 }
+LANGUAGE_SLUGS = {
+    "amis": "ami",
+    "atayal": "tay",
+    "bunun": "bnn",
+    "kanakanavu": "xnb",
+    "kavalan": "ckv",
+    "paiwan": "pwn",
+    "puyuma": "pyu",
+    "rukai": "dru",
+    "saaroa": "sxr",
+    "saisiyat": "xsy",
+    "sakizaya": "szy",
+    "seediq": "trv",
+    "taroko": "trv",
+    "thao": "ssf",
+    "tsou": "tsu",
+    "yami": "tao",
+}
 KNOWN_SPACES = {
     "FormosanBank/formosan-mt": ["translation"],
     "FormosanBank/formosan_asr": ["automatic-speech-recognition"],
@@ -85,14 +103,51 @@ def _model_row(item: dict[str, Any]) -> dict[str, object]:
         if task == "automatic-speech-recognition"
         else None
     )
+    repository_slug = repository.rsplit("/", 1)[-1].casefold()
+    inferred_languages = [code for slug, code in LANGUAGE_SLUGS.items() if slug in repository_slug]
+    config = item.get("config") or {}
+    framework = str(item.get("library_name") or card.get("library_name") or "unknown")
+    model_family = str(config.get("model_type") or "unknown")
+    used_storage = item.get("usedStorage")
+    artifact_bytes = int(used_storage) if isinstance(used_storage, int | float) else None
+    metric_rows: list[dict[str, object]] = []
+    model_index = item.get("model-index") or card.get("model-index") or []
+    if isinstance(model_index, list):
+        for group in model_index:
+            if not isinstance(group, dict):
+                continue
+            for result in group.get("results") or []:
+                if not isinstance(result, dict):
+                    continue
+                for metric in result.get("metrics") or []:
+                    if not isinstance(metric, dict) or "value" not in metric:
+                        continue
+                    metric_rows.append(
+                        {
+                            "name": str(metric.get("name") or metric.get("type") or "metric"),
+                            "value": metric["value"],
+                        }
+                    )
     return {
         "id": dimension_id("model", repository),
         "repository": repository,
         "task": task,
         "url": f"https://huggingface.co/{repository}",
         "license": str(card.get("license") or "unknown"),
-        "languages": languages or sorted(FORMOSAN_CODES),
+        "languages": languages or inferred_languages or sorted(FORMOSAN_CODES),
         "direction": _direction(repository),
+        "framework": framework,
+        "model_family": model_family,
+        "artifact_bytes": artifact_bytes,
+        "evaluation_metrics": metric_rows,
+        "license_source": (
+            "cardData.license" if card.get("license") else "not stated in structured metadata"
+        ),
+        "intended_use": str(
+            card.get("intended-use")
+            or card.get("intended_use")
+            or "Not stated in structured public model metadata."
+        ),
         "last_modified": item.get("lastModified"),
         "limitations": (
             "Machine output may be wrong. It is not expert review, a correction service, "

@@ -3,6 +3,7 @@ import type {ReactNode} from "react";
 import {useI18n} from "../i18n";
 import {NavLink} from "../routing";
 import type {AppData} from "../types";
+import {Diagnostics} from "./Diagnostics";
 
 const navigation = [
   ["/learn", "nav.learn"],
@@ -71,6 +72,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             <code>{data.meta.source.commit.slice(0, 12)}</code>
           </a>
         </div>
+        <Diagnostics releaseId={data.meta.release_id} />
       </footer>
     </div>
   );

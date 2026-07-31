@@ -40,8 +40,10 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert catalog["source"]["commit"] == first.source.commit
     assert catalog["corpora"][0]["name"] == "TestCorpus"
     assert catalog["corpora"][0]["rights_id"] == "rights_testcorpus"
+    assert catalog["corpora"][0]["citation_count"] == 1
     amis = next(row for row in catalog["languages"] if row["name"] == "Amis")
     assert amis["counts"]["sentences"] == 2
+    assert amis["dialects"] == ["Xiuguluan"]
     assert "audio" in amis["capabilities"]
     search_manifest = json.loads(
         (first.output / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")

@@ -4,6 +4,7 @@ import type {SearchRecord} from "./types";
 function record(id: string, tokens: string[]): SearchRecord {
   return {
     id,
+    text_id: `text_${id}`,
     corpus_id: "corpus_fixture",
     language_id: "lang_amis",
     dialect: "Xiuguluan",
