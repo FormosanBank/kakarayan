@@ -12,7 +12,8 @@ def test_assemble_site_copies_api_and_release_data(public_repo: Path, tmp_path: 
     assemble(release.output, public)
 
     assert (public / "api" / "v1" / "meta.json").is_file()
-    assert (public / "data" / "search" / "sentences.jsonl").is_file()
+    assert next((public / "data" / "search" / "shards").rglob("*.json.gz")).is_file()
+    assert not (public / "data" / "search" / "sentences.jsonl").exists()
     assert not (public / "data" / "formosanbank.sqlite").exists()
     assert not (public / "data" / "prepared").exists()
     assert not (public / "data" / "api").exists()

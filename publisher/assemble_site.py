@@ -30,7 +30,7 @@ def assemble(release: Path, public: Path) -> None:
         raise BuildError("Release has no static search data")
     shutil.copytree(release / "api", api_target)
     data_target.mkdir()
-    shutil.copytree(search, data_target / "search")
+    shutil.copytree(search / "shards", data_target / "search" / "shards")
 
 
 def main(argv: list[str] | None = None) -> int:

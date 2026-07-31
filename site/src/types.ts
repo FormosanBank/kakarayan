@@ -101,6 +101,7 @@ export interface SearchShard {
   corpus_id: string;
   records: number;
   bytes: number;
+  uncompressed_bytes: number;
   sha256: string;
 }
 

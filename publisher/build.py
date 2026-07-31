@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import gzip
 import hashlib
 import json
 import re
@@ -454,9 +455,11 @@ def _write_search_data(
         if not current_records or current_scope is None:
             return
         corpus_id, language_id = current_scope
-        relative = Path("search") / "shards" / language_id / corpus_id / f"{scope_part:04d}.json"
+        relative = Path("search") / "shards" / language_id / corpus_id / f"{scope_part:04d}.json.gz"
         path = output / relative
-        _write_json(path, current_records)
+        uncompressed = _json_bytes(current_records)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(gzip.compress(uncompressed, compresslevel=9, mtime=0))
         data = path.read_bytes()
         shards.append(
             {
@@ -465,6 +468,7 @@ def _write_search_data(
                 "corpus_id": corpus_id,
                 "records": len(current_records),
                 "bytes": len(data),
+                "uncompressed_bytes": len(uncompressed),
                 "sha256": hashlib.sha256(data).hexdigest(),
             }
         )

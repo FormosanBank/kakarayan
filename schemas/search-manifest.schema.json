@@ -12,13 +12,22 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["path", "language_id", "corpus_id", "records", "bytes", "sha256"],
+        "required": [
+          "path",
+          "language_id",
+          "corpus_id",
+          "records",
+          "bytes",
+          "uncompressed_bytes",
+          "sha256"
+        ],
         "properties": {
-          "path": {"type": "string", "pattern": "^search/shards/"},
+          "path": {"type": "string", "pattern": "^search/shards/.+\\.json\\.gz$"},
           "language_id": {"type": "string", "pattern": "^lang_"},
           "corpus_id": {"type": "string", "pattern": "^corpus_"},
           "records": {"type": "integer", "minimum": 1, "maximum": 1000},
           "bytes": {"type": "integer", "minimum": 1},
+          "uncompressed_bytes": {"type": "integer", "minimum": 1},
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
         },
         "additionalProperties": false

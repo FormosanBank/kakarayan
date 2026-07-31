@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import json
 import unicodedata
+import zipfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -50,25 +52,42 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
     languages = set(selection["language_ids"])
     corpora = set(selection["corpus_ids"])
     result = []
-    source = release / "search" / "sentences.jsonl"
-    with source.open(encoding="utf-8") as stream:
-        for line in stream:
-            record = json.loads(line)
-            if record["language_id"] not in languages:
-                continue
-            if corpora and record["corpus_id"] not in corpora:
-                continue
-            if record_ids:
-                selected = record["id"] in record_ids
-            else:
-                selected = _matches(record, selection["query"], selection["match"])
-            if selected:
-                result.append(record)
-                if len(result) >= selection["max_rows"]:
-                    break
+    for line in _record_lines(release):
+        record = json.loads(line)
+        if record["language_id"] not in languages:
+            continue
+        if corpora and record["corpus_id"] not in corpora:
+            continue
+        if record_ids:
+            selected = record["id"] in record_ids
+        else:
+            selected = _matches(record, selection["query"], selection["match"])
+        if selected:
+            result.append(record)
+            if len(result) >= selection["max_rows"]:
+                break
     if record_ids and {record["id"] for record in result} != record_ids:
         raise BuildError("Recipe record_ids are not all present in the pinned release and scope")
     return result
+
+
+def _record_lines(release: Path) -> Iterator[str]:
+    flat = release / "search" / "sentences.jsonl"
+    if flat.is_file():
+        with flat.open(encoding="utf-8") as stream:
+            yield from stream
+        return
+    packages = sorted((release / "prepared" / "jsonl").glob("*.zip"))
+    if not packages:
+        raise BuildError("Release contains no executable recipe record source")
+    for package in packages:
+        with zipfile.ZipFile(package) as archive:
+            for name in sorted(archive.namelist()):
+                if not name.endswith(".jsonl"):
+                    continue
+                with archive.open(name) as stream:
+                    for line in stream:
+                        yield line.decode("utf-8")
 
 
 def _value(record: dict[str, Any], field: str) -> object:

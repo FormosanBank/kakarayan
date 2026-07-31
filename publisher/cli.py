@@ -22,6 +22,11 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Read current public FormosanBank metadata from the official Hugging Face API",
     )
+    result.add_argument(
+        "--no-prepared",
+        action="store_true",
+        help="Skip bulk linguist formats when building the Pages search data",
+    )
     return result
 
 
@@ -33,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output,
         expected_commit=args.source_commit,
         model_catalog=models,
+        include_prepared=not args.no_prepared,
     )
     print(
         json.dumps(

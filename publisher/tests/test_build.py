@@ -7,6 +7,7 @@ import zipfile
 from contextlib import closing
 from pathlib import Path
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from openpyxl import load_workbook
@@ -44,6 +45,10 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     )
     assert search_manifest["shards"][0]["records"] == 2
     assert search_manifest["shards"][0]["language_id"] == "lang_amis"
+    assert search_manifest["shards"][0]["path"].endswith(".json.gz")
+    assert (
+        search_manifest["shards"][0]["uncompressed_bytes"] > search_manifest["shards"][0]["bytes"]
+    )
     orthography = json.loads(
         (first.output / "api" / "v1" / "orthography.json").read_text(encoding="utf-8")
     )
@@ -57,8 +62,8 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert all(not item["publishable"] for item in downloads["artifacts"])
     assert all(item["blocked_reasons"] for item in downloads["artifacts"])
 
-    token_parquet = first.output / "prepared" / "parquet" / "tokens.parquet"
-    assert pq.read_table(token_parquet).num_rows == 4
+    with zipfile.ZipFile(first.output / "prepared" / "parquet-tables.zip") as archive:
+        assert pq.read_table(pa.BufferReader(archive.read("tokens.parquet"))).num_rows == 4
     workbook = load_workbook(
         first.output / "prepared" / "formosanbank.xlsx",
         read_only=True,

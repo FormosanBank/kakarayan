@@ -25,6 +25,40 @@ async function json<T>(url: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function sha256(data: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(digest)]
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function compressedJson<T>(
+  url: string,
+  expectedSha256: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(url, {
+    headers: {Accept: "application/gzip, application/octet-stream"},
+    ...(signal ? {signal} : {}),
+  });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
+  const compressed = await response.arrayBuffer();
+  if ((await sha256(compressed)) !== expectedSha256) {
+    throw new Error(`Search shard checksum mismatch: ${url}`);
+  }
+  let text: string;
+  if ("DecompressionStream" in globalThis) {
+    const stream = new Blob([compressed])
+      .stream()
+      .pipeThrough(new DecompressionStream("gzip"));
+    text = await new Response(stream).text();
+  } else {
+    const {gunzipSync, strFromU8} = await import("fflate");
+    text = strFromU8(gunzipSync(new Uint8Array(compressed)));
+  }
+  return JSON.parse(text) as T;
+}
+
 export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
   const [meta, languages, corpora, rights, models, search, orthography] = await Promise.all([
     json<Meta>(`${base}api/v1/meta.json`, signal),
@@ -93,7 +127,11 @@ export function matchingShards(
 async function loadShard(shard: SearchShard, signal?: AbortSignal): Promise<SearchRecord[]> {
   const existing = shardCache.get(shard.path);
   if (existing) return existing;
-  const request = json<SearchRecord[]>(`${dataBase}${shard.path}`, signal);
+  const request = compressedJson<SearchRecord[]>(
+    `${dataBase}${shard.path}`,
+    shard.sha256,
+    signal,
+  );
   shardCache.set(shard.path, request);
   try {
     return await request;

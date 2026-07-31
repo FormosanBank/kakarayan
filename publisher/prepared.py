@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from pathlib import Path
 from typing import Any, cast
 
@@ -112,14 +113,23 @@ def _sqlite_schema(database: Path) -> str:
 
 def _prepared_packages(output: Path) -> None:
     prepared = output / "prepared"
-    roots = {
-        "csv-tables.zip": output / "tables",
+    tables = output / "tables"
+    write_zip(
+        prepared / "csv-tables.zip",
+        ((path.name, path.read_bytes()) for path in sorted(tables.glob("*.csv"))),
+    )
+    write_zip(
+        prepared / "flat-jsonl-tables.zip",
+        ((path.name, path.read_bytes()) for path in sorted(tables.glob("*.jsonl"))),
+    )
+    shutil.rmtree(tables)
+    for name, root in {
         "tsv-tables.zip": prepared / "tsv",
         "parquet-tables.zip": prepared / "parquet",
         "text-exports.zip": prepared / "text",
-    }
-    for name, root in roots.items():
+    }.items():
         write_zip(prepared / name, directory_entries(root))
+        shutil.rmtree(root)
     entries: list[tuple[str, bytes]] = []
     for name in (
         "README.txt",
@@ -133,6 +143,8 @@ def _prepared_packages(output: Path) -> None:
         source = prepared / name
         entries.append((name, source.read_bytes()))
     write_zip(prepared / "metadata-and-audio.zip", entries)
+    for name, _data in entries:
+        (prepared / name).unlink()
 
 
 def build_prepared_formats(
@@ -221,6 +233,7 @@ def build_prepared_formats(
         rights=rights,
     )
     _prepared_packages(output)
+    (output / "search" / "sentences.jsonl").unlink()
     for path in prepared.rglob("*"):
         if path.is_file():
             assignments.setdefault(path.relative_to(output).as_posix(), all_rights_ids)
