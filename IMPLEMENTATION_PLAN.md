@@ -1,9 +1,10 @@
-# Kakarayan Static Research Workbench: End-to-End Implementation Plan
+# Kakarayan Language Platform: End-to-End Implementation Plan
 
 ## 1. Purpose of this document
 
-This document is the complete implementation plan for turning Kakarayan into a public,
-backend-free web interface for the public `FormosanBank/FormosanBank` repository.
+This document is the complete implementation plan for turning Kakarayan into the public
+interface to FormosanBank. The platform combines a corpus research workbench, an
+Amis-first language-learning studio, public data and model catalogues, and developer APIs.
 
 The implementing engineer should assume no prior knowledge of Kakarayan, FormosanBank,
 the corpus XML, or the earlier product discussion.
@@ -17,11 +18,14 @@ No implementation commit may be made directly to `main`.
 
 ## 2. Executive outcome
 
-Build a polished static research application that:
+Build a polished public language platform that:
 
-- Runs entirely on GitHub Pages.
-- Requires no Django server, API server, PostgreSQL service, or paid hosting.
+- Keeps every essential corpus, download, dictionary, learning, and documentation flow
+  available from GitHub Pages without a required backend.
+- Adds a best-effort, read-only live corpus API on a no-cost Hugging Face Space when the
+  organization can provision one without purchasing infrastructure.
 - Uses only the public `FormosanBank/FormosanBank` repository as its corpus source.
+- Uses only reviewed public Kakarayan content and public model metadata beyond that source.
 - Uses GitHub Actions as the offline publication pipeline.
 - Uses GitHub Pages for the application and interactive query shards.
 - Uses GitHub Releases for large, prepared download artifacts.
@@ -31,29 +35,41 @@ Build a polished static research application that:
 - Preserves the existing Kakarayan visual identity and bilingual English/Traditional
   Chinese interface.
 - Treats FormosanBank XML as canonical and every generated artifact as derived.
+- Provides an Amis-first dictionary, example explorer, private local study decks, spaced
+  repetition, recording practice, orthography guidance, machine translation, and ASR.
+- Catalogues public FormosanBank models honestly, including direction, language, license,
+  provenance, limitations, endpoint status, and third-party service disclosure.
+- Documents static JSON access, the optional live REST API, and thin JavaScript, Python,
+  command-line, and R clients.
 
 The public site must be useful without a terminal, GitHub account, or technical corpus
 knowledge.
 
 ## 3. Non-negotiable constraints
 
-### 3.1 Hosting and cost
+### 3.1 Hosting, cost, and graceful degradation
 
-- There must be no production backend.
-- There must be no production database.
+- The product must remain useful with no production backend.
 - There must be no paid infrastructure requirement.
 - The normal deployment target is the Kakarayan repository's GitHub Pages project site.
 - A custom domain may be supported, but it must remain optional.
 - Standard public-repository GitHub Actions runners are the only assumed build compute.
-- The design must not depend on a free-tier application or database service that may sleep,
-  expire, require a credit card, or change pricing.
+- The core experience must not depend on a free-tier service that may sleep, expire, require
+  a credit card, or change pricing.
+- A public Hugging Face Space may provide a live read-only corpus API, MT, or ASR, but it is
+  an optional enhancement. Every such feature must expose its current availability and a
+  useful static fallback.
+- The app must never require a secret in the browser.
+- Do not purchase compute or create a paid service to complete this work.
+- Do not proxy model traffic through Kakarayan merely to hide a public endpoint.
 
 ### 3.2 Repository and pull request discipline
 
 - Work only on the dedicated feature branch.
 - Never commit implementation work directly to `main`.
 - Commit coherent slices to the feature branch as work progresses.
-- Keep all static-workbench implementation in this repository.
+- Keep the full platform implementation, publisher, API source, clients, and deployment
+  automation in this repository.
 - Submit the complete implementation as one pull request against `main`.
 - Do not split the feature across multiple implementation PRs.
 - Do not merge the PR.
@@ -81,6 +97,10 @@ knowledge.
 - Do not execute corpus audio-download scripts or pull Git LFS/Hugging Face media as part of
   ordinary site publication. Media acquisition requires an explicit rights-compatible
   release mode.
+- Public model registries may read public Hugging Face model cards and endpoint metadata.
+- Never access private model, toolkit, corpus, or development repositories.
+- A public model card may disclose private training lineage. Record that disclosure as
+  provenance, but do not fetch or package the private data.
 
 ### 3.4 Existing Kakarayan work
 
@@ -104,6 +124,11 @@ knowledge.
 - All claimed formats must be generated and validated.
 - Features that cannot be supported honestly from the source data must be omitted or shown
   with a precise reason, never simulated.
+- The Amis learner path must be complete enough for real use. Other languages must share
+  the same reusable architecture and show capability-aware states instead of fake parity.
+- Machine output must always be labeled as machine output. Corpus attestations and reviewed
+  teaching content must be visually and semantically distinct.
+- Learning progress, recordings, and saved items must stay on the user's device.
 
 ## 4. Current repository orientation
 
@@ -193,6 +218,8 @@ kakarayan/
       components/
       search/
       export/
+      learn/
+      models/
       data/
       i18n/
       styles/
@@ -200,10 +227,28 @@ kakarayan/
       test/
     public/
     index.html
+    manifest.webmanifest
     package.json
     package-lock.json
     tsconfig.json
     vite.config.ts
+  api/
+    app/
+      main.py
+      config.py
+      database.py
+      errors.py
+      pagination.py
+      routes/
+      schemas/
+    tests/
+    Dockerfile
+    pyproject.toml
+    README.md
+  clients/
+    javascript/
+    python/
+    r/
   publisher/
     __init__.py
     cli.py
@@ -212,6 +257,9 @@ kakarayan/
       README.md
       corpora.toml
       languages.toml
+      rights.toml
+      models.toml
+      learning-content.toml
     discovery.py
     xml_records.py
     identifiers.py
@@ -243,6 +291,9 @@ kakarayan/
     table-manifest.schema.json
     search-manifest.schema.json
     export-recipe.schema.json
+    rights.schema.json
+    model-catalog.schema.json
+    static-api.schema.json
   tests/
     fixtures/
       formosanbank/
@@ -252,11 +303,19 @@ kakarayan/
     publication.md
     rights-and-citation.md
     architecture-decisions.md
+    api.md
+    learning-content.md
+    model-services.md
+    privacy.md
+  content/
+    en/
+    zh-Hant/
   .github/
     workflows/
       ci.yml
       deploy-pages.yml
       publish-data.yml
+      deploy-api-space.yml
   build/                         generated and gitignored
     pages/
     releases/
@@ -1120,6 +1179,317 @@ Worker, support cancellation, and offer a local-recipe path when it exceeds brow
 Do not present descriptive corpus frequencies as claims about speakers, communities,
 language vitality, grammaticality, or population-wide usage.
 
+### 11.15 Learn landing page
+
+The learning area is Amis-first, but its components must use the same language capability
+registry as the research tools so additional languages can be enabled without forks.
+
+The landing page must provide:
+
+- A simple route into lookup, examples, practice, translation, transcription, and saved
+  study material.
+- A language selector that explains which tools are available for each language.
+- Amis dialect selection whenever the underlying resource distinguishes dialect.
+- A clear distinction among corpus evidence, reviewed learning content, and machine output.
+- A short privacy statement explaining that saved material and recordings stay on-device.
+- A compact service-status panel for optional model tools.
+- No fluency, correctness, or community-endorsement claims.
+
+### 11.16 Learner dictionary and example explorer
+
+Build the learner dictionary on the same occurrence data as the research dictionary.
+Do not fabricate lexemes from token clusters.
+
+Each result must support:
+
+- Exact and forgiving lookup across original, standard, alternate, and translation fields.
+- Display of original and standard orthography with explicit labels.
+- Dialect, corpus, source, and attestation count.
+- English and Traditional Chinese meanings where available.
+- Pronunciation or source audio only when public and resolvable.
+- Several diverse, cited example sentences with translation and tier expansion.
+- One-click save of a word, sense candidate, or example into a local study deck.
+- A link to the full research concordance and source record.
+- A visible notice when a result is an automatically grouped candidate rather than a
+  reviewed dictionary entry.
+
+The interface must not collapse conflicting meanings, dialects, or spelling variants into a
+single asserted entry. Ranking should prefer exact forms, reviewed dictionary corpora,
+available translations, audio, and examples, with the ranking rule documented.
+
+### 11.17 Local study decks and spaced repetition
+
+Persist study data only in IndexedDB. Use a versioned application-owned schema that is
+separate from immutable corpus release data.
+
+Support:
+
+- User-created decks and tags.
+- Cards created from words, examples, or manually entered prompts.
+- Front/back and recognition/production directions.
+- Optional audio references that remain references, not copied protected media.
+- A deterministic, documented spaced-repetition scheduler with Again, Hard, Good, and Easy.
+- Due, new, learning, and review queues.
+- Per-card source release and stable source-record locator.
+- Clear behavior when a newer data release changes or removes a source record.
+- Full local backup and restore as versioned JSON.
+- Anki-compatible TSV and ordinary CSV exports with spreadsheet-injection protection.
+- Reset and delete controls with explicit confirmation.
+
+Do not add login, sync, leaderboards, streak pressure, telemetry, or cloud storage.
+
+### 11.18 Pronunciation and recording practice
+
+Recording practice must:
+
+- Request microphone permission only after a direct user action.
+- Explain that audio stays in memory or local browser storage until the user deletes it.
+- Provide record, stop, playback, replace, download, and delete controls.
+- Never upload a recording unless the user explicitly presses the ASR action and confirms
+  the named third-party endpoint.
+- Compare an ASR hypothesis to the selected reference as a learning aid, not a pronunciation
+  score or expert judgment.
+- Highlight plain text differences without asserting that a difference is an error.
+- Preserve apostrophes, glottal stops, Unicode normalization, and Formosan characters.
+- Work as a recorder even when ASR is unavailable.
+
+### 11.19 Orthography assistant
+
+The orthography assistant must be deterministic and based only on reviewed public
+FormosanBank conversion tables and documentation.
+
+It may:
+
+- Explain original versus standard orthography.
+- Apply a named, versioned conversion table when its language and direction are unambiguous.
+- Show character-level changes and link to the rule source.
+- Warn about ambiguous or context-sensitive mappings.
+
+It may not:
+
+- Present automatic transliteration as phonetic transcription.
+- Invent rules for languages without reviewed tables.
+- silently replace user text.
+- Call a general-purpose language model.
+
+### 11.20 Machine translation
+
+Expose only registered public FormosanBank translation models.
+
+For each direction:
+
+- Name the source and target languages and the exact model repository.
+- Display model license, training-data disclosure, limitations, and last verified status.
+- Label all results as machine translation.
+- Require explicit user action before text is sent to Hugging Face.
+- Send text directly from the browser to the selected public Space or inference endpoint.
+- Show queued, loading, cold-start, running, success, cancelled, unavailable, and error states.
+- Enforce input length and request time limits.
+- Allow cancel and retry.
+- Preserve the input locally when the service fails.
+- Offer corpus translation search as the static fallback.
+- Never silently switch models or providers.
+
+The first registry should represent the four currently public directional models when their
+cards and endpoints remain public: English to Amis, Amis to English, Mandarin to Amis, and
+Amis to Mandarin. Registry generation must tolerate future additions and removals.
+
+### 11.21 Automatic speech recognition
+
+Expose registered public FormosanBank ASR models and public Spaces through the same adapter
+contract as MT.
+
+The ASR flow must:
+
+- Accept a recording or an explicitly selected local audio file.
+- Validate type, duration, and size before sending.
+- Name the target language and model.
+- Display model license, provenance, limitations, and status.
+- Require explicit confirmation before upload.
+- Label the output as an automatic transcript.
+- Provide copy, download, and save-to-deck actions.
+- Preserve the recording locally on failure.
+- Work for every language with a verified public adapter, while keeping Amis prominent.
+
+Never upload corpus audio in bulk or use visitor audio for training, analytics, or retention.
+
+### 11.22 Reviewed grammar and learning content
+
+Grammar explanations, lessons, paradigms, and usage notes may be published only from
+reviewed, cited content committed under `content/`.
+
+Every content item must include:
+
+- Stable identifier and interface language.
+- Target language and dialect scope.
+- Author or reviewer.
+- Review status and date.
+- Source citations.
+- Rights status.
+- Machine-readable related corpus queries or examples where relevant.
+
+Do not generate a grammar guide with an LLM, use unreviewed corpus generalizations as
+prescriptive teaching material, or ship placeholder lessons. If no reviewed lesson content
+exists, ship the content framework, evidence explorer, and clear contribution path without
+claiming a course exists.
+
+### 11.23 Models catalogue
+
+The Models area must list all registered public FormosanBank MT and ASR resources, not only
+the adapters enabled in the learner tools.
+
+Each entry includes:
+
+- Task, language, direction, dialect if declared, framework, and model family.
+- Model and Space URLs.
+- License and source-card excerpt or field used to establish it.
+- Public/private training-lineage disclosure exactly at the level provided publicly.
+- Intended use, limitations, and known evaluation metrics without embellishment.
+- Artifact size when available.
+- Browser tool availability and last automated health check.
+- A citation and a report-problem link.
+
+Model metadata is descriptive. Kakarayan must not imply that a model is community-approved,
+safe for high-stakes use, or linguistically authoritative.
+
+### 11.24 Developer portal
+
+The Developers area must offer:
+
+- Static API documentation with stable versioned JSON URLs.
+- Optional live REST API documentation and OpenAPI.
+- Copyable `fetch`, `curl`, Python, and R examples.
+- Pagination, filtering, identifiers, normalization, and error semantics.
+- Release pinning and reproducibility guidance.
+- Dataset loading examples for each prepared format.
+- Thin client installation and usage.
+- Rate and scope limits.
+- A status/fallback explanation.
+- Rights, citation, and responsible-use requirements.
+
+All examples must be executable against public endpoints or generated local fixtures.
+
+## 11A. Static and live API architecture
+
+### 11A.1 Static API
+
+Treat versioned JSON and data manifests on GitHub Pages as a first-class public API.
+
+Publish:
+
+- `/api/v1/meta.json`
+- `/api/v1/releases.json`
+- `/api/v1/languages.json`
+- `/api/v1/corpora.json`
+- `/api/v1/rights.json`
+- `/api/v1/models.json`
+- `/api/v1/downloads.json`
+- `/api/v1/search/manifest.json`
+- Release-scoped record and index shards resolved through manifests.
+
+Every response must have a JSON Schema, API version, generated-at time, Kakarayan commit,
+FormosanBank source commit, release ID, and canonical URL where appropriate.
+
+Never mutate bytes at an existing release-scoped URL. The unversioned `v1` catalogue may
+point to the current immutable release.
+
+### 11A.2 Optional live corpus API
+
+Implement a read-only FastAPI service suitable for a Docker-based Hugging Face Space. The
+service downloads a pinned SQLite snapshot from a GitHub Release during startup, verifies
+its checksum, runs `PRAGMA integrity_check`, opens it read-only, and becomes ready only
+after validation.
+
+Required endpoints:
+
+- `GET /healthz`
+- `GET /readyz`
+- `GET /v1/meta`
+- `GET /v1/languages`
+- `GET /v1/languages/{language_id}`
+- `GET /v1/corpora`
+- `GET /v1/corpora/{corpus_id}`
+- `GET /v1/texts/{text_id}`
+- `GET /v1/sentences/{sentence_id}`
+- `GET /v1/dictionary`
+- `GET /v1/concordance`
+- `GET /v1/frequencies`
+- `GET /v1/downloads`
+- `GET /v1/rights`
+- `GET /v1/models`
+- `GET /openapi.json`
+- `GET /docs`
+
+API rules:
+
+- No write endpoints.
+- No arbitrary SQL.
+- No remote file or URL parameters.
+- No regular-expression search in the live service.
+- Maximum query string length of 256 Unicode code points.
+- Default page size 25 and maximum 100.
+- Opaque cursor pagination for result sets.
+- Allowlisted sort keys and filters.
+- Prepared statements only.
+- Bounded query time and result work.
+- Structured error objects with stable code, message, status, and optional field.
+- CORS limited to the public Kakarayan origin, local development, and documented preview
+  origins.
+- Cache immutable metadata and catalogue responses.
+- Do not log query text, corpus content, or client audio.
+
+Service startup configuration must name a release-manifest URL and checksum. It must fail
+closed if the asset is missing, corrupt, incompatible, or newer than the supported schema.
+
+### 11A.3 API deployment boundary
+
+Keep the Dockerfile and Space source in Kakarayan. A guarded workflow may mirror that source
+to `FormosanBank/kakarayan-api` only:
+
+- On explicit workflow dispatch or after merge to `main`.
+- Never from pull-request code.
+- Using a narrowly scoped organization secret.
+- With a source commit and image/service version recorded.
+
+If a new no-cost organization Space cannot be created or authorized, record the exact
+maintainer action and ship the static API. Do not buy compute and do not block the rest of
+the platform.
+
+### 11A.4 Client libraries
+
+Create thin, typed clients rather than alternate query engines:
+
+- A JavaScript or TypeScript package for static and live API reads.
+- A Python package and command-line interface.
+- A small R package or sourceable client.
+
+Clients must expose base URL and release pinning, timeouts, pagination iteration, structured
+errors, user-agent identification, and download checksum verification. Keep dependencies
+small. Generate or validate types from the schemas/OpenAPI where practical.
+
+## 11B. Browser model-service architecture
+
+Use one versioned model registry and task adapters.
+
+An adapter describes:
+
+- Stable model ID.
+- Task and direction.
+- Public model and Space URLs.
+- Request and response shape.
+- Accepted limits and media types.
+- License and provenance links.
+- Whether browser CORS has been verified.
+- Last verified health and timestamp.
+
+The browser calls only the endpoint named by the selected adapter. It must show a
+third-party disclosure before sending user text or audio. Do not embed tokens, use private
+inference endpoints, retain inputs, add analytics, or route through an undisclosed provider.
+
+Service failure is normal. Use abortable requests, bounded retries initiated by the user,
+clear cold-start copy, and static alternatives. Never mark a model healthy only because its
+repository exists.
+
 ## 12. Export and download capabilities
 
 ### 12.1 Browser-generated exports
@@ -1425,7 +1795,7 @@ smoke test.
 
 ## 16. Privacy and security
 
-The site should collect no user data.
+Kakarayan should collect no user data.
 
 Do not add:
 
@@ -1434,10 +1804,17 @@ Do not add:
 - Advertising.
 - Authentication.
 - Cookies.
-- Server logs beyond GitHub's unavoidable hosting behavior.
+- Application cookies.
+- Server-side storage for study progress or recordings.
 
-Do not upload corpus text, audio, metadata, or generated indexes to third-party AI,
-translation, analytics, error-reporting, or hosted-search services.
+GitHub Pages and optional Hugging Face services have their own unavoidable infrastructure
+logs. Disclose the named third party before a visitor sends text or audio to a model tool.
+Never send data automatically, retain it in Kakarayan, or describe the service as private.
+
+Do not upload corpus collections, metadata, generated indexes, study decks, or recordings
+to third-party AI, analytics, error-reporting, or hosted-search services. A visitor may
+explicitly submit the text or audio they selected to the registered public MT or ASR
+endpoint after seeing the disclosure.
 
 Do not build semantic embeddings or AI-derived annotations for this product. Search must
 use transparent lexical, relational, and documented linguistic projections.
@@ -1860,6 +2237,28 @@ Exit condition:
 - Shared URLs reproduce searches.
 - Stale asynchronous results cannot overwrite newer queries.
 
+### Phase 7A: Learner studio
+
+- Implement the Amis-first learner landing page and capability registry.
+- Adapt dictionary and examples into a novice-friendly evidence view.
+- Implement IndexedDB decks, versioned backup/restore, safe tabular export, and the
+  documented spaced-repetition scheduler.
+- Implement recording controls and local recording lifecycle.
+- Implement the deterministic orthography assistant from reviewed public tables.
+- Implement MT and ASR adapters with consent, limits, state, cancellation, and fallback.
+- Implement reviewed-content rendering and contribution metadata.
+- Add offline PWA behavior for the shell, saved decks, and previously cached static data.
+- Test browser storage migrations, scheduler boundaries, microphone denial, service
+  unavailability, malformed responses, and user cancellation.
+
+Exit condition:
+
+- A learner can look up Amis evidence, save it, review it, export and restore progress, and
+  record locally with optional model tools unavailable.
+- Public MT and ASR adapters work when their endpoints are healthy and fail clearly when
+  they are not.
+- No learner data leaves the device without an explicit, disclosed action.
+
 ### Phase 8: Dataset builder and browser exports
 
 - Implement staged selection workflow.
@@ -1911,6 +2310,28 @@ Exit condition:
 - Pull requests build and validate without publishing.
 - A local or non-production dry run produces the exact Pages and Releases layouts.
 - Main-only deployment guards are tested by workflow inspection and CI.
+
+### Phase 10A: APIs, clients, and model catalogue
+
+- Publish the versioned static API and schemas.
+- Implement the read-only FastAPI service over the release SQLite asset.
+- Add bounded filters, cursor pagination, structured errors, OpenAPI, and startup integrity
+  checks.
+- Implement JavaScript, Python/CLI, and R clients.
+- Generate and render the public model catalogue.
+- Add adapter contract tests and best-effort public endpoint health checks.
+- Add the guarded, main/manual-only Hugging Face Space mirror workflow.
+- Document static fallbacks and the exact external setup action if the Space cannot be
+  provisioned at no cost.
+
+Exit condition:
+
+- Static API examples work from Pages build output.
+- Live API tests pass against the fixture SQLite snapshot.
+- All clients pass the same contract examples.
+- No pull-request workflow can deploy or access a write token.
+- Model-service outage does not break research, download, dictionary, deck, or recording
+  functionality.
 
 ### Phase 11: Hardening
 
@@ -2100,12 +2521,23 @@ The implementation is complete only when all of the following are true:
 - The existing Django application remains intact and passing its baseline checks.
 - The static application production build succeeds.
 - It runs correctly at the `/kakarayan/` project path.
+- Core research, download, dictionary, learning, and documentation flows work when every
+  optional Hugging Face service is unavailable.
 - Every public, valid corpus is represented.
 - Every display language is represented distinctly.
 - Every corpus/language has reviewed presentation metadata and source evidence.
 - English and Traditional Chinese are complete.
 - Corpus and language discovery are complete.
 - Concordance and dictionary modes are complete.
+- The Amis-first learner dictionary and example explorer are complete.
+- Local decks, the spaced-repetition queue, versioned backup/restore, and safe exports are
+  complete.
+- Local pronunciation recording works without an external service.
+- MT and ASR adapters have explicit consent, third-party disclosure, limits, cancellation,
+  status, and static or local fallback.
+- The orthography assistant uses only reviewed public tables and cites its rules.
+- Learning and grammar content is published only when reviewed and cited.
+- The model catalogue is complete for registered public resources.
 - Scoped linguistic summaries and their exports are complete.
 - Search modes and filters are complete.
 - Interlinear display and source provenance are complete.
@@ -2122,7 +2554,10 @@ The implementation is complete only when all of the following are true:
 - Rights and citations are visible and machine-readable.
 - Central, corpus, component, AI-use, TDM, and community notices are preserved.
 - No private data or private path is present.
-- No runtime backend or database is required.
+- The static API is versioned, schema-validated, documented, and release-pinned.
+- The optional live API passes its contract, integrity, security, and bound tests.
+- JavaScript, Python/CLI, and R clients pass shared contract examples.
+- No runtime backend or database is required for the core product.
 - No paid service is required.
 - Pages artifact and shard budgets are satisfied.
 - Typical search and memory budgets are satisfied.
@@ -2131,6 +2566,8 @@ The implementation is complete only when all of the following are true:
 - CI is green.
 - Pull requests do not publish.
 - Main-only deployment guards are present.
+- The Hugging Face Space workflow cannot deploy from pull requests and uses a narrowly
+  scoped secret only after merge or explicit maintainer dispatch.
 - Data releases are immutable, Pages deployment is atomic, and rollback is documented.
 - Historical prepared-only releases are distinguished from the current interactive release.
 - Documentation allows a new contributor to reproduce the build.
@@ -2148,11 +2585,17 @@ This pull request does not:
 - Accept private corpora.
 - Edit canonical FormosanBank data in the browser.
 - Replace FormosanBank's QC process.
-- Provide semantic/embedding/AI-generated search or annotation.
+- Provide semantic, embedding, RAG, general AI tutoring, or AI-generated corpus annotation.
 - Provide server-side arbitrary export jobs.
 - Clip or transcode large audio collections in the browser.
 - Guarantee availability of externally hosted media.
 - Fabricate linguistic annotations absent from the source.
+- Claim that machine translation or ASR is a reviewed correction, expert judgment, or
+  community-endorsed output.
+- Ship a text-to-speech system or browser-local conversion of multi-gigabyte models.
+- Publish unreviewed grammar lessons or an Amis interface translation without a fluent
+  reviewer.
+- Store learner progress, recordings, or search history in the cloud.
 - Assign corpus or code licenses without maintainer authority.
 - Merge itself into `main`.
 
@@ -2162,7 +2605,7 @@ If there is a conflict between a convenient implementation and these core princi
 
 1. Preserve canonical data and provenance.
 2. Preserve rights and attribution.
-3. Preserve zero-backend operation.
+3. Preserve the backend-optional core.
 4. Preserve research correctness.
 5. Preserve accessibility and usability.
 6. Prefer measured simplicity over speculative infrastructure.

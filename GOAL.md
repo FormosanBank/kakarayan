@@ -1,4 +1,4 @@
-# Goal: Ship the Complete Backend-Free Kakarayan Research Workbench
+# Goal: Ship the Complete Kakarayan Language Platform
 
 ## Mission
 
@@ -18,21 +18,30 @@ Do not stop at a plan, scaffold, mockup, prototype, or partial corpus.
 
 ## Non-negotiable outcome
 
-- Deliver a polished static research interface for public `FormosanBank/FormosanBank` data.
-- Run the production application entirely on GitHub Pages.
-- Require no production Django server, API, PostgreSQL service, or paid hosting.
+- Deliver a polished public platform for research, download, language learning, models,
+  and developer access to public FormosanBank resources.
+- Run the core production application on GitHub Pages.
+- Keep all essential features useful without a production backend or paid hosting.
+- Provide a best-effort live read-only corpus API on a no-cost Hugging Face Space, with the
+  static API as the permanent fallback.
 - Use GitHub Actions for offline data preparation.
 - Use Pages for application assets and interactive query shards.
 - Use GitHub Releases for large prepared downloads.
 - Perform search, filtering, preview, and modest custom exports in the browser.
 - Support English and Traditional Chinese at full feature parity.
-- Serve linguists without requiring a terminal, GitHub account, or corpus-engineering skills.
+- Deliver an Amis-first learner studio with a reusable capability model for other languages.
+- Integrate registered public FormosanBank MT and ASR endpoints with explicit consent,
+  honest machine-output labels, service status, cancellation, and graceful degradation.
+- Publish a public model catalogue, static JSON API, optional REST API, and thin JavaScript,
+  Python/CLI, and R clients.
+- Serve linguists and learners without requiring a terminal, GitHub account, or corpus
+  engineering skills.
 
 ## Branch and pull request contract
 
 - Never commit to `main`.
 - Check the current branch and worktree before editing.
-- Continue on `agent/static-research-workbench` unless explicitly instructed otherwise.
+- Continue on `feature/kakarayan-language-platform` unless explicitly instructed otherwise.
 - If on `main`, switch to the dedicated branch before changing anything.
 - Make coherent commits as vertical slices are completed.
 - Keep the complete implementation in this one branch.
@@ -43,11 +52,14 @@ Do not stop at a plan, scaffold, mockup, prototype, or partial corpus.
 - Do not publish branch code over production Pages.
 - PR workflows may build artifacts but may not deploy.
 - Production deployment must be guarded to `main`.
+- Hugging Face Space deployment must be guarded to `main` or explicit maintainer dispatch.
 
 ## Source-of-truth contract
 
 - Read only the public `FormosanBank/FormosanBank` repository.
 - Never access or publish private corpus repositories.
+- Read only public model cards and public endpoint metadata for the model registry.
+- Never access private model, toolkit, or training-data repositories.
 - Resolve the requested remote ref; do not assume a local FormosanBank checkout is current.
 - Pin every build to an exact FormosanBank commit.
 - Read that commit's tree, not deleted history, and allowlist publishable source paths.
@@ -76,6 +88,7 @@ Do not stop at a plan, scaffold, mockup, prototype, or partial corpus.
 
 ## Required public product
 
+- Complete top-level Learn, Explore, Download, Developers, Models, and About areas.
 - Complete home, corpus explorer, corpus detail, language explorer, and language detail views.
 - Distinct display identities for Seediq and Truku despite their shared `trv` code.
 - Exact-source, normalized, prefix, substring, scoped regex, and fuzzy form search.
@@ -95,41 +108,60 @@ Do not stop at a plan, scaffold, mockup, prototype, or partial corpus.
 - Complete format guide, data model, citation, rights, methodology, about, 404, offline,
   empty, loading, unsupported, and failure states.
 
+## Required learner product
+
+- An Amis-first learner landing page with honest per-language capability states.
+- A learner dictionary that distinguishes source attestations, standardized forms, automatic
+  groupings, reviewed content, and machine output.
+- A phrase and example explorer with corpus, dialect, source, rights, and citation.
+- IndexedDB study decks with tags, word/example/manual cards, and source-release locators.
+- A documented local spaced-repetition scheduler with Again, Hard, Good, and Easy actions.
+- Versioned JSON backup/restore plus safe Anki TSV and CSV exports.
+- Local pronunciation recording, playback, replace, download, and delete.
+- Optional ASR comparison that never presents an edit distance as a pronunciation score.
+- A deterministic orthography assistant built only from reviewed public conversion tables.
+- Public FormosanBank MT adapters for verified Amis and English/Mandarin directions.
+- Public FormosanBank ASR adapters for every verified language endpoint.
+- Reviewed, cited grammar or learning content only. Do not invent a course.
+- An offline-capable shell and continued access to local study data.
+- No accounts, cloud sync, analytics, ads, streak pressure, or server-side learner data.
+
+## Required model and developer product
+
+- A model catalogue covering registered public FormosanBank MT and ASR models and Spaces.
+- Model direction, language, task, framework, license, provenance, training-lineage
+  disclosure, limitations, metrics, artifact size, endpoint, and status.
+- A versioned static API on Pages for metadata, releases, languages, corpora, rights, models,
+  downloads, and search manifests.
+- A read-only FastAPI service over a checksum-verified release SQLite snapshot.
+- Health, readiness, metadata, language, corpus, text, sentence, dictionary, concordance,
+  frequency, download, rights, model, OpenAPI, and documentation endpoints.
+- Query length and page limits, opaque cursors, allowlisted sorting, prepared statements,
+  structured errors, bounded work, restrictive CORS, and no arbitrary SQL.
+- JavaScript/TypeScript, Python/CLI, and R clients with release pinning, timeouts, pagination,
+  structured errors, and checksum verification.
+- Copyable, tested `fetch`, `curl`, Python, and R examples.
+
 ## Required exports
 
-Browser-generated exports for safe selections:
-
-- CSV and TSV, including raw and spreadsheet-safe modes.
-- JSON and JSON Lines.
-- Parquet.
-- Plain and interlinear text.
-- Audio-reference manifests.
-- Reproducible export recipes.
-- ZIP or XLSX only if measured browser behavior is safe.
-
-Prepared release artifacts:
-
-- Byte-preserving canonical XML packages.
-- Relational CSV and TSV packages.
-- Hierarchical JSON Lines packages.
-- Normalized Parquet packages.
-- Portable SQLite packages.
-- Human-oriented XLSX packages.
-- Valid CLDF where mappings are linguistically defensible.
-- ELAN EAF, Praat TextGrid, WebVTT, and SRT only for compatible timed data.
-- Plain text, interlinear text, and audio manifests.
-- Schemas, checksums, citations, rights, provenance, and package README files.
-
-Validate every claimed format with an independent parser or official validator.
-
-Explain incompatibility instead of fabricating missing annotation.
-
-Do not invent POS, dependencies, lexical analysis, or grammatical structure.
+- Browser exports: safe CSV/TSV, JSON/JSONL, Parquet, plain/interlinear text,
+  audio-reference manifests, and reproducible recipes.
+- Browser ZIP or XLSX only when measured size and memory behavior is safe.
+- Prepared artifacts: byte-preserving XML, relational CSV/TSV, hierarchical JSONL,
+  normalized Parquet, SQLite, human XLSX, plain/interlinear text, and audio manifests.
+- Produce CLDF only for defensible mappings and EAF, TextGrid, VTT, or SRT only for
+  compatible timed data.
+- Include schemas, checksums, citations, rights, provenance, and package READMEs.
+- Independently validate every claimed format. Explain incompatibility instead of inventing
+  annotation or grammatical analysis.
 
 ## Required architecture
 
 - Add a strict TypeScript static application under `site/`.
 - Add a tested Python publication package under `publisher/`.
+- Add a tested FastAPI service under `api/`.
+- Add thin clients under `clients/`.
+- Add reviewed learning content under `content/`.
 - Add versioned contracts under `schemas/`.
 - Keep generated output under ignored `build/` paths.
 - Use static-safe routing that works at `/kakarayan/`, not only `/`.
@@ -140,14 +172,14 @@ Do not invent POS, dependencies, lexical analysis, or grammatical structure.
 - Do not require cross-origin isolation, multithreaded Wasm, or custom response headers.
 - Serve interactive data from the Pages origin.
 - Treat Releases as normal downloads, not as a browser database API.
-- Resolve data locations through validated manifests.
-- Never hard-code current inventory counts or generated filenames.
+- Resolve all generated locations through validated manifests. Never hard-code inventories.
 - Generate deterministic identifiers, ordering, archives, schemas, and checksums.
-- Use content-hashed, release-scoped interactive paths and never reuse a URL for new bytes.
-- Keep historical releases downloadable without promising historical interactive querying.
-- Publish immutable data releases before atomically deploying their Pages bundle.
-- Verify deployed Wasm, Workers, manifests, byte ranges, search, and downloads.
-- Document rollback to the previous application/data pair.
+- Use immutable content-hashed release paths, atomic Pages assembly, deployment checks, and
+  documented rollback.
+- Treat public model calls as optional browser-to-provider requests. Never embed a secret or
+  add a required Kakarayan proxy.
+- Download and verify the API SQLite asset before readiness and open it read-only.
+- Keep the Space source in this repository and mirror it only through a guarded workflow.
 
 ## Rights, attribution, privacy, and security
 
@@ -157,17 +189,19 @@ Do not invent POS, dependencies, lexical analysis, or grammatical structure.
 - Display rights and citations on pages, in the builder, and inside packages.
 - Preserve central, corpus, XML-root, media, noncommercial-AI, and TDM notices.
 - Use a reviewed metadata/rights registry with evidence links; do not infer law from prose.
-- Propagate machine-readable rights signals and document GitHub Pages root-path limitations.
+- Propagate machine-readable rights signals.
 - Preserve attribution to Kakarayan's original researcher and FormosanBank contributors.
 - Do not choose a code license without maintainer authority.
 - Treat unresolved code-license approval as a deployment blocker, not an assumption.
 - Collect no user data.
 - Add no analytics, advertising, authentication, tracking, or application cookies.
-- Send no corpus data to hosted AI/translation/search services and build no semantic index.
-- Treat corpus strings and URL state as untrusted.
-- Do not insert unsanitized HTML.
-- Sanitize archive paths and spreadsheet-oriented exports.
-- Bundle executable assets locally.
+- Send no corpus collection, study deck, generated index, or recording automatically to a
+  hosted service.
+- Permit only an explicit visitor-selected text or audio submission to the named registered
+  public MT or ASR endpoint after third-party disclosure.
+- Build no semantic index, RAG service, general-purpose AI tutor, or AI corpus annotation.
+- Treat strings, URL state, archive paths, and spreadsheet exports as untrusted.
+- Do not insert unsanitized HTML. Bundle executable assets locally.
 - Use least-privilege, immutable workflow dependencies where practical.
 - Never expose write tokens to pull-request code.
 - Never execute upstream corpus/QC code in a job holding release or Pages write credentials.
@@ -176,16 +210,9 @@ Do not invent POS, dependencies, lexical analysis, or grammatical structure.
 
 - Target WCAG 2.2 AA and complete keyboard operation.
 - Support current and previous Chrome, Firefox, Safari, and Edge.
-- Keep the Pages artifact below 900 MiB.
-- Keep each interactive shard below 50 MiB compressed; target 25 MiB.
-- Keep initial-route transfer below 2 MiB.
-- Keep application JavaScript below 500 KiB compressed before lazy Wasm.
-- Keep the catalogue below 1 MiB compressed.
-- Return typical cold scoped exact results within 5 seconds.
-- Return typical warm scoped exact results within 2 seconds.
-- Keep typical query memory below 500 MiB.
+- Meet the plan's Pages, shard, initial-transfer, JavaScript, catalogue, release-asset,
+  latency, and memory budgets.
 - Warn or refuse before estimated browser memory exceeds 1 GiB.
-- Keep each release asset below 1.9 GiB.
 - Measure all budgets against the full public corpus.
 - Do not claim a check, format, or budget was verified unless it actually was.
 
@@ -201,50 +228,30 @@ Do not invent POS, dependencies, lexical analysis, or grammatical structure.
 - Add a full-data dry run before completion.
 - Add a main-only Pages deployment workflow.
 - Add an explicit data-publication workflow with source-ref and dry-run inputs.
+- Add API fixture tests, shared client contract tests, and public model adapter tests.
+- Add a guarded post-merge/manual-only Hugging Face Space deployment workflow.
 - Do not automatically publish arbitrary upstream changes.
 
 ## Agentic execution loop
 
-1. Read [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) completely.
-2. Read repository instructions, README, architecture, ingestion, models, views, templates,
-   styles, translations, and tests.
-3. Confirm the feature branch and cleanly identify pre-existing work.
-4. Create/read `IMPLEMENTATION_STATUS.md` as the durable recovery record.
-5. Run and record the existing baseline checks.
-6. Inspect the current public FormosanBank repository and recalculate its inventory.
-7. Study difficult XML examples before finalizing contracts.
-8. Re-read the relevant plan phase.
-9. Select the smallest coherent vertical slice that advances the real product.
-10. Define concrete acceptance checks for that slice.
-11. Implement production behavior, not placeholders.
-12. Add or update focused tests.
-13. Run the narrowest relevant checks.
-14. Fix root causes instead of weakening validation.
-15. Run broader impacted checks.
-16. Inspect the slice diff and remove debug or accidental output.
-17. Commit the coherent slice on the feature branch.
-18. Update status with commit, passed checks, measurements, blockers, and next slice.
-19. Move immediately to the next incomplete slice.
-20. Repeat until every phase and definition-of-done item is satisfied.
-
-Do not defer all integration and validation until the end.
+1. Read the complete plan, repository instructions, existing architecture, and tests.
+2. Confirm the feature branch and pre-existing work.
+3. Create or read `IMPLEMENTATION_STATUS.md` and run the current baseline.
+4. Inspect the current public FormosanBank source, rights, inventory, and difficult XML.
+5. Re-read the relevant phase and choose the smallest complete vertical slice.
+6. Define acceptance checks, implement real behavior, and add focused tests.
+7. Run narrow then broad checks and fix root causes.
+8. Review the diff and remove accidental or generated clutter.
+9. Commit and push the coherent slice.
+10. Record checks, measurements, blockers, and the next slice in status.
+11. Repeat immediately until every phase and definition-of-done item is satisfied.
 
 After context compaction or a resumed session, re-read the goal, plan, status, branch state,
 and recent commits; verify the last checkpoint and resume instead of restarting.
 
-Do not stop because one test passes, one language works, or the interface renders.
-
-Do not leave unresolved TODOs, mock data, fake buttons, dead code, or disabled primary flows.
-
-Do not silently narrow corpus, format, accessibility, or browser scope.
-
-When blocked, gather evidence, try safe in-scope alternatives, and continue independent work.
-
-Escalate only decisions requiring maintainer authority, such as licensing, rights, or a
-materially different architecture.
-
-An external blocker does not justify stopping unrelated implementation or marking the goal
-complete; finish everything independently possible and record the exact required action.
+Do not stop after one passing test or rendered page, leave placeholders, defer integration,
+or silently narrow scope. When blocked, gather evidence and continue independent work.
+Escalate only decisions requiring maintainer authority. Record exact external actions.
 
 ## Final verification loop
 
@@ -259,23 +266,34 @@ complete; finish everything independently possible and record the exact required
 - Run the production build at `/kakarayan/`.
 - Validate routes, links, manifests, schemas, archives, and checksums.
 - Run dependency and license audits.
+- Run the live API contract against its fixture and release snapshot.
+- Run JavaScript, Python/CLI, and R shared client examples.
+- Exercise MT/ASR success, cold-start, timeout, cancellation, malformed-response, and outage
+  states without making model availability a core-site release gate.
+- Exercise IndexedDB migration, backup/restore, scheduling, microphone denial, local
+  recording deletion, and offline learner flows.
 - Measure storage, transfer, latency, and memory budgets.
 - Inspect the entire diff against `main`.
 - Remove generated corpus output, secrets, private paths, debug files, and unrelated changes.
 - Update README, architecture, format, rights, publication, and reproduction documentation.
 - Confirm PR workflows cannot publish and deployment can run only from `main`.
+- Confirm the Space workflow cannot run from pull requests or expose its write secret.
 
 ## Completion
 
-- Commit all remaining coherent work to the feature branch.
-- Push that one branch.
-- Open one draft pull request against `main`.
+- Commit and push all coherent work, then open one draft pull request against `main`.
 - Include architecture, screenshots, full-data metrics, format matrix, rights behavior,
-  measured budgets, validation, reproduction commands, and post-merge deployment steps.
-- Mark it ready only when the implementation is complete and CI is green.
-- Do not merge it.
-- Do not claim the site is live before main-only deployment succeeds after maintainer merge.
+  measured budgets, learner privacy, API/model status, validation, reproduction commands,
+  and post-merge deployment steps.
+- Mark it ready only when complete and CI is green. Do not merge it or claim it is live
+  before main-only deployment succeeds after maintainer merge.
 - Report the branch, commits, PR URL, exact checks, measurements, and external actions.
 
+If a no-cost Space cannot be created, finish every other deliverable, record the exact
+maintainer action, and ship the static API fallback. If Kakarayan's software-license choice
+has not been approved by Gabriel and FormosanBank, finish the code but mark public
+deployment as governance-blocked.
+
 The task is complete only when the single pull request is genuinely merge-ready and every
-definition-of-done item in [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) is satisfied.
+independently achievable definition-of-done item in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) is satisfied.
