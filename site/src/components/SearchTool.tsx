@@ -1,40 +1,12 @@
 import {useEffect, useMemo, useRef, useState, type FormEvent} from "react";
 import {matchingShards, searchRecords, type SearchMode} from "../data";
+import {downloadExport, type ExportFormat} from "../exports";
 import {useI18n} from "../i18n";
 import {Link, useSearchParams} from "../routing";
 import {cardFromRecord, saveCard} from "../study";
 import type {AppData, SearchRecord} from "../types";
 
 const VALID_MODES: SearchMode[] = ["exact", "prefix", "contains", "translation"];
-
-function csvCell(value: string): string {
-  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
-
-function downloadResults(records: SearchRecord[]) {
-  const lines = [
-    ["id", "standard", "original", "translations", "language", "corpus", "dialect", "source"],
-    ...records.map((record) => [
-      record.id,
-      record.standard,
-      record.original,
-      record.translations.map((item) => `${item.xml_lang}:${item.text}`).join(" | "),
-      record.language_id,
-      record.corpus_id,
-      record.dialect,
-      record.source_path,
-    ]),
-  ].map((row) => row.map(csvCell).join(","));
-  const url = URL.createObjectURL(
-    new Blob([`\uFEFF${lines.join("\n")}\n`], {type: "text/csv;charset=utf-8"}),
-  );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "kakarayan-search.csv";
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
 
 export function SearchTool({
   data,
@@ -60,6 +32,7 @@ export function SearchTool({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const controller = useRef<AbortController | null>(null);
 
   const relevantCorpora = useMemo(
@@ -210,9 +183,42 @@ export function SearchTool({
             {truncated && " · first 200 shown"}
           </p>
           {records.length > 0 && (
-            <button className="button button--quiet" onClick={() => downloadResults(records)}>
-              Download CSV
-            </button>
+            <div className="result-export">
+              <label>
+                Export
+                <select
+                  value={exportFormat}
+                  onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
+                >
+                  <option value="csv">CSV</option>
+                  <option value="tsv">TSV</option>
+                  <option value="json">JSON</option>
+                  <option value="jsonl">JSON Lines</option>
+                  <option value="plain">Plain text</option>
+                  <option value="interlinear">Interlinear text</option>
+                  <option value="audio">Audio references</option>
+                  <option value="recipe">Reproducible recipe</option>
+                </select>
+              </label>
+              <button
+                className="button button--quiet"
+                onClick={() =>
+                  downloadExport(
+                    records,
+                    {
+                      releaseId: data.meta.release_id,
+                      query: query.trim(),
+                      mode,
+                      languageId,
+                      corpusId,
+                    },
+                    exportFormat,
+                  )
+                }
+              >
+                Download
+              </button>
+            </div>
           )}
         </div>
       )}

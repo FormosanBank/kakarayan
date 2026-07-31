@@ -135,6 +135,13 @@ export interface SearchRecord {
   original: string;
   translations: Translation[];
   tokens: Token[];
+  audio: Array<{
+    file: string;
+    url: string;
+    start: number | null;
+    end: number | null;
+    source: string;
+  }>;
 }
 
 export interface OrthographyRule {

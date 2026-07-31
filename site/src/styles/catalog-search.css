@@ -361,6 +361,25 @@
   color: var(--ink-soft);
 }
 
+.result-export {
+  display: flex;
+  gap: 0.65rem;
+  align-items: end;
+}
+
+.result-export label {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.result-export select {
+  min-width: 10rem;
+  padding: 0.55rem 2rem 0.55rem 0.65rem;
+}
+
 .result-list {
   display: grid;
   gap: 1rem;
@@ -479,5 +498,4 @@
   background: rgb(252 250 245 / 55%);
   text-align: center;
 }
-
 

@@ -11,11 +11,13 @@ interface Artifact {
   sha256: string;
   scope: string;
   rights_ids: string[];
+  publishable: boolean;
+  blocked_reasons: string[];
+  download_url: string;
 }
 
-interface ReleaseManifest {
+interface DownloadsCatalog {
   release_id: string;
-  source: {repository: string; commit: string};
   artifacts: Artifact[];
 }
 
@@ -32,17 +34,17 @@ function size(bytes: number): string {
 
 export function Downloads({data}: {data: AppData}) {
   const {t} = useI18n();
-  const [manifest, setManifest] = useState<ReleaseManifest | null>(null);
+  const [manifest, setManifest] = useState<DownloadsCatalog | null>(null);
   const [error, setError] = useState("");
   const [format, setFormat] = useState("all");
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${import.meta.env.BASE_URL}data/release-manifest.json`, {
+    fetch(`${import.meta.env.BASE_URL}api/v1/downloads.json`, {
       signal: controller.signal,
     })
       .then(async (response) => {
         if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-        setManifest((await response.json()) as ReleaseManifest);
+        setManifest((await response.json()) as DownloadsCatalog);
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
@@ -54,11 +56,7 @@ export function Downloads({data}: {data: AppData}) {
   const artifacts = useMemo(
     () =>
       (manifest?.artifacts ?? []).filter((artifact) => {
-        const isResearch =
-          artifact.path === "formosanbank.sqlite" ||
-          artifact.path.startsWith("tables/") ||
-          artifact.path === "search/sentences.jsonl";
-        return isResearch && (format === "all" || artifact.path.endsWith(format));
+        return format === "all" || artifact.path.endsWith(format);
       }),
     [format, manifest?.artifacts],
   );
@@ -100,10 +98,10 @@ export function Downloads({data}: {data: AppData}) {
         <label className="field field--compact">
           Format
           <select value={format} onChange={(event) => setFormat(event.target.value)}>
-            <option value="all">All core formats</option>
-            <option value=".sqlite">SQLite</option>
-            <option value=".csv">CSV</option>
-            <option value=".jsonl">JSON Lines</option>
+            <option value="all">All prepared formats</option>
+            <option value=".zip">ZIP packages</option>
+            <option value=".parquet">Parquet</option>
+            <option value=".xlsx">XLSX</option>
           </select>
         </label>
       </div>
@@ -124,19 +122,21 @@ export function Downloads({data}: {data: AppData}) {
             </div>
             <div>
               <strong>{size(artifact.bytes)}</strong>
-              <StatusBadge value={hasUnreviewedRights ? "review_required" : "allowed"} />
-              {hasUnreviewedRights ? (
-                <button className="button button--primary" disabled>
-                  Rights review required
-                </button>
-              ) : (
+              <StatusBadge value={artifact.publishable ? "allowed" : "review_required"} />
+              {artifact.publishable ? (
                 <a
                   className="button button--primary"
-                  href={`${import.meta.env.BASE_URL}data/${artifact.path}`}
-                  download
+                  href={artifact.download_url}
                 >
                   Download
                 </a>
+              ) : (
+                <>
+                  <button className="button button--primary" disabled>
+                    Rights review required
+                  </button>
+                  <small>{artifact.blocked_reasons.join("; ")}</small>
+                </>
               )}
             </div>
           </article>
@@ -161,8 +161,17 @@ export function Downloads({data}: {data: AppData}) {
             <p>One record per line for streaming, shell pipelines, and document tools.</p>
           </article>
           <article>
-            <h3>CSV</h3>
-            <p>One file per tier with stable IDs. Formula-like cells are guarded in UI exports.</p>
+            <h3>Parquet and XLSX</h3>
+            <p>
+              Columnar research tables and a spreadsheet-safe, human-oriented workbook.
+            </p>
+          </article>
+          <article>
+            <h3>CLDF and aligned media</h3>
+            <p>
+              Conservative CLDF examples plus EAF, TextGrid, WebVTT, and SRT only where
+              valid timings exist.
+            </p>
           </article>
         </div>
       </section>

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from lxml import etree
@@ -96,14 +98,47 @@ def _mixed_text(element: etree._Element) -> tuple[str, bool]:
     return "".join(parts).strip(), unclear
 
 
+def _attributes_json(element: etree._Element) -> str:
+    return json.dumps(
+        dict(sorted(element.attrib.items())),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _inline_markup_json(element: etree._Element) -> str:
+    children = []
+    for child in element:
+        qualified = etree.QName(child)
+        children.append(
+            {
+                "name": qualified.localname,
+                "namespace": qualified.namespace,
+                "attributes": dict(sorted(child.attrib.items())),
+                "text": child.text or "",
+                "tail": child.tail or "",
+            }
+        )
+    return json.dumps(
+        children,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _number(value: str | None) -> float | None:
     if value in (None, ""):
         return None
     assert value is not None
     try:
-        return float(value)
-    except ValueError:
+        parsed = Decimal(value)
+    except (InvalidOperation, ValueError):
         return None
+    if not parsed.is_finite() or parsed < 0:
+        return None
+    return float(parsed)
 
 
 def _tier_row(
@@ -136,15 +171,26 @@ def _tier_row(
         "position": ordinal,
     }
     if tag == "AUDIO":
+        start = _number(element.get("start"))
+        end = _number(element.get("end"))
         base.update(
             {
                 "file": element.get("file", ""),
                 "url": element.get("url", ""),
-                "start": _number(element.get("start")),
-                "end": _number(element.get("end")),
+                "start": start,
+                "end": end,
                 "start_raw": element.get("start", ""),
                 "end_raw": element.get("end", ""),
                 "source": element.get("source", ""),
+                "duration": (
+                    end - start if start is not None and end is not None and end >= start else None
+                ),
+                "availability_status": (
+                    "referenced"
+                    if element.get("file") or element.get("url") or element.get("source")
+                    else "unresolved"
+                ),
+                "attributes_json": _attributes_json(element),
             }
         )
     else:
@@ -156,10 +202,18 @@ def _tier_row(
                     "kind": element.get("kindOf", ""),
                     "notes": element.get("notes", ""),
                     "normalized": normalize_surface(text),
+                    "attributes_json": _attributes_json(element),
+                    "inline_markup_json": _inline_markup_json(element),
                 }
             )
         elif tag == "PHON":
-            base.update({"kind": element.get("kindOf", "")})
+            base.update(
+                {
+                    "kind": element.get("kindOf", ""),
+                    "attributes_json": _attributes_json(element),
+                    "inline_markup_json": _inline_markup_json(element),
+                }
+            )
         else:
             base.update(
                 {
@@ -168,6 +222,8 @@ def _tier_row(
                     "version": element.get("ver", ""),
                     "notes": element.get("notes", ""),
                     "normalized": normalize_gloss(text),
+                    "attributes_json": _attributes_json(element),
+                    "inline_markup_json": _inline_markup_json(element),
                 }
             )
     return table, base
@@ -207,6 +263,7 @@ def _append_owner(
         "parent_id": parent_id,
         "xml_id": local_id,
         "position": position,
+        "metadata_json": _attributes_json(element),
     }
     if kind in {"word", "morpheme"}:
         row.update({"class": element.get("class", ""), "sclass": element.get("sclass", "")})
@@ -334,6 +391,7 @@ def project_xml(path: Path, repo: Path) -> Projection:
             "source": root.get("source", ""),
             "audio_mode": root.get("audio", ""),
             "glottocode": root.get("glottocode", ""),
+            "metadata_json": _attributes_json(root),
         }
     )
     if language is None:

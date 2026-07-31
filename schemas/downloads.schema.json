@@ -1,33 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://formosanbank.github.io/kakarayan/schemas/release-manifest.schema.json",
-  "title": "Kakarayan release manifest",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/downloads.schema.json",
+  "title": "Kakarayan prepared downloads",
   "type": "object",
-  "required": [
-    "schema_version",
-    "release_id",
-    "generated_at",
-    "source",
-    "artifacts",
-    "counts",
-    "formats"
-  ],
+  "required": ["schema_version", "release_id", "artifacts"],
   "properties": {
     "schema_version": {"const": "1.0.0"},
     "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
-    "generated_at": {"type": "string", "format": "date-time"},
-    "source": {"$ref": "catalog.schema.json#/$defs/source"},
-    "counts": {"$ref": "catalog.schema.json#/$defs/counts"},
-    "formats": {
-      "type": "object",
-      "required": ["cldf", "aligned", "canonical_packages"],
-      "properties": {
-        "cldf": {"type": "object"},
-        "aligned": {"type": "object"},
-        "canonical_packages": {"type": "integer", "minimum": 0}
-      },
-      "additionalProperties": false
-    },
     "artifacts": {
       "type": "array",
       "items": {
@@ -40,7 +19,8 @@
           "scope",
           "rights_ids",
           "publishable",
-          "blocked_reasons"
+          "blocked_reasons",
+          "download_url"
         ],
         "properties": {
           "path": {"type": "string", "pattern": "^[^/]"},
@@ -50,7 +30,8 @@
           "scope": {"type": "string"},
           "rights_ids": {"type": "array", "items": {"type": "string"}},
           "publishable": {"type": "boolean"},
-          "blocked_reasons": {"type": "array", "items": {"type": "string"}}
+          "blocked_reasons": {"type": "array", "items": {"type": "string"}},
+          "download_url": {"type": "string", "format": "uri"}
         },
         "additionalProperties": false
       }

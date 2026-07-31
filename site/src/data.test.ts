@@ -12,6 +12,7 @@ const record: SearchRecord = {
   original: "fangcalay",
   translations: [{text: "beautiful", xml_lang: "eng", kind: "", version: ""}],
   tokens: [{surface: "Fangcalay", normalized: "fangcalay", position: 0}],
+  audio: [],
 };
 
 describe("transparent static search", () => {
@@ -28,4 +29,3 @@ describe("transparent static search", () => {
     expect(recordMatches(record, "ugly", "translation")).toBe(false);
   });
 });
-

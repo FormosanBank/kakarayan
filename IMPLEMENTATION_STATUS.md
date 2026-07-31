@@ -94,6 +94,15 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   pagination, structured errors, static search-shard access, and checksum verification.
 - [x] Exercise all three clients against the same running fixture API; package-build Python,
   compile/test JavaScript, and pass `R CMD check`.
+- [x] Preserve raw attribute maps, inline markup structure, raw and parsed timing, duration,
+  availability, explicit nulls, and common SQLite views in the normalized projection.
+- [x] Implement deterministic prepared CSV/TSV, partitioned hierarchical JSONL, Parquet,
+  XLSX, canonical XML ZIP, CLDF Generic, plain/interlinear text, audio manifest, and
+  timing-gated EAF/TextGrid/WebVTT/SRT outputs.
+- [x] Implement eight browser selection exports plus versioned non-executable recipe schema,
+  local validation, pinned-release execution, and a public-checkout fallback.
+- [x] Keep bulk packages off Pages, attach artifact-level rights decisions, and fail closed
+  when a corpus redistribution conclusion remains unreviewed.
 - [ ] Implement deterministic full-data publisher and release artifacts.
 - [ ] Implement guarded CI, Pages, release, and Space workflows.
 - [ ] Complete full-corpus, browser, accessibility, security, and reproducibility validation.
@@ -101,6 +110,7 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 
 ## Next slice
 
-Commit and push the API/client checkpoint. Then complete prepared download formats,
-selection recipes, full-corpus publication, and size/performance evidence before wiring
-guarded CI and deployment workflows.
+Commit and push the prepared-format checkpoint. Rerun the full public corpus after the first
+measurement pass identified and fixed CLDF source-text exclusions, oversized JSONL
+partitioning, and XLSX normalization memory use. Record measured output and performance
+before wiring guarded CI and deployment workflows.

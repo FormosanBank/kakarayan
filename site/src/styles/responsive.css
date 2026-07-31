@@ -100,7 +100,13 @@
 
   .explore-toolbar,
   .download-toolbar,
+  .results-heading,
   .deck-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-export {
     align-items: stretch;
     flex-direction: column;
   }
@@ -179,4 +185,3 @@
     grid-template-columns: 1fr;
   }
 }
-

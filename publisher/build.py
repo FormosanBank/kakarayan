@@ -22,6 +22,7 @@ from referencing import Registry, Resource
 from publisher import SCHEMA_VERSION
 from publisher.languages import language_rows
 from publisher.orthography import build_orthography_catalog
+from publisher.prepared import build_prepared_formats
 from publisher.rights import build_rights_catalog
 from publisher.tables import TABLE_COLUMNS, sqlite_type
 from publisher.xml_records import Projection, discover_xml, project_xml
@@ -149,7 +150,12 @@ def _write_projection(
     for table, rows in projection.rows.items():
         columns = TABLE_COLUMNS[table]
         for row in rows:
-            csv_writers[table].writerow({column: row.get(column) for column in columns})
+            csv_writers[table].writerow(
+                {
+                    column: r"\N" if row.get(column) is None else row.get(column)
+                    for column in columns
+                }
+            )
             jsonl_files[table].write(
                 json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
             )
@@ -176,6 +182,55 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
     )
     for statement in statements:
         connection.execute(statement)
+    connection.executescript(
+        """
+        CREATE VIEW sentence_view AS
+        SELECT
+          s.id AS sentence_id,
+          s.parent_id AS text_id,
+          t.corpus_id,
+          t.language_id,
+          t.language,
+          t.xml_lang,
+          t.dialect,
+          t.source_path,
+          s.xml_id AS source_xml_id,
+          s.position AS source_ordinal,
+          (
+            SELECT text FROM forms
+            WHERE owner_type = 'sentence' AND owner_id = s.id AND kind = 'standard'
+            ORDER BY position LIMIT 1
+          ) AS standard_form,
+          (
+            SELECT text FROM forms
+            WHERE owner_type = 'sentence' AND owner_id = s.id AND kind = 'original'
+            ORDER BY position LIMIT 1
+          ) AS original_form,
+          s.audio_url,
+          s.token_count
+        FROM sentences s
+        JOIN texts t ON t.id = s.parent_id;
+
+        CREATE VIEW concordance_view AS
+        SELECT
+          tok.id AS token_id,
+          tok.sentence_id,
+          tok.word_id,
+          tok.position,
+          tok.surface,
+          tok.normalized,
+          sv.text_id,
+          sv.corpus_id,
+          sv.language_id,
+          sv.language,
+          sv.dialect,
+          sv.source_path,
+          sv.standard_form,
+          sv.original_form
+        FROM tokens tok
+        JOIN sentence_view sv ON sv.sentence_id = tok.sentence_id;
+        """
+    )
 
 
 def _validate_sqlite(connection: sqlite3.Connection) -> None:
@@ -328,6 +383,20 @@ def _search_record(connection: sqlite3.Connection, row: tuple[object, ...]) -> d
             (row[0],),
         )
     ]
+    audio = [
+        {
+            "file": item[0],
+            "url": item[1],
+            "start": item[2],
+            "end": item[3],
+            "source": item[4],
+        }
+        for item in connection.execute(
+            "SELECT file, url, start, end, source FROM audio "
+            "WHERE owner_type = 'sentence' AND owner_id = ? ORDER BY position",
+            (row[0],),
+        )
+    ]
     return {
         "id": row[0],
         "corpus_id": row[1],
@@ -339,6 +408,7 @@ def _search_record(connection: sqlite3.Connection, row: tuple[object, ...]) -> d
         "original": row[7],
         "translations": translations,
         "tokens": tokens,
+        "audio": audio,
     }
 
 
@@ -424,20 +494,42 @@ def _write_search_data(
     }
 
 
-def _artifact(path: Path, root: Path, *, scope: str, rights_ids: list[str]) -> dict[str, object]:
+def _artifact(
+    path: Path,
+    root: Path,
+    *,
+    scope: str,
+    rights_ids: list[str],
+    rights_entries: Mapping[str, Mapping[str, object]],
+) -> dict[str, object]:
     data = path.read_bytes()
+    blocked_reasons = []
+    for rights_id in rights_ids:
+        entry = rights_entries[rights_id]
+        if entry["review_status"] != "reviewed":
+            blocked_reasons.append(f"{rights_id}: rights review required")
+        elif entry["redistribution"] != "allowed":
+            blocked_reasons.append(f"{rights_id}: redistribution is {entry['redistribution']}")
     return {
         "path": path.relative_to(root).as_posix(),
         "media_type": {
             ".json": "application/json",
             ".jsonl": "application/x-ndjson",
             ".csv": "text/csv",
+            ".tsv": "text/tab-separated-values",
             ".sqlite": "application/vnd.sqlite3",
+            ".parquet": "application/vnd.apache.parquet",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".zip": "application/zip",
+            ".txt": "text/plain",
+            ".sql": "application/sql",
         }.get(path.suffix, "application/octet-stream"),
         "bytes": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
         "scope": scope,
         "rights_ids": rights_ids,
+        "publishable": not blocked_reasons,
+        "blocked_reasons": blocked_reasons,
     }
 
 
@@ -462,6 +554,7 @@ def build_release(
     schemas: Path | None = None,
     rights_overrides: Path | None = None,
     model_catalog: dict[str, object] | None = None,
+    include_prepared: bool = True,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
     repo = repo.resolve()
@@ -582,7 +675,27 @@ def build_release(
     _validate(orthography, schema_dir / "orthography.schema.json")
     _validate(search_manifest, schema_dir / "search-manifest.schema.json")
 
-    rights_ids = [str(entry["id"]) for entry in cast(list[dict[str, object]], rights["entries"])]
+    if include_prepared:
+        prepared_rights, prepared_summary = build_prepared_formats(
+            repo=repo,
+            output=output,
+            database=sqlite_path,
+            release_id=release_id,
+            source_commit=source.commit,
+            rights=rights,
+        )
+    else:
+        prepared_rights = {}
+        prepared_summary = {
+            "cldf": {},
+            "aligned": {},
+            "canonical_packages": 0,
+        }
+    rights_rows = cast(list[dict[str, object]], rights["entries"])
+    rights_ids = [str(entry["id"]) for entry in rights_rows]
+    rights_by_id: dict[str, Mapping[str, object]] = {
+        str(entry["id"]): entry for entry in rights_rows
+    }
     artifact_paths = sorted(
         [
             path
@@ -591,22 +704,54 @@ def build_release(
         ],
         key=lambda path: path.relative_to(output).as_posix(),
     )
-    artifacts = [
-        _artifact(path, output, scope="all-public-projected-data", rights_ids=rights_ids)
-        for path in artifact_paths
-    ]
+    artifacts = []
+    for path in artifact_paths:
+        relative = path.relative_to(output).as_posix()
+        artifact_rights = prepared_rights.get(relative, rights_ids)
+        scope = (
+            "prepared-download"
+            if relative.startswith("prepared/")
+            else "site-query-data"
+            if relative.startswith(("api/", "search/"))
+            else "release-core"
+        )
+        artifacts.append(
+            _artifact(
+                path,
+                output,
+                scope=scope,
+                rights_ids=artifact_rights,
+                rights_entries=rights_by_id,
+            )
+        )
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,
         "generated_at": generated_at,
         "source": {"repository": source.repository, "commit": source.commit},
         "counts": catalog["counts"],
+        "formats": prepared_summary,
         "artifacts": artifacts,
     }
-    downloads = {
+    prepared_artifacts = [
+        {
+            **artifact,
+            "download_url": (
+                "https://github.com/FormosanBank/kakarayan/releases/download/"
+                f"data-{release_id}/{Path(str(artifact['path'])).name}"
+            ),
+        }
+        for artifact in artifacts
+        if str(artifact["path"]).startswith("prepared/")
+        and (
+            str(artifact["path"]).endswith((".zip", ".xlsx"))
+            or "/parquet/" in str(artifact["path"])
+        )
+    ]
+    downloads: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,
-        "artifacts": artifacts,
+        "artifacts": prepared_artifacts,
     }
     releases = {
         "schema_version": SCHEMA_VERSION,
@@ -623,6 +768,7 @@ def build_release(
     _write_json(api / "downloads.json", downloads)
     _write_json(api / "releases.json", releases)
     _write_json(output / "release-manifest.json", manifest)
+    _validate(downloads, schema_dir / "downloads.schema.json")
     _validate(manifest, schema_dir / "release-manifest.schema.json")
     checksum_lines = [f"{artifact['sha256']}  {artifact['path']}" for artifact in artifacts]
     checksum_lines.append(

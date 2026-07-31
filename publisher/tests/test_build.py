@@ -3,10 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import zipfile
 from contextlib import closing
 from pathlib import Path
 
+import pyarrow.parquet as pq
 import pytest
+from openpyxl import load_workbook
 
 from publisher.build import BuildError, build_release
 
@@ -50,7 +53,32 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         (first.output / "api" / "v1" / "downloads.json").read_text(encoding="utf-8")
     )
     assert downloads["release_id"] == first.release_id
-    assert any(item["path"] == "formosanbank.sqlite" for item in downloads["artifacts"])
+    assert any(item["path"].endswith("csv-tables.zip") for item in downloads["artifacts"])
+    assert all(not item["publishable"] for item in downloads["artifacts"])
+    assert all(item["blocked_reasons"] for item in downloads["artifacts"])
+
+    token_parquet = first.output / "prepared" / "parquet" / "tokens.parquet"
+    assert pq.read_table(token_parquet).num_rows == 4
+    workbook = load_workbook(
+        first.output / "prepared" / "formosanbank.xlsx",
+        read_only=True,
+    )
+    assert "README" in workbook.sheetnames
+    workbook.close()
+    canonical = next((first.output / "prepared" / "canonical").glob("*.zip"))
+    with zipfile.ZipFile(canonical) as archive:
+        source_path = "Corpora/TestCorpus/XML/fixture.xml"
+        assert archive.read(source_path) == (public_repo / source_path).read_bytes()
+        assert "rights.json" in archive.namelist()
+    with zipfile.ZipFile(first.output / "prepared" / "time-aligned.zip") as archive:
+        assert any(name.endswith(".eaf") for name in archive.namelist())
+        assert any(name.endswith(".TextGrid") for name in archive.namelist())
+    with zipfile.ZipFile(first.output / "prepared" / "formosanbank-cldf.zip") as archive:
+        assert "Generic-metadata.json" in archive.namelist()
+    jsonl_packages = list((first.output / "prepared" / "jsonl").glob("*.zip"))
+    assert len(jsonl_packages) == 1
+    with zipfile.ZipFile(jsonl_packages[0]) as archive:
+        assert archive.namelist() == ["part-0000.jsonl"]
 
     with closing(sqlite3.connect(first.output / "formosanbank.sqlite")) as database:
         assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)

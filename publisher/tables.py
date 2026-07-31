@@ -19,6 +19,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "source",
         "audio_mode",
         "glottocode",
+        "metadata_json",
     ),
     "sentences": (
         "id",
@@ -28,9 +29,10 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "audio_url",
         "source",
         "token_count",
+        "metadata_json",
     ),
-    "words": ("id", "parent_id", "xml_id", "position", "class", "sclass"),
-    "morphemes": ("id", "parent_id", "xml_id", "position", "class", "sclass"),
+    "words": ("id", "parent_id", "xml_id", "position", "class", "sclass", "metadata_json"),
+    "morphemes": ("id", "parent_id", "xml_id", "position", "class", "sclass", "metadata_json"),
     "forms": (
         "id",
         "owner_type",
@@ -41,6 +43,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "kind",
         "notes",
         "normalized",
+        "attributes_json",
+        "inline_markup_json",
     ),
     "phonology": (
         "id",
@@ -50,6 +54,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "text",
         "unclear",
         "kind",
+        "attributes_json",
+        "inline_markup_json",
     ),
     "translations": (
         "id",
@@ -63,6 +69,8 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "version",
         "notes",
         "normalized",
+        "attributes_json",
+        "inline_markup_json",
     ),
     "audio": (
         "id",
@@ -76,6 +84,9 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "start_raw",
         "end_raw",
         "source",
+        "duration",
+        "availability_status",
+        "attributes_json",
     ),
     "tokens": (
         "id",
@@ -88,7 +99,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 INTEGER_COLUMNS = {"position", "token_count", "unclear"}
-REAL_COLUMNS = {"start", "end"}
+REAL_COLUMNS = {"start", "end", "duration"}
 
 
 def sqlite_type(column: str) -> str:

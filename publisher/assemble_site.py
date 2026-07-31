@@ -25,8 +25,12 @@ def assemble(release: Path, public: Path) -> None:
     if api_target.exists() or data_target.exists():
         raise BuildError("Generated site API/data targets already exist; remove them explicitly")
     public.mkdir(parents=True, exist_ok=True)
+    search = release / "search"
+    if not search.is_dir():
+        raise BuildError("Release has no static search data")
     shutil.copytree(release / "api", api_target)
-    shutil.copytree(release, data_target, ignore=shutil.ignore_patterns("api"))
+    data_target.mkdir()
+    shutil.copytree(search, data_target / "search")
 
 
 def main(argv: list[str] | None = None) -> int:
