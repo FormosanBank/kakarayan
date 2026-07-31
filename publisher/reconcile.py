@@ -81,6 +81,9 @@ def _database_state(
             for row in connection.execute("SELECT duration FROM audio WHERE duration IS NOT NULL")
         )
         hierarchical_counts = dict(counts)
+        hierarchical_counts["texts"] = int(
+            connection.execute("SELECT COUNT(DISTINCT parent_id) FROM sentences").fetchone()[0]
+        )
         for table in ("forms", "phonology", "translations", "audio"):
             hierarchical_counts[table] = int(
                 connection.execute(
@@ -407,6 +410,7 @@ def reconcile_release(
         "duration_seconds": database_duration,
         "representations": sorted(representations),
         "hierarchical_exclusions": [
+            "texts with no sentences",
             "text-owned forms",
             "text-owned phonology",
             "text-owned translations",

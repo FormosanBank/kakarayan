@@ -201,6 +201,8 @@ table across CSV, TSV, flat JSONL, Parquet, and XLSX. It reconstructs the senten
 hierarchical JSONL counts, compares duration totals, and compares one deterministic complete
 row per table across machine-readable formats. Text-owned tiers are explicit exclusions
 from the sentence hierarchy and remain fully reconciled in every flat relational format.
+Source `TEXT` records that contain no sentences are likewise absent from sentence-oriented
+JSONL, while remaining present in every flat relational format and canonical XML.
 
 With a clean public source checkout, it hashes every XML file in both its canonical ZIP and
 source tree. With an assembled Pages tree, it also decodes every browser search shard and
