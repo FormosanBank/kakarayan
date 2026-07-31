@@ -99,6 +99,20 @@ kakarayan_client <- function(base_url, mode = c("static", "live"),
   }
 }
 
+.kak_static_data <- function(client, path) {
+  envelope <- .kak_request(client, path)
+  if (!is.list(envelope) ||
+      !identical(envelope$api_version, "v1") ||
+      is.null(envelope$data)) {
+    .kak_error(
+      "invalid_envelope",
+      "The static API response envelope is invalid",
+      409L
+    )
+  }
+  envelope$data
+}
+
 .kak_query <- function(values) {
   values <- values[!vapply(values, is.null, logical(1))]
   if (!length(values)) {
@@ -141,7 +155,11 @@ kakarayan_languages <- function(client) {
   } else {
     "/v1/languages"
   }
-  .kak_request(client, path)
+  if (client$mode == "static") {
+    .kak_static_data(client, path)
+  } else {
+    .kak_request(client, path)
+  }
 }
 
 #' Read the corpus catalogue
@@ -150,7 +168,11 @@ kakarayan_languages <- function(client) {
 kakarayan_corpora <- function(client) {
   .kak_ensure_release(client)
   path <- if (client$mode == "static") "/api/v1/corpora.json" else "/v1/corpora"
-  .kak_request(client, path)
+  if (client$mode == "static") {
+    .kak_static_data(client, path)
+  } else {
+    .kak_request(client, path)
+  }
 }
 
 #' Read the static search manifest
@@ -165,7 +187,7 @@ kakarayan_search_manifest <- function(client) {
     )
   }
   .kak_ensure_release(client)
-  .kak_request(client, "/api/v1/search/manifest.json")
+  .kak_static_data(client, "/api/v1/search/manifest.json")
 }
 
 #' Read one allowlisted static search shard

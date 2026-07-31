@@ -6,6 +6,9 @@ import argparse
 import json
 from pathlib import Path
 
+from jsonschema.exceptions import ValidationError
+
+from publisher.build import validate_document
 from publisher.verify_release import VerificationError
 
 
@@ -33,9 +36,17 @@ def verify_site(root: Path, *, total_limit: int, file_limit: int) -> dict[str, i
         raise VerificationError(
             f"Largest site file is {largest} bytes, over the {file_limit}-byte budget"
         )
+    schema = Path(__file__).resolve().parents[1] / "schemas" / "static-api.schema.json"
+    for path in (root / "api" / "v1").rglob("*.json"):
+        try:
+            validate_document(json.loads(path.read_text(encoding="utf-8")), schema)
+        except (json.JSONDecodeError, ValidationError) as error:
+            raise VerificationError(
+                f"Static API response does not match its schema: {path.relative_to(root)}: {error}"
+            ) from error
     search = json.loads(
         (root / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")
-    )
+    )["data"]
     expected = {f"data/{shard['path']}" for shard in search["shards"]}
     actual = {
         path.relative_to(root).as_posix()

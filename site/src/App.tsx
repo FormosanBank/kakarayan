@@ -26,14 +26,16 @@ function Loading() {
 }
 
 function Unavailable({error, retry}: {error: Error; retry: () => void}) {
-  const {t} = useI18n();
+  const {t, tx} = useI18n();
   return (
     <main className="boot-state boot-state--error">
       <div className="boot-mark">K</div>
       <h1>{t("common.unavailable")}</h1>
       <p>
-        Kakarayan did not load a consistent public release. No partial or mismatched data is
-        shown.
+        {tx(
+          "Kakarayan did not load a consistent public release. No partial or mismatched data is shown.",
+          "Kakarayan 無法載入一致的公開版本，因此不會顯示部分或不相符的資料。",
+        )}
       </p>
       <code>{error.message}</code>
       <Diagnostics releaseId={null} error={error} />
@@ -42,7 +44,7 @@ function Unavailable({error, retry}: {error: Error; retry: () => void}) {
           {t("common.retry")}
         </button>
         <a className="button button--quiet" href="https://github.com/FormosanBank/FormosanBank">
-          Open canonical public XML
+          {tx("Open canonical public XML", "開啟權威公開 XML")}
         </a>
       </div>
     </main>
@@ -50,17 +52,18 @@ function Unavailable({error, retry}: {error: Error; retry: () => void}) {
 }
 
 function NotFound() {
+  const {tx} = useI18n();
   return (
     <div className="page-wrap page-wrap--prose">
       <p className="eyebrow">404</p>
-      <h1>This path is not in the field notebook.</h1>
-      <p>The release remains intact. Return home or open corpus search.</p>
+      <h1>{tx("This path is not in the field notebook.", "田野筆記中沒有這個路徑。")}</h1>
+      <p>{tx("The release remains intact. Return home or open corpus search.", "資料版本仍然完整。請返回首頁或開啟語料搜尋。")}</p>
       <div className="button-row">
         <Link className="button button--primary" to="/">
-          Home
+          {tx("Home", "首頁")}
         </Link>
         <Link className="button button--quiet" to="/search">
-          Search
+          {tx("Search", "搜尋")}
         </Link>
       </div>
     </div>
@@ -93,7 +96,7 @@ function RoutedApp({data}: {data: NonNullable<ReturnType<typeof useAppData>["dat
 
 function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
   const path = useRoutePath();
-  const {locale, t} = useI18n();
+  const {locale, t, tx} = useI18n();
   const detailName = path.startsWith("/languages/")
     ? data.languages.find(
         (item) => item.id === decodeURIComponent(path.slice("/languages/".length)),
@@ -115,7 +118,7 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       "/models": t("models.title"),
       "/about": t("about.title"),
     }[path] ??
-      "Page not found");
+      tx("Page not found", "找不到頁面"));
   const routeDescription =
     path === "/search"
       ? t("search.lede")

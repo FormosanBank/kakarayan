@@ -15,14 +15,14 @@ const navigation = [
 ] as const;
 
 export function Layout({data, children}: {data: AppData; children: ReactNode}) {
-  const {locale, setLocale, t} = useI18n();
+  const {locale, setLocale, t, tx} = useI18n();
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main">
-        Skip to content
+        {t("nav.skip")}
       </a>
       <header className="topbar">
-        <NavLink className="brand" to="/" aria-label="Kakarayan home">
+        <NavLink className="brand" to="/" aria-label={tx("Kakarayan home", "Kakarayan 首頁")}>
           <span className="brand-mark" aria-hidden="true">
             K
           </span>
@@ -31,7 +31,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             <small>FormosanBank</small>
           </span>
         </NavLink>
-        <nav className="primary-nav" aria-label="Primary">
+        <nav className="primary-nav" aria-label={tx("Primary", "主要導覽")}>
           {navigation.map(([to, key]) => (
             <NavLink key={to} to={to}>
               {t(key)}
@@ -43,7 +43,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             {data.meta.release_id}
           </span>
           <label className="locale-picker">
-            <span className="sr-only">Interface language</span>
+            <span className="sr-only">{tx("Interface language", "介面語言")}</span>
             <select
               value={locale}
               onChange={(event) => setLocale(event.target.value as "en" | "zh-Hant")}
@@ -58,7 +58,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
       <footer className="footer">
         <div>
           <strong>Kakarayan</strong>
-          <p>Public Formosan language resources for research, learning, and revitalization.</p>
+          <p>{t("footer.summary")}</p>
         </div>
         <div>
           <span>{t("common.release")}</span>
@@ -105,14 +105,29 @@ export function Stat({
   label: string;
   tone?: "ink" | "coral" | "gold" | "moss";
 }) {
+  const {number} = useI18n();
   return (
     <div className={`stat stat--${tone}`}>
-      <strong>{typeof value === "number" ? new Intl.NumberFormat().format(value) : value}</strong>
+      <strong>{typeof value === "number" ? number(value) : value}</strong>
       <span>{label}</span>
     </div>
   );
 }
 
 export function StatusBadge({value}: {value: string}) {
-  return <span className={`status status--${value.replaceAll("_", "-")}`}>{value}</span>;
+  const {tx} = useI18n();
+  const labels: Record<string, string> = {
+    allowed: tx("allowed", "允許"),
+    available: tx("available", "可用"),
+    unavailable: tx("unavailable", "不可用"),
+    unchecked: tx("unchecked", "未檢查"),
+    review_required: tx("review required", "需要審查"),
+    denied: tx("denied", "不允許"),
+    unknown: tx("unknown", "未知"),
+  };
+  return (
+    <span className={`status status--${value.replaceAll("_", "-")}`}>
+      {labels[value] ?? value}
+    </span>
+  );
 }

@@ -6,6 +6,7 @@
   "required": [
     "schema_version",
     "release_id",
+    "kakarayan",
     "source",
     "generated_at",
     "languages",
@@ -16,6 +17,7 @@
     "schema_version": {"const": "1.0.0"},
     "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
     "generated_at": {"type": "string", "format": "date-time"},
+    "kakarayan": {"$ref": "static-api.schema.json#/$defs/application"},
     "source": {"$ref": "#/$defs/source"},
     "languages": {
       "type": "array",

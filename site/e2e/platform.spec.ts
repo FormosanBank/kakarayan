@@ -56,7 +56,8 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   );
   expect(searchAssets.some((url) => url.includes("/indexes/"))).toBe(true);
   expect(searchAssets.some((url) => url.includes("/shards/"))).toBe(true);
-  await expect(page.getByText(/candidate records checked/)).toContainText("1 attestations");
+  await expect(page.locator(".results-heading")).toContainText("1 attestations");
+  await expect(page.locator(".results-heading")).toContainText("candidate records");
   await expect(page.locator(".kwic mark")).toContainText("lima");
   await page.getByRole("button", {name: "Headword candidates"}).click();
   await expect(page.getByText(/not reviewed dictionary entries/)).toBeVisible();
@@ -157,8 +158,24 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByRole("heading", {level: 1})).toContainText(
     "仔細聆聽，深入搜尋，讓語言繼續流傳",
   );
-  await page.getByRole("link", {name: "探索"}).click();
+  await page.getByRole("link", {name: "探索", exact: true}).click();
   await expect(page.getByRole("heading", {level: 1})).toContainText("探索語料庫");
+  await expect(page.getByPlaceholder("篩選語言…")).toBeVisible();
+
+  await page.goto("#/search");
+  await expect(page.getByRole("tab", {name: "索引行與詞典"})).toBeVisible();
+  await expect(page.getByLabel("詞語或翻譯")).toBeVisible();
+  await page.getByRole("tab", {name: "資料集產生器"}).click();
+  await expect(page.getByRole("heading", {name: "建立有界限的語言學資料集"})).toBeVisible();
+
+  await page.goto("#/learn");
+  await expect(page.getByRole("tab", {name: /學習字卡/})).toBeVisible();
+  await page.getByRole("tab", {name: /發音練習/}).click();
+  await expect(page.getByRole("heading", {name: "發音錄音工具"})).toBeVisible();
+
+  await page.goto("#/downloads");
+  await expect(page.getByText("權利審查仍在進行中。")).toBeVisible();
+  await expect(page.getByRole("heading", {name: "格式指南"})).toBeVisible();
 });
 
 test("primary pages have no serious accessibility violations", async ({page}, testInfo) => {

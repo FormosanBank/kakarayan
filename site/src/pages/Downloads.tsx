@@ -29,6 +29,12 @@ interface DownloadsCatalog {
   artifacts: Artifact[];
 }
 
+interface DownloadsEnvelope {
+  api_version: "v1";
+  release_id: string;
+  data: DownloadsCatalog;
+}
+
 function size(bytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB"];
   let value = bytes;
@@ -41,7 +47,7 @@ function size(bytes: number): string {
 }
 
 export function Downloads({data}: {data: AppData}) {
-  const {t} = useI18n();
+  const {t, tx} = useI18n();
   const [params] = useSearchParams();
   const [manifest, setManifest] = useState<DownloadsCatalog | null>(null);
   const [error, setError] = useState("");
@@ -56,7 +62,11 @@ export function Downloads({data}: {data: AppData}) {
     })
       .then(async (response) => {
         if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-        setManifest((await response.json()) as DownloadsCatalog);
+        const envelope = (await response.json()) as DownloadsEnvelope;
+        if (envelope.api_version !== "v1" || envelope.release_id !== data.meta.release_id) {
+          throw new Error("Prepared download metadata does not match the loaded release");
+        }
+        setManifest(envelope.data);
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
@@ -64,7 +74,7 @@ export function Downloads({data}: {data: AppData}) {
         }
       });
     return () => controller.abort();
-  }, []);
+  }, [data.meta.release_id]);
   const artifacts = useMemo(
     () =>
       (manifest?.artifacts ?? []).filter((artifact) => {
@@ -103,25 +113,27 @@ export function Downloads({data}: {data: AppData}) {
       <div className="download-principles">
         <div>
           <span>1</span>
-          <strong>Choose by use</strong>
-          <p>SQLite for local query, JSONL for streams, CSV for tables, XML for canon.</p>
+          <strong>{tx("Choose by use", "依用途選擇")}</strong>
+          <p>{tx("SQLite for local query, JSONL for streams, CSV for tables, XML for canon.", "SQLite 適合本機查詢，JSONL 適合串流，CSV 適合表格，XML 則是權威格式。")}</p>
         </div>
         <div>
           <span>2</span>
-          <strong>Pin the release</strong>
-          <p>Every artifact names the public source commit and immutable release.</p>
+          <strong>{tx("Pin the release", "固定資料版本")}</strong>
+          <p>{tx("Every artifact names the public source commit and immutable release.", "每個成品都標明公開來源提交與不可變的資料版本。")}</p>
         </div>
         <div>
           <span>3</span>
-          <strong>Carry the notice</strong>
-          <p>Corpus and component rights remain attached to every derived package.</p>
+          <strong>{tx("Carry the notice", "保留權利聲明")}</strong>
+          <p>{tx("Corpus and component rights remain attached to every derived package.", "每個衍生套件都保留語料庫及各組件的權利資訊。")}</p>
         </div>
       </div>
       {hasUnreviewedRights && (
         <p className="callout callout--warning">
-          <strong>Rights review is still in progress.</strong> Prepared projected tables are
-          shown for technical inspection. Do not assume that public repository visibility
-          grants uniform redistribution or commercial rights. Follow each corpus notice.
+          <strong>{tx("Rights review is still in progress.", "權利審查仍在進行中。")}</strong>{" "}
+          {tx(
+            "Prepared projected tables are shown for technical inspection. Do not assume that public repository visibility grants uniform redistribution or commercial rights. Follow each corpus notice.",
+            "預備投影表僅供技術檢查。請勿假設公開儲存庫的可見性就授予一致的再散布或商業權利，並應遵守各語料庫聲明。",
+          )}
         </p>
       )}
       <div className="download-toolbar">
@@ -132,7 +144,7 @@ export function Downloads({data}: {data: AppData}) {
       </div>
       <div className="download-filters">
         <label className="field">
-          Language
+          {tx("Language", "語言")}
           <select
             value={languageId}
             onChange={(event) => {
@@ -140,7 +152,7 @@ export function Downloads({data}: {data: AppData}) {
               setCorpusId("all");
             }}
           >
-            <option value="all">All languages</option>
+            <option value="all">{tx("All languages", "所有語言")}</option>
             {data.languages.map((language) => (
               <option key={language.id} value={language.id}>
                 {language.name}
@@ -149,9 +161,9 @@ export function Downloads({data}: {data: AppData}) {
           </select>
         </label>
         <label className="field">
-          Corpus
+          {tx("Corpus", "語料庫")}
           <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
-            <option value="all">All corpora</option>
+            <option value="all">{tx("All corpora", "所有語料庫")}</option>
             {corpora.map((corpus) => (
               <option key={corpus.id} value={corpus.id}>
                 {corpus.name}
@@ -160,18 +172,18 @@ export function Downloads({data}: {data: AppData}) {
           </select>
         </label>
         <label className="field">
-          Tier
+          {tx("Tier", "層級")}
           <select value={tier} onChange={(event) => setTier(event.target.value)}>
-            <option value="all">All tiers</option>
+            <option value="all">{tx("All tiers", "所有層級")}</option>
             {tiers.map((value) => (
               <option key={value}>{value}</option>
             ))}
           </select>
         </label>
         <label className="field">
-          Format
+          {tx("Format", "格式")}
           <select value={format} onChange={(event) => setFormat(event.target.value)}>
-            <option value="all">All prepared formats</option>
+            <option value="all">{tx("All prepared formats", "所有預備格式")}</option>
             {formats.map((value) => (
               <option key={value}>{value}</option>
             ))}
@@ -180,8 +192,8 @@ export function Downloads({data}: {data: AppData}) {
       </div>
       {error && (
         <p className="callout callout--error">
-          Prepared artifact manifest unavailable: {error}. Canonical XML remains available
-          from the public FormosanBank repository.
+          {tx("Prepared artifact manifest unavailable:", "無法取得預備成品清單：")} {error}。
+          {tx("Canonical XML remains available from the public FormosanBank repository.", "權威 XML 仍可從公開 FormosanBank 儲存庫取得。")}
         </p>
       )}
       <div className="artifact-list">
@@ -195,24 +207,27 @@ export function Downloads({data}: {data: AppData}) {
               </p>
               <code title={artifact.sha256}>sha256 {artifact.sha256.slice(0, 20)}…</code>
               <details>
-                <summary>Command line and checksum</summary>
+                <summary>{tx("Command line and checksum", "命令列與校驗碼")}</summary>
                 <pre>
                   {`curl -L --fail --output '${artifact.path.split("/").pop()}' '${artifact.download_url}'\n` +
                     `printf '%s  %s\\n' '${artifact.sha256}' '${artifact.path.split("/").pop()}' | sha256sum --check -`}
                 </pre>
               </details>
               <details>
-                <summary>Citation, scope, and rights</summary>
+                <summary>{tx("Citation, scope, and rights", "引用、範圍與權利")}</summary>
                 <p>
-                  Scope: <code>{artifact.scope}</code>. Source commit{" "}
-                  <code>{data.meta.source.commit}</code>. Release{" "}
+                  {tx("Scope:", "範圍：")} <code>{artifact.scope}</code>。
+                  {tx("Source commit", "來源提交")}{" "}
+                  <code>{data.meta.source.commit}</code>。{tx("Release", "資料版本")}{" "}
                   <code>{manifest?.release_id}</code>.
                 </p>
                 {artifact.compression && (
                   <p>
-                    Compression: {artifact.compression}. Decoded size{" "}
-                    {artifact.content_bytes ? size(artifact.content_bytes) : "not reported"};
-                    decoded SHA-256 <code>{artifact.content_sha256 ?? "not reported"}</code>.
+                    {tx("Compression:", "壓縮：")} {artifact.compression}。
+                    {tx("Decoded size", "解碼後大小")}{" "}
+                    {artifact.content_bytes ? size(artifact.content_bytes) : tx("not reported", "未報告")}；
+                    {tx("decoded SHA-256", "解碼後 SHA-256")}{" "}
+                    <code>{artifact.content_sha256 ?? tx("not reported", "未報告")}</code>。
                   </p>
                 )}
                 <ul>
@@ -221,8 +236,9 @@ export function Downloads({data}: {data: AppData}) {
                     return (
                       <li key={id}>
                         <code>{id}</code>:{" "}
-                        {rights?.attribution || "No reviewed attribution statement"}; license{" "}
-                        {rights?.license_expression ?? "not established"}.
+                        {rights?.attribution || tx("No reviewed attribution statement", "無經審查的署名聲明")}；
+                        {tx("license", "授權")}{" "}
+                        {rights?.license_expression ?? tx("not established", "尚未確立")}。
                       </li>
                     );
                   })}
@@ -237,12 +253,12 @@ export function Downloads({data}: {data: AppData}) {
                   className="button button--primary"
                   href={artifact.download_url}
                 >
-                  Download
+                  {tx("Download", "下載")}
                 </a>
               ) : (
                 <>
                   <button className="button button--primary" disabled>
-                    Rights review required
+                    {tx("Rights review required", "需要權利審查")}
                   </button>
                   <small>{artifact.blocked_reasons.join("; ")}</small>
                 </>
@@ -253,42 +269,50 @@ export function Downloads({data}: {data: AppData}) {
       </div>
       {!error && manifest && artifacts.length === 0 && (
         <div className="empty-state">
-          No prepared package matches every selected facet. Clear a filter or build a
-          bounded browser selection in Research.
+          {tx(
+            "No prepared package matches every selected facet. Clear a filter or build a bounded browser selection in Research.",
+            "沒有預備套件符合所有選定條件。請清除篩選條件，或在研究工具中建立有界限的瀏覽器資料選集。",
+          )}
         </div>
       )}
       <section className="format-guide">
-        <h2>Format guide</h2>
+        <h2>{tx("Format guide", "格式指南")}</h2>
         <div>
           <article>
-            <h3>Canonical XML</h3>
+            <h3>{tx("Canonical XML", "權威 XML")}</h3>
             <p>
-              The authoritative hierarchy and exact source bytes. Obtain from the pinned
-              public FormosanBank tree while package rights review is pending.
+              {tx(
+                "The authoritative hierarchy and exact source bytes. Obtain from the pinned public FormosanBank tree while package rights review is pending.",
+                "保留權威階層與完全相同的來源位元組。套件權利審查期間，請從固定版本的公開 FormosanBank 樹狀目錄取得。",
+              )}
             </p>
           </article>
           <article>
             <h3>SQLite</h3>
             <p>
-              Gzip-compressed portable relational snapshot for SQL, R, Python, Datasette,
-              and local APIs.
+              {tx(
+                "Gzip-compressed portable relational snapshot for SQL, R, Python, Datasette, and local APIs.",
+                "以 Gzip 壓縮的可攜式關聯快照，適用於 SQL、R、Python、Datasette 與本機 API。",
+              )}
             </p>
           </article>
           <article>
-            <h3>JSON Lines</h3>
-            <p>One record per line for streaming, shell pipelines, and document tools.</p>
+            <h3>{tx("JSON Lines", "JSON 行格式")}</h3>
+            <p>{tx("One record per line for streaming, shell pipelines, and document tools.", "每行一筆記錄，適合串流、命令列管線與文件工具。")}</p>
           </article>
           <article>
-            <h3>Parquet and XLSX</h3>
+            <h3>{tx("Parquet and XLSX", "Parquet 與 XLSX")}</h3>
             <p>
-              Columnar research tables and a spreadsheet-safe, human-oriented workbook.
+              {tx("Columnar research tables and a spreadsheet-safe, human-oriented workbook.", "欄式研究表格，以及適合試算表且方便人員閱讀的活頁簿。")}
             </p>
           </article>
           <article>
-            <h3>CLDF and aligned media</h3>
+            <h3>{tx("CLDF and aligned media", "CLDF 與對齊媒體")}</h3>
             <p>
-              Conservative CLDF examples plus EAF, TextGrid, WebVTT, and SRT only where
-              valid timings exist.
+              {tx(
+                "Conservative CLDF examples plus EAF, TextGrid, WebVTT, and SRT only where valid timings exist.",
+                "保守映射的 CLDF 例句，以及僅在具備有效時間資訊時提供的 EAF、TextGrid、WebVTT 與 SRT。",
+              )}
             </p>
           </article>
         </div>

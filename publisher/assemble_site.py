@@ -109,8 +109,22 @@ def assemble(
             validate_document(downloads, schema_dir / "downloads.schema.json")
         except (OSError, json.JSONDecodeError, ValidationError) as error:
             raise BuildError(f"Invalid published download manifest: {error}") from error
+        meta = json.loads((api_target / "v1" / "meta.json").read_text(encoding="utf-8"))
+        download_response = {
+            **{key: value for key, value in meta.items() if key != "data"},
+            "endpoint": "downloads",
+            "canonical_url": ("https://formosanbank.github.io/kakarayan/api/v1/downloads.json"),
+            "data": downloads,
+        }
+        validate_document(download_response, schema_dir / "static-api.schema.json")
         (api_target / "v1" / "downloads.json").write_text(
-            json.dumps(downloads, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+            json.dumps(
+                download_response,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
             encoding="utf-8",
             newline="\n",
         )

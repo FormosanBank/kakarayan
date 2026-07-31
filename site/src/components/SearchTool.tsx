@@ -40,7 +40,7 @@ export function SearchTool({
   data: AppData;
   learner?: boolean;
 }) {
-  const {t} = useI18n();
+  const {number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const initialLanguage = params.get("language") ?? (learner ? (amis?.id ?? "") : "");
@@ -158,7 +158,12 @@ export function SearchTool({
   async function addToDeck(record: SearchRecord) {
     try {
       await saveCard(cardFromRecord(record, data.meta.release_id));
-      setNotice(`${record.standard || record.original} saved locally.`);
+      setNotice(
+        tx(
+          `${record.standard || record.original} saved locally.`,
+          `已將「${record.standard || record.original}」儲存在本機。`,
+        ),
+      );
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : String(cause));
     }
@@ -174,7 +179,11 @@ export function SearchTool({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             autoComplete="off"
-            placeholder={learner ? "fangcalay, salikaka…" : "form, translation, gloss…"}
+            placeholder={
+              learner
+                ? "fangcalay, salikaka…"
+                : tx("form, translation, gloss…", "形式、翻譯、詞彙註釋…")
+            }
           />
         </div>
         <div className="field">
@@ -189,7 +198,7 @@ export function SearchTool({
               setCorpusId("");
             }}
           >
-            {!learner && <option value="">Choose…</option>}
+            {!learner && <option value="">{tx("Choose…", "請選擇…")}</option>}
             {data.languages.map((language) => (
               <option key={language.id} value={language.id}>
                 {language.name}
@@ -206,7 +215,7 @@ export function SearchTool({
             value={corpusId}
             onChange={(event) => setCorpusId(event.target.value)}
           >
-            <option value="">All available</option>
+            <option value="">{tx("All available", "全部可用語料庫")}</option>
             {relevantCorpora.map((corpus) => (
               <option key={corpus.id} value={corpus.id}>
                 {corpus.name}
@@ -231,20 +240,28 @@ export function SearchTool({
         {(mode === "regex" || mode === "fuzzy") && (
           <p className="tool-note">
             {mode === "regex"
-              ? "RE2 provides linear-time Unicode matching. Backreferences and look-around are not supported."
-              : "Fuzzy lookup uses Unicode edit distance 1 for short queries and 2 otherwise."}
+              ? tx(
+                  "RE2 provides linear-time Unicode matching. Backreferences and look-around are not supported.",
+                  "RE2 提供線性時間的 Unicode 比對，不支援反向參照與前後查找。",
+                )
+              : tx(
+                  "Fuzzy lookup uses Unicode edit distance 1 for short queries and 2 otherwise.",
+                  "模糊查詢對短字串使用 Unicode 編輯距離 1，其餘使用距離 2。",
+                )}
           </p>
         )}
         <button className="button button--primary" disabled={busy || !languageId || !query.trim()}>
-          {busy ? "Searching…" : t("search.submit")}
+          {busy ? tx("Searching…", "搜尋中…") : t("search.submit")}
         </button>
       </form>
 
       {!languageId && <p className="tool-note">{t("search.scope")}</p>}
       {languageId && shards.length === 0 && (
         <p className="callout callout--warning">
-          This release has no interactive search shard for the selected scope. Use a prepared
-          download or choose another scope.
+          {tx(
+            "This release has no interactive search shard for the selected scope. Use a prepared download or choose another scope.",
+            "此版本沒有符合所選範圍的互動搜尋分片。請使用預先製作的下載檔案，或選擇其他範圍。",
+          )}
         </p>
       )}
       {error && (
@@ -262,14 +279,14 @@ export function SearchTool({
       {(records.length > 0 || (!busy && searched)) && (
         <div className="results-heading" aria-live="polite">
           <p>
-            <strong>{matches.toLocaleString()}</strong> {t("search.results")} · showing{" "}
-            {records.length.toLocaleString()} · {scanned.toLocaleString()} candidate records
-            checked
+            <strong>{number(matches)}</strong> {t("search.results")} ·{" "}
+            {tx("showing", "顯示")} {number(records.length)} · {tx("checked", "已檢查")}{" "}
+            {number(scanned)} {tx("candidate records", "筆候選記錄")}
           </p>
           {records.length > 0 && (
             <div className="result-export">
               <label>
-                Export
+                {tx("Export", "匯出")}
                 <select
                   value={exportFormat}
                   onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
@@ -277,12 +294,12 @@ export function SearchTool({
                   <option value="csv">CSV</option>
                   <option value="tsv">TSV</option>
                   <option value="json">JSON</option>
-                  <option value="jsonl">JSON Lines</option>
+                  <option value="jsonl">{tx("JSON Lines", "JSON 行格式")}</option>
                   <option value="parquet">Parquet (DuckDB-Wasm)</option>
-                  <option value="plain">Plain text</option>
-                  <option value="interlinear">Interlinear text</option>
-                  <option value="audio">Audio references</option>
-                  <option value="recipe">Reproducible recipe</option>
+                  <option value="plain">{tx("Plain text", "純文字")}</option>
+                  <option value="interlinear">{tx("Interlinear text", "逐行對譯文字")}</option>
+                  <option value="audio">{tx("Audio references", "音訊參照")}</option>
+                  <option value="recipe">{tx("Reproducible recipe", "可重現操作配方")}</option>
                 </select>
               </label>
               <button
@@ -310,7 +327,7 @@ export function SearchTool({
                   }
                 }}
               >
-                {exporting ? "Preparing…" : "Download"}
+                {exporting ? tx("Preparing…", "準備中…") : tx("Download", "下載")}
               </button>
             </div>
           )}
@@ -327,14 +344,14 @@ export function SearchTool({
             aria-pressed={resultView === "occurrences"}
             onClick={() => setResultView("occurrences")}
           >
-            Concordance occurrences
+            {tx("Concordance occurrences", "索引行出現項目")}
           </button>
           <button
             aria-pressed={resultView === "candidates"}
             disabled={!["source", "exact", "prefix", "contains", "fuzzy"].includes(mode)}
             onClick={() => setResultView("candidates")}
           >
-            Headword candidates
+            {tx("Headword candidates", "詞目候選")}
           </button>
         </div>
       )}
@@ -376,8 +393,10 @@ export function SearchTool({
       {truncated && (
         <div className="pagination-actions">
           <p>
-            Results are in deterministic source order. Browser display is capped at 2,000;
-            use Dataset builder for a bounded export.
+            {tx(
+              "Results are in deterministic source order. Browser display is capped at 2,000; use Dataset builder for a bounded export.",
+              "結果依可重現的來源順序排列。瀏覽器最多顯示 2,000 筆；如需有界限的匯出，請使用資料集產生器。",
+            )}
           </p>
           {visibleLimit < 2_000 && (
             <button
@@ -385,7 +404,7 @@ export function SearchTool({
               disabled={busy}
               onClick={() => void performSearch(Math.min(visibleLimit + 200, 2_000), false)}
             >
-              Show next {Math.min(200, 2_000 - visibleLimit)}
+              {tx("Show next", "再顯示")} {number(Math.min(200, 2_000 - visibleLimit))}
             </button>
           )}
         </div>

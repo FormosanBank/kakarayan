@@ -1,4 +1,5 @@
 import {PageIntro, StatusBadge} from "../components/Layout";
+import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData, Corpus, Counts, Language} from "../types";
 
@@ -12,13 +13,22 @@ function downloadText(value: string, name: string, mediaType: string) {
 }
 
 function CountsGrid({counts}: {counts: Counts}) {
+  const {number, tx} = useI18n();
+  const labels: Record<string, string> = {
+    texts: tx("Texts", "文本"),
+    sentences: tx("Sentences", "句子"),
+    words: tx("Words", "詞"),
+    morphemes: tx("Morphemes", "語素"),
+    tokens: tx("Tokens", "詞元"),
+    audio: tx("Audio references", "音訊參照"),
+  };
   const entries = Object.entries(counts).filter(([, value]) => value !== undefined);
   return (
     <dl className="detail-counts">
       {entries.map(([name, value]) => (
         <div key={name}>
-          <dt>{name}</dt>
-          <dd>{value?.toLocaleString()}</dd>
+          <dt>{labels[name] ?? name}</dt>
+          <dd>{value === undefined ? "" : number(value)}</dd>
         </div>
       ))}
     </dl>
@@ -32,25 +42,26 @@ export function LanguageDetail({
   data: AppData;
   language: Language;
 }) {
+  const {tx} = useI18n();
   const corpora = data.corpora.filter((corpus) => corpus.languages.includes(language.id));
   return (
     <div className="page-wrap">
       <PageIntro
         title={language.name}
-        lede={`${language.names["zh-Hant"] || "No reviewed Traditional Chinese name"} · ${
-          language.names.autonym || "No reviewed autonym"
+        lede={`${language.names["zh-Hant"] || tx("No reviewed Traditional Chinese name", "尚無經審查的繁體中文名稱")} · ${
+          language.names.autonym || tx("No reviewed autonym", "尚無經審查的自稱")
         } · ISO 639-3 ${language.iso639_3}`}
       />
       <div className="detail-actions">
         <Link className="button button--primary" to={`/search?language=${language.id}`}>
-          Search this language
+          {tx("Search this language", "搜尋此語言")}
         </Link>
         <Link className="button button--quiet" to={`/downloads?language=${language.id}`}>
-          Filter prepared data
+          {tx("Filter prepared data", "篩選預備資料")}
         </Link>
       </div>
       <section className="detail-section">
-        <h2>Published coverage</h2>
+        <h2>{tx("Published coverage", "已發布資料涵蓋範圍")}</h2>
         <CountsGrid counts={language.counts} />
         <div className="capabilities">
           {language.capabilities.map((capability) => (
@@ -58,16 +69,18 @@ export function LanguageDetail({
           ))}
         </div>
         <p>
-          <strong>Published dialect labels:</strong>{" "}
-          {language.dialects.join(", ") || "none supplied in this release"}.
+          <strong>{tx("Published dialect labels:", "已發布的方言標籤：")}</strong>{" "}
+          {language.dialects.join(", ") || tx("none supplied in this release", "此版本未提供")}。
         </p>
         <p>
-          Counts describe this release, not the number of speakers, dialect vitality, or
-          completeness of the language.
+          {tx(
+            "Counts describe this release, not the number of speakers, dialect vitality, or completeness of the language.",
+            "這些數量只描述此資料版本，不代表使用者人數、方言活力或語言的完整程度。",
+          )}
         </p>
       </section>
       <section className="detail-section">
-        <h2>Participating corpora</h2>
+        <h2>{tx("Participating corpora", "參與的語料庫")}</h2>
         <div className="detail-list">
           {corpora.map((corpus) => (
             <article key={corpus.id}>
@@ -76,7 +89,7 @@ export function LanguageDetail({
                 <p>{corpus.source_path}</p>
               </div>
               <CountsGrid counts={corpus.counts} />
-              <Link to={`/corpora/${corpus.id}`}>Corpus details →</Link>
+              <Link to={`/corpora/${corpus.id}`}>{tx("Corpus details →", "語料庫詳細資料 →")}</Link>
             </article>
           ))}
         </div>
@@ -86,6 +99,7 @@ export function LanguageDetail({
 }
 
 export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
+  const {number, tx} = useI18n();
   const rights = data.rights.entries.find((entry) => entry.id === corpus.rights_id);
   const languages = corpus.languages
     .map((id) => data.languages.find((language) => language.id === id))
@@ -94,7 +108,10 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
     <div className="page-wrap">
       <PageIntro
         title={corpus.name}
-        lede={`Public source scope ${corpus.source_path}. Every link and count is pinned to ${data.meta.release_id}.`}
+        lede={tx(
+          `Public source scope ${corpus.source_path}. Every link and count is pinned to ${data.meta.release_id}.`,
+          `公開來源範圍為 ${corpus.source_path}。所有連結與數量皆固定於 ${data.meta.release_id}。`,
+        )}
       />
       <div className="detail-actions">
         {languages.map((language) => (
@@ -103,42 +120,44 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
             key={language.id}
             to={`/search?language=${language.id}&corpus=${corpus.id}`}
           >
-            Search {language.name}
+            {tx("Search", "搜尋")} {language.name}
           </Link>
         ))}
         <Link className="button button--quiet" to={`/downloads?corpus=${corpus.id}`}>
-          Filter prepared data
+          {tx("Filter prepared data", "篩選預備資料")}
         </Link>
         <a
           className="button button--quiet"
           href={`https://github.com/FormosanBank/FormosanBank/tree/${data.meta.source.commit}/${corpus.source_path}`}
         >
-          Pinned public source
+          {tx("Pinned public source", "固定版本的公開來源")}
         </a>
       </div>
       <section className="detail-section">
-        <h2>Corpus coverage</h2>
+        <h2>{tx("Corpus coverage", "語料庫涵蓋範圍")}</h2>
         <CountsGrid counts={corpus.counts} />
         <p>
-          Display languages:{" "}
-          {languages.map((language) => language.name).join(", ") || "not resolved"}.
+          {tx("Display languages:", "顯示語言：")}{" "}
+          {languages.map((language) => language.name).join(", ") || tx("not resolved", "無法判定")}。
         </p>
         <p>
-          <strong>Source statement:</strong>{" "}
-          {corpus.source || "No separate source statement was supplied."}
+          <strong>{tx("Source statement:", "來源聲明：")}</strong>{" "}
+          {corpus.source || tx("No separate source statement was supplied.", "未提供個別來源聲明。")}
         </p>
         <p>
-          <strong>Copyright statement:</strong>{" "}
-          {corpus.copyright || "Consult corpus and central rights evidence."}
+          <strong>{tx("Copyright statement:", "著作權聲明：")}</strong>{" "}
+          {corpus.copyright || tx("Consult corpus and central rights evidence.", "請查閱語料庫與中央權利證據。")}
         </p>
       </section>
       <section className="detail-section">
-        <h2>Citation and machine-readable records</h2>
-        <p>{corpus.citation || "No corpus citation string was supplied in source metadata."}</p>
+        <h2>{tx("Citation and machine-readable records", "引用與機器可讀記錄")}</h2>
+        <p>{corpus.citation || tx("No corpus citation string was supplied in source metadata.", "來源中繼資料未提供語料庫引用字串。")}</p>
         <p>
-          This catalogue found {corpus.citation_count.toLocaleString()} distinct non-empty
-          citation string{corpus.citation_count === 1 ? "" : "s"} across source texts.
-          Prepared text tables retain every text-level value.
+          {tx("This catalogue found", "此目錄在來源文本中找到")} {number(corpus.citation_count)}{" "}
+          {tx(
+            `distinct non-empty citation string${corpus.citation_count === 1 ? "" : "s"} across source texts. Prepared text tables retain every text-level value.`,
+            "個相異的非空白引用字串。預備文本表會保留每一個文本層級的值。",
+          )}
         </p>
         <div className="button-row">
           {corpus.bibtex_citation && (
@@ -148,7 +167,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
                 downloadText(corpus.bibtex_citation, `${corpus.id}.bib`, "application/x-bibtex")
               }
             >
-              Download source BibTeX
+              {tx("Download source BibTeX", "下載來源 BibTeX")}
             </button>
           )}
           {corpus.citation && (
@@ -169,28 +188,28 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
                 )
               }
             >
-              Download RIS
+              {tx("Download RIS", "下載 RIS")}
             </button>
           )}
         </div>
       </section>
       <section className="detail-section" id="rights">
-        <h2>Rights and attribution</h2>
+        <h2>{tx("Rights and attribution", "權利與署名")}</h2>
         <StatusBadge value={rights?.redistribution ?? "review_required"} />
-        <p>{rights?.attribution || "No reviewed attribution statement is published."}</p>
+        <p>{rights?.attribution || tx("No reviewed attribution statement is published.", "尚未發布經審查的署名聲明。")}</p>
         <p>{rights?.notes}</p>
         <dl className="detail-metadata">
           <div>
-            <dt>Review</dt>
+            <dt>{tx("Review", "審查")}</dt>
             <dd>{rights?.review_status ?? "review_required"}</dd>
           </div>
           <div>
-            <dt>License expression</dt>
-            <dd>{rights?.license_expression ?? "not established"}</dd>
+            <dt>{tx("License expression", "授權表示式")}</dt>
+            <dd>{rights?.license_expression ?? tx("not established", "尚未確立")}</dd>
           </div>
           <div>
-            <dt>Commercial use</dt>
-            <dd>{rights?.commercial_use ?? "unknown"}</dd>
+            <dt>{tx("Commercial use", "商業使用")}</dt>
+            <dd>{rights?.commercial_use ?? tx("unknown", "未知")}</dd>
           </div>
         </dl>
         {rights?.evidence.length ? (
@@ -203,17 +222,19 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           </ul>
         ) : null}
         <p>
-          Public repository visibility is not a blanket license. Retain corpus-specific
-          notices and source citations with every derived record.
+          {tx(
+            "Public repository visibility is not a blanket license. Retain corpus-specific notices and source citations with every derived record.",
+            "公開儲存庫可見不等於全面授權。每筆衍生記錄都必須保留語料庫專屬聲明與來源引用。",
+          )}
         </p>
       </section>
       <section className="detail-section">
-        <h2>Known limitations</h2>
+        <h2>{tx("Known limitations", "已知限制")}</h2>
         <p>
-          Counts describe records projected from this pinned public source, not language
-          completeness or speaker populations. Empty fields mean the source did not supply
-          that tier or Kakarayan could not map it defensibly. Audio references are not
-          guaranteed to resolve on the public web.
+          {tx(
+            "Counts describe records projected from this pinned public source, not language completeness or speaker populations. Empty fields mean the source did not supply that tier or Kakarayan could not map it defensibly. Audio references are not guaranteed to resolve on the public web.",
+            "數量只描述由此固定公開來源投影出的記錄，不代表語言完整性或使用者人口。空白欄位表示來源未提供該層級，或 Kakarayan 無法可靠對應。音訊參照不保證能在公開網路上開啟。",
+          )}
         </p>
       </section>
     </div>

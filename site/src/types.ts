@@ -15,9 +15,26 @@ export type Counts = Partial<
 
 export interface Meta {
   schema_version: string;
+  api_version: "v1";
+  endpoint: "meta";
   release_id: string;
   generated_at: string;
+  kakarayan: {repository: "FormosanBank/kakarayan"; version: string; commit: string};
   source: {repository: string; commit: string};
+  canonical_url: string;
+  data: {current_release: string};
+}
+
+export interface ApiEnvelope<T> {
+  schema_version: string;
+  api_version: "v1";
+  endpoint: string;
+  release_id: string;
+  generated_at: string;
+  kakarayan: {repository: "FormosanBank/kakarayan"; version: string; commit: string};
+  source: {repository: string; commit: string};
+  canonical_url: string;
+  data: T;
 }
 
 export interface Language {

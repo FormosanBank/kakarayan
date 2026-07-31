@@ -96,12 +96,17 @@ def _verify_search(root: Path) -> None:
     manifest_path = root / "api" / "v1" / "search" / "manifest.json"
     if not manifest_path.is_file():
         raise VerificationError("Release is missing its search manifest")
-    manifest = _json(manifest_path)
+    response = _json(manifest_path)
     schema_root = Path(__file__).resolve().parents[1] / "schemas"
     registry = Registry()
     for candidate in schema_root.glob("*.schema.json"):
         schema = _json(candidate)
         registry = registry.with_resource(schema["$id"], Resource.from_contents(schema))
+    Draft202012Validator(
+        _json(schema_root / "static-api.schema.json"),
+        registry=registry,
+    ).validate(response)
+    manifest = response["data"]
     Draft202012Validator(
         _json(schema_root / "search-manifest.schema.json"),
         registry=registry,

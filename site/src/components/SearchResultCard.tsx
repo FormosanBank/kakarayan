@@ -27,6 +27,7 @@ function tokenMatches(surface: string, normalized: string, query: string, mode: 
 }
 
 function Kwic({record, query, mode}: {record: SearchRecord; query: string; mode: SearchMode}) {
+  const {tx} = useI18n();
   if (!record.tokens.length) return null;
   const matched = record.tokens.findIndex((token) =>
     tokenMatches(token.surface, token.normalized, query, mode),
@@ -35,7 +36,7 @@ function Kwic({record, query, mode}: {record: SearchRecord; query: string; mode:
   const start = Math.max(0, center - 5);
   const end = Math.min(record.tokens.length, center + (matched < 0 ? 12 : 6));
   return (
-    <div className="kwic" aria-label="Keyword in sentence context">
+    <div className="kwic" aria-label={tx("Keyword in sentence context", "句子語境中的關鍵詞")}>
       {start > 0 && <span aria-hidden="true">…</span>}
       {record.tokens.slice(start, end).map((token, offset) => {
         const position = start + offset;
@@ -51,17 +52,18 @@ function Kwic({record, query, mode}: {record: SearchRecord; query: string; mode:
 }
 
 function Interlinear({record}: {record: SearchRecord}) {
+  const {tx} = useI18n();
   if (!record.words.length) return null;
   return (
     <div className="table-scroll interlinear-table" tabIndex={0}>
       <table>
         <thead>
           <tr>
-            <th>Position</th>
-            <th>Word forms</th>
-            <th>Phonology</th>
-            <th>Morphemes</th>
-            <th>Glosses</th>
+            <th>{tx("Position", "位置")}</th>
+            <th>{tx("Word forms", "詞形")}</th>
+            <th>{tx("Phonology", "音韻")}</th>
+            <th>{tx("Morphemes", "語素")}</th>
+            <th>{tx("Glosses", "詞彙註釋")}</th>
           </tr>
         </thead>
         <tbody>
@@ -94,10 +96,10 @@ function Interlinear({record}: {record: SearchRecord}) {
             return (
               <tr key={word.id}>
                 <th scope="row">{word.position + 1}</th>
-                <td>{forms.map((item) => item.text).join(" / ") || "not supplied"}</td>
-                <td>{phonology.map((item) => item.text).join(" / ") || "not supplied"}</td>
-                <td>{morphemeForms.filter(Boolean).join(" - ") || "not segmented"}</td>
-                <td>{glosses.map((item) => item.text).join(" · ") || "not supplied"}</td>
+                <td>{forms.map((item) => item.text).join(" / ") || tx("not supplied", "未提供")}</td>
+                <td>{phonology.map((item) => item.text).join(" / ") || tx("not supplied", "未提供")}</td>
+                <td>{morphemeForms.filter(Boolean).join(" - ") || tx("not segmented", "未切分")}</td>
+                <td>{glosses.map((item) => item.text).join(" · ") || tx("not supplied", "未提供")}</td>
               </tr>
             );
           })}
@@ -124,7 +126,7 @@ export function SearchResultCard({
   onSave: (record: SearchRecord) => void;
   onNotice: (notice: string) => void;
 }) {
-  const {t} = useI18n();
+  const {number, t, tx} = useI18n();
   const language = data.languages.find((item) => item.id === record.language_id);
   const corpus = data.corpora.find((item) => item.id === record.corpus_id);
   const stablePath = `/search?q=${encodeURIComponent(query)}&language=${encodeURIComponent(
@@ -145,7 +147,9 @@ export function SearchResultCard({
         {record.dialect && <span>{record.dialect}</span>}
         <span>{corpus?.name}</span>
       </div>
-      <h3 lang={language?.iso639_3}>{record.standard || record.original || "Untranscribed sentence"}</h3>
+      <h3 lang={language?.iso639_3}>
+        {record.standard || record.original || tx("Untranscribed sentence", "未轉錄句子")}
+      </h3>
       <Kwic record={record} query={query} mode={mode} />
       {record.original && record.original !== record.standard && (
         <dl className="tier-pair">
@@ -162,7 +166,7 @@ export function SearchResultCard({
       <div className="translations">
         {record.translations.map((translation, index) => (
           <p key={`${translation.xml_lang}-${index}`} lang={translation.xml_lang}>
-            <span>{translation.xml_lang || "translation"}</span>
+            <span>{translation.xml_lang || tx("translation", "翻譯")}</span>
             {translation.text}
           </p>
         ))}
@@ -171,31 +175,35 @@ export function SearchResultCard({
         record.phonology.length > 0 ||
         record.tier_translations.some((item) => item.owner_type !== "sentence")) && (
         <details className="tier-details">
-          <summary>Expand sentence and interlinear tiers</summary>
+          <summary>{tx("Expand sentence and interlinear tiers", "展開句子與逐行對譯層級")}</summary>
           <Interlinear record={record} />
           {record.phonology
             .filter((item) => item.owner_type === "sentence")
             .map((item) => (
               <p key={`${item.owner_id}-${item.position}`}>
-                <strong>Sentence phonology</strong> {item.text}
+                <strong>{tx("Sentence phonology", "句子音韻")}</strong> {item.text}
               </p>
             ))}
         </details>
       )}
       {record.audio.length > 0 && (
         <details className="audio-evidence">
-          <summary>Audio evidence ({record.audio.length})</summary>
+          <summary>{tx("Audio evidence", "音訊證據")} ({number(record.audio.length)})</summary>
           {record.audio.slice(0, 5).map((audio, index) => {
             const url = playableUrl(record, index);
             return (
               <div key={`${audio.owner_id}-${audio.position}`}>
-                <code>{audio.file || audio.url || audio.source || "unnamed reference"}</code>
+                <code>{audio.file || audio.url || audio.source || tx("unnamed reference", "未命名參照")}</code>
                 {audio.start !== null && (
                   <span>
-                    {audio.start.toFixed(3)}s to {audio.end?.toFixed(3) ?? "unknown"}s
+                    {audio.start.toFixed(3)}s {tx("to", "至")} {audio.end?.toFixed(3) ?? tx("unknown", "未知")}s
                   </span>
                 )}
-                {url ? <audio controls preload="none" src={url} /> : <small>Reference is not a public web URL.</small>}
+                {url ? (
+                  <audio controls preload="none" src={url} />
+                ) : (
+                  <small>{tx("Reference is not a public web URL.", "此參照不是公開網路網址。")}</small>
+                )}
               </div>
             );
           })}
@@ -208,22 +216,22 @@ export function SearchResultCard({
           target="_blank"
           rel="noreferrer"
         >
-          Source XML
+          {tx("Source XML", "來源 XML")}
         </a>
-        <Link to={stablePath}>Stable record link</Link>
-        <Link to={`/corpora/${record.corpus_id}`}>Citation and rights</Link>
+        <Link to={stablePath}>{tx("Stable record link", "穩定記錄連結")}</Link>
+        <Link to={`/corpora/${record.corpus_id}`}>{tx("Citation and rights", "引用與權利")}</Link>
         <button
           className="text-button"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(citation);
-              onNotice("Release-pinned citation copied.");
+              onNotice(tx("Release-pinned citation copied.", "已複製固定版本的引用。"));
             } catch {
-              onNotice(`Copy this citation: ${citation}`);
+              onNotice(tx(`Copy this citation: ${citation}`, `請複製此引用：${citation}`));
             }
           }}
         >
-          Copy citation
+          {tx("Copy citation", "複製引用")}
         </button>
         <button className="text-button" onClick={() => onSave(record)}>
           {t("search.save")}

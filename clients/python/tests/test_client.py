@@ -22,7 +22,11 @@ class Handler(BaseHTTPRequestHandler):
             body = {"release_id": "release-1"}
             release = None
         elif self.path.endswith("/languages.json"):
-            body = [{"id": "lang_amis"}]
+            body = {
+                "api_version": "v1",
+                "release_id": "release-1",
+                "data": [{"id": "lang_amis"}],
+            }
             release = None
         elif self.path == "/artifact":
             raw = b"verified fixture"

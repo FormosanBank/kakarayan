@@ -40,12 +40,14 @@ def test_assemble_site_copies_api_and_release_data(public_repo: Path, tmp_path: 
         (public / "api" / "v1" / "downloads.json").read_text(encoding="utf-8")
     )
     assert download_catalog["release_id"] == release.release_id
-    assert download_catalog["artifacts"]
+    assert download_catalog["kakarayan"]["commit"]
+    assert download_catalog["canonical_url"].endswith("/api/v1/downloads.json")
+    assert download_catalog["data"]["artifacts"]
     assert all(
         artifact["download_url"].startswith(
             "https://github.com/FormosanBank/kakarayan/releases/download/"
         )
-        for artifact in download_catalog["artifacts"]
+        for artifact in download_catalog["data"]["artifacts"]
     )
 
     with pytest.raises(BuildError, match="already exist"):

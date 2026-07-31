@@ -3,6 +3,7 @@ import {useMemo, useRef, useState} from "react";
 import type {AnalysisResult, CountRow} from "../analysis";
 import {runAnalysis} from "../analysisClient";
 import {estimateScope, loadScopeRecords, matchingShards} from "../data";
+import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData} from "../types";
 
@@ -59,6 +60,7 @@ function downloadRows(result: AnalysisResult, kind: TableKind, format: "csv" | "
 }
 
 export function Summaries({data}: {data: AppData}) {
+  const {number, tx} = useI18n();
   const [languageId, setLanguageId] = useState("");
   const [corpusId, setCorpusId] = useState("");
   const [ngramSize, setNgramSize] = useState(2);
@@ -112,15 +114,17 @@ export function Summaries({data}: {data: AppData}) {
     <section className="summaries">
       <div className="summary-controls">
         <div>
-          <h2>Scoped linguistic summaries</h2>
+          <h2>{tx("Scoped linguistic summaries", "限定範圍的語言學摘要")}</h2>
           <p>
-            Descriptive corpus counts are not claims about speakers, vitality,
-            grammaticality, or population-wide language use.
+            {tx(
+              "Descriptive corpus counts are not claims about speakers, vitality, grammaticality, or population-wide language use.",
+              "描述性的語料數量並不代表使用者人數、語言活力、合語法性或整體人口的語言使用情況。",
+            )}
           </p>
         </div>
         <div className="form-grid">
           <label className="field">
-            Language
+            {tx("Language", "語言")}
             <select
               value={languageId}
               onChange={(event) => {
@@ -129,7 +133,7 @@ export function Summaries({data}: {data: AppData}) {
                 setResult(null);
               }}
             >
-              <option value="">Choose…</option>
+              <option value="">{tx("Choose…", "請選擇…")}</option>
               {data.languages.map((language) => (
                 <option key={language.id} value={language.id}>
                   {language.name}
@@ -138,9 +142,9 @@ export function Summaries({data}: {data: AppData}) {
             </select>
           </label>
           <label className="field">
-            Corpus
+            {tx("Corpus", "語料庫")}
             <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
-              <option value="">All compatible corpora</option>
+              <option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>
               {corpora.map((corpus) => (
                 <option key={corpus.id} value={corpus.id}>
                   {corpus.name}
@@ -149,7 +153,7 @@ export function Summaries({data}: {data: AppData}) {
             </select>
           </label>
           <label className="field">
-            N-gram size
+            {tx("N-gram size", "N-gram 大小")}
             <select value={ngramSize} onChange={(event) => setNgramSize(Number(event.target.value))}>
               {[1, 2, 3, 4, 5].map((value) => (
                 <option key={value} value={value}>
@@ -159,16 +163,16 @@ export function Summaries({data}: {data: AppData}) {
             </select>
           </label>
           <label className="field">
-            Collocate token
+            {tx("Collocate token", "搭配詞詞元")}
             <input
               value={collocate}
               maxLength={80}
               onChange={(event) => setCollocate(event.target.value)}
-              placeholder="Optional, ±2 tokens"
+              placeholder={tx("Optional, ±2 tokens", "選用，前後各 2 個詞元")}
             />
           </label>
           <label className="field">
-            Sample seed
+            {tx("Sample seed", "抽樣種子")}
             <input
               value={seed}
               maxLength={80}
@@ -177,9 +181,9 @@ export function Summaries({data}: {data: AppData}) {
           </label>
         </div>
         <p className="tool-note">
-          Scope: {estimate.records.toLocaleString()} sentences,{" "}
+          {tx("Scope:", "範圍：")} {number(estimate.records)} {tx("sentences", "句")}，{" "}
           {(estimate.uncompressedBytes / 1024 / 1024).toFixed(1)} MiB decoded. Browser
-          summaries are limited to 50,000 sentences.
+          {tx(" summaries are limited to 50,000 sentences.", "；瀏覽器摘要最多處理 50,000 句。")}
         </p>
         <div className="button-row">
           <button
@@ -187,14 +191,14 @@ export function Summaries({data}: {data: AppData}) {
             disabled={!languageId || busy || estimate.records > 50_000}
             onClick={run}
           >
-            {busy ? "Computing in worker…" : "Compute summaries"}
+            {busy ? tx("Computing in worker…", "背景執行緒計算中…") : tx("Compute summaries", "計算摘要")}
           </button>
           {busy && (
             <button className="text-button" onClick={() => controller.current?.abort()}>
-              Cancel
+              {tx("Cancel", "取消")}
             </button>
           )}
-          {estimate.records > 50_000 && <Link to="/downloads">Use prepared data →</Link>}
+          {estimate.records > 50_000 && <Link to="/downloads">{tx("Use prepared data →", "使用預備資料 →")}</Link>}
         </div>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
@@ -202,29 +206,29 @@ export function Summaries({data}: {data: AppData}) {
         <>
           <div className="summary-stats">
             <div>
-              <strong>{result.records.toLocaleString()}</strong>
-              <span>sentences</span>
+              <strong>{number(result.records)}</strong>
+              <span>{tx("sentences", "句子")}</span>
             </div>
             <div>
-              <strong>{result.tokens.toLocaleString()}</strong>
-              <span>tokens</span>
+              <strong>{number(result.tokens)}</strong>
+              <span>{tx("tokens", "詞元")}</span>
             </div>
             <div>
-              <strong>{result.sourceTypes.toLocaleString()}</strong>
-              <span>source-exact types</span>
+              <strong>{number(result.sourceTypes)}</strong>
+              <span>{tx("source-exact types", "來源完全相符類型")}</span>
             </div>
             <div>
-              <strong>{result.normalizedTypes.toLocaleString()}</strong>
-              <span>normalized types</span>
+              <strong>{number(result.normalizedTypes)}</strong>
+              <span>{tx("normalized types", "正規化類型")}</span>
             </div>
             <div>
               <strong>
                 {result.tokens ? (result.normalizedTypes / result.tokens).toFixed(3) : "0"}
               </strong>
-              <span>type/token ratio</span>
+              <span>{tx("type/token ratio", "類型／詞元比")}</span>
             </div>
           </div>
-          <div className="summary-tabs" role="tablist" aria-label="Summary table">
+          <div className="summary-tabs" role="tablist" aria-label={tx("Summary table", "摘要表")}>
             {(
               [
                 "source",
@@ -241,13 +245,20 @@ export function Summaries({data}: {data: AppData}) {
                 key={value}
                 onClick={() => setKind(value)}
               >
-                {value}
+                {{
+                  source: tx("source", "來源"),
+                  normalized: tx("normalized", "正規化"),
+                  translation: tx("translation", "翻譯"),
+                  distribution: tx("distribution", "分布"),
+                  ngrams: "n-grams",
+                  collocates: tx("collocates", "搭配詞"),
+                }[value]}
               </button>
             ))}
           </div>
           <div className="summary-export">
             <span>
-              Seed <code>{result.seed}</code> · deterministic sample{" "}
+              {tx("Seed", "種子")} <code>{result.seed}</code> · {tx("deterministic sample", "可重現樣本")}{" "}
               {result.sampleIds.slice(0, 5).join(", ")}
             </span>
             <button onClick={() => downloadRows(result, kind, "csv")}>CSV</button>
@@ -258,14 +269,14 @@ export function Summaries({data}: {data: AppData}) {
               <thead>
                 <tr>
                   <th>{kind}</th>
-                  <th>Count</th>
+                  <th>{tx("Count", "數量")}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.value}>
                     <td>{row.value}</td>
-                    <td>{row.count.toLocaleString()}</td>
+                    <td>{number(row.count)}</td>
                   </tr>
                 ))}
               </tbody>

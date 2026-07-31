@@ -33,7 +33,7 @@ export function StudyDeck({
   languages: Language[];
   currentRelease: string;
 }) {
-  const {t} = useI18n();
+  const {number, t, tx} = useI18n();
   const [cards, setCards] = useState<StudyCard[]>([]);
   const [error, setError] = useState("");
   const [showAnswer, setShowAnswer] = useState(false);
@@ -114,7 +114,7 @@ export function StudyDeck({
   }
 
   async function remove(card: StudyCard) {
-    if (!window.confirm(`Delete "${card.front}" from this device?`)) return;
+    if (!window.confirm(tx(`Delete "${card.front}" from this device?`, `要從此裝置刪除「${card.front}」嗎？`))) return;
     await deleteCard(card.id);
     reload();
   }
@@ -141,7 +141,7 @@ export function StudyDeck({
   }
 
   async function resetAll() {
-    if (!window.confirm("Delete every Kakarayan study card from this browser?")) return;
+    if (!window.confirm(tx("Delete every Kakarayan study card from this browser?", "要從此瀏覽器刪除所有 Kakarayan 學習卡片嗎？"))) return;
     await clearCards();
     reload();
   }
@@ -150,7 +150,8 @@ export function StudyDeck({
     <section className="study-deck">
       <div className="deck-toolbar">
         <div>
-          <strong>{cards.length}</strong> cards · <strong>{due.length}</strong> {t("deck.due")}
+          <strong>{number(cards.length)}</strong> {tx("cards", "張卡片")} ·{" "}
+          <strong>{number(due.length)}</strong> {t("deck.due")}
         </div>
         <div className="button-row">
           <button className="button button--quiet" onClick={backup} disabled={!cards.length}>
@@ -184,47 +185,48 @@ export function StudyDeck({
       {cards.length > 0 && (
         <dl className="queue-summary">
           <div>
-            <dt>Due</dt>
-            <dd>{due.length}</dd>
+            <dt>{tx("Due", "到期")}</dt>
+            <dd>{number(due.length)}</dd>
           </div>
           <div>
-            <dt>New</dt>
-            <dd>{queues.new}</dd>
+            <dt>{tx("New", "新卡")}</dt>
+            <dd>{number(queues.new)}</dd>
           </div>
           <div>
-            <dt>Learning</dt>
-            <dd>{queues.learning}</dd>
+            <dt>{tx("Learning", "學習中")}</dt>
+            <dd>{number(queues.learning)}</dd>
           </div>
           <div>
-            <dt>Review</dt>
-            <dd>{queues.review}</dd>
+            <dt>{tx("Review", "複習")}</dt>
+            <dd>{number(queues.review)}</dd>
           </div>
         </dl>
       )}
       {staleCards.length > 0 && (
         <p className="callout callout--warning">
-          {staleCards.length} cited card{staleCards.length === 1 ? "" : "s"} came from an
-          older data release. The saved text is unchanged; open a fresh corpus result before
-          treating it as current.
+          {tx(
+            `${staleCards.length} cited card${staleCards.length === 1 ? "" : "s"} came from an older data release. The saved text is unchanged; open a fresh corpus result before treating it as current.`,
+            `${number(staleCards.length)} 張附引用卡片來自較舊的資料版本。已儲存文字未變；請開啟最新語料結果後再視為現行資料。`,
+          )}
         </p>
       )}
       <details className="manual-card">
-        <summary>Create a personal card</summary>
+        <summary>{tx("Create a personal card", "建立個人卡片")}</summary>
         <div className="form-grid">
           <label className="field">
-            Front
+            {tx("Front", "正面")}
             <input value={front} maxLength={500} onChange={(event) => setFront(event.target.value)} />
           </label>
           <label className="field">
-            Answer
+            {tx("Answer", "答案")}
             <input value={back} maxLength={1_500} onChange={(event) => setBack(event.target.value)} />
           </label>
           <label className="field">
-            Deck
+            {tx("Deck", "牌組")}
             <input value={deck} maxLength={80} onChange={(event) => setDeck(event.target.value)} />
           </label>
           <label className="field">
-            Language
+            {tx("Language", "語言")}
             <select value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
               {languages.map((language) => (
                 <option key={language.id} value={language.id}>
@@ -234,24 +236,24 @@ export function StudyDeck({
             </select>
           </label>
           <label className="field">
-            Direction
+            {tx("Direction", "方向")}
             <select
               value={direction}
               onChange={(event) =>
                 setDirection(event.target.value as StudyCard["direction"])
               }
             >
-              <option value="recognition">Recognition: prompt to meaning</option>
-              <option value="production">Production: meaning to prompt</option>
+              <option value="recognition">{tx("Recognition: prompt to meaning", "辨識：提示詞到詞義")}</option>
+              <option value="production">{tx("Production: meaning to prompt", "產出：詞義到提示詞")}</option>
             </select>
           </label>
           <label className="field">
-            Tags
+            {tx("Tags", "標籤")}
             <input
               value={tags}
               maxLength={300}
               onChange={(event) => setTags(event.target.value)}
-              placeholder="comma or space separated"
+              placeholder={tx("comma or space separated", "以逗號或空格分隔")}
             />
           </label>
         </div>
@@ -260,27 +262,32 @@ export function StudyDeck({
           disabled={!front.trim() || !back.trim()}
           onClick={addManualCard}
         >
-          Save local card
+          {tx("Save local card", "儲存本機卡片")}
         </button>
       </details>
       {!cards.length && <div className="empty-state">{t("deck.empty")}</div>}
       {current && (
         <article className="review-card">
-          <span>{current.deck} · local card</span>
+          <span>{current.deck} · {tx("local card", "本機卡片")}</span>
           <h3>{current.direction === "production" ? current.back : current.front}</h3>
           {!showAnswer ? (
             <button className="button button--primary" onClick={() => setShowAnswer(true)}>
-              Show answer
+              {tx("Show answer", "顯示答案")}
             </button>
           ) : (
             <>
               <div className="review-answer">
                 {current.direction === "production" ? current.front : current.back}
               </div>
-              <div className="grade-row" aria-label="Review grade">
+              <div className="grade-row" aria-label={tx("Review grade", "複習評分")}>
                 {(["again", "hard", "good", "easy"] as Grade[]).map((gradeValue) => (
                   <button key={gradeValue} onClick={() => grade(gradeValue)}>
-                    {gradeValue}
+                    {{
+                      again: tx("again", "重來"),
+                      hard: tx("hard", "困難"),
+                      good: tx("good", "良好"),
+                      easy: tx("easy", "簡單"),
+                    }[gradeValue]}
                   </button>
                 ))}
               </div>
@@ -288,19 +295,20 @@ export function StudyDeck({
           )}
           {current.source && (
             <small>
-              Source {current.source.recordId} · release {current.source.releaseId}
+              {tx("Source", "來源")} {current.source.recordId} · {tx("release", "資料版本")}{" "}
+              {current.source.releaseId}
             </small>
           )}
           {current.audioReferences.length > 0 && (
-            <small>{current.audioReferences.length} source audio reference(s) retained</small>
+            <small>{number(current.audioReferences.length)} {tx("source audio reference(s) retained", "筆來源音訊參照已保留")}</small>
           )}
         </article>
       )}
       {cards.length > 0 && (
         <details className="card-inventory">
-          <summary>All local cards ({cards.length})</summary>
+          <summary>{tx("All local cards", "所有本機卡片")} ({number(cards.length)})</summary>
           <label className="field">
-            Filter cards, decks, or tags
+            {tx("Filter cards, decks, or tags", "篩選卡片、牌組或標籤")}
             <input value={filter} onChange={(event) => setFilter(event.target.value)} />
           </label>
           <ul>
@@ -309,16 +317,16 @@ export function StudyDeck({
                 <span>
                   <strong>{card.front}</strong>
                   {card.back}
-                  <small>{card.deck} · {card.tags.join(" · ") || "no tags"}</small>
+                  <small>{card.deck} · {card.tags.join(" · ") || tx("no tags", "無標籤")}</small>
                 </span>
                 <button className="text-button text-button--danger" onClick={() => remove(card)}>
-                  Delete
+                  {tx("Delete", "刪除")}
                 </button>
               </li>
             ))}
           </ul>
           <button className="button button--danger" onClick={resetAll}>
-            Delete all local cards
+            {tx("Delete all local cards", "刪除所有本機卡片")}
           </button>
         </details>
       )}

@@ -20,7 +20,11 @@ test("reads static catalogues and pins the release", async () => {
       const url = String(input);
       calls.push(url);
       if (url.endsWith("meta.json")) return json({release_id: "release-1"});
-      return json([{id: "lang_amis"}]);
+      return json({
+        api_version: "v1",
+        release_id: "release-1",
+        data: [{id: "lang_amis"}],
+      });
     },
   });
   assert.deepEqual(await client.getLanguages(), [{id: "lang_amis"}]);

@@ -97,6 +97,20 @@ class KakarayanClient:
             self.meta()
             self._release_checked = True
 
+    def _static_data(self, path: str) -> Any:
+        envelope = self._json(path)
+        if (
+            not isinstance(envelope, dict)
+            or envelope.get("api_version") != "v1"
+            or "data" not in envelope
+        ):
+            raise KakarayanError(
+                "invalid_envelope",
+                "The static API response envelope is invalid",
+                409,
+            )
+        return envelope["data"]
+
     def _live(self, endpoint: str, values: Mapping[str, object | None]) -> str:
         if self.mode != "live":
             raise KakarayanError(
@@ -116,12 +130,12 @@ class KakarayanClient:
     def languages(self) -> list[dict[str, Any]]:
         self._ensure_release()
         path = "/api/v1/languages.json" if self.mode == "static" else "/v1/languages"
-        return self._json(path)
+        return self._static_data(path) if self.mode == "static" else self._json(path)
 
     def corpora(self) -> list[dict[str, Any]]:
         self._ensure_release()
         path = "/api/v1/corpora.json" if self.mode == "static" else "/v1/corpora"
-        return self._json(path)
+        return self._static_data(path) if self.mode == "static" else self._json(path)
 
     def search_manifest(self) -> dict[str, Any]:
         if self.mode != "static":
@@ -131,7 +145,7 @@ class KakarayanClient:
                 400,
             )
         self._ensure_release()
-        return self._json("/api/v1/search/manifest.json")
+        return self._static_data("/api/v1/search/manifest.json")
 
     def _compressed_json(
         self,

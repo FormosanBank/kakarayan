@@ -8,32 +8,32 @@ import {useI18n} from "../i18n";
 import type {AppData} from "../types";
 
 export function Research({data}: {data: AppData}) {
-  const {t} = useI18n();
+  const {t, tx} = useI18n();
   const [view, setView] = useState<"search" | "builder" | "summaries">("search");
   return (
     <div className="page-wrap page-wrap--wide">
       <PageIntro title={t("search.title")} lede={t("search.lede")} />
-      <div className="research-tabs" role="tablist" aria-label="Research tools">
+      <div className="research-tabs" role="tablist" aria-label={tx("Research tools", "研究工具")}>
         <button
           role="tab"
           aria-selected={view === "search"}
           onClick={() => setView("search")}
         >
-          Concordance and dictionary
+          {tx("Concordance and dictionary", "索引行與詞典")}
         </button>
         <button
           role="tab"
           aria-selected={view === "builder"}
           onClick={() => setView("builder")}
         >
-          Dataset builder
+          {tx("Dataset builder", "資料集產生器")}
         </button>
         <button
           role="tab"
           aria-selected={view === "summaries"}
           onClick={() => setView("summaries")}
         >
-          Linguistic summaries
+          {tx("Linguistic summaries", "語言學摘要")}
         </button>
       </div>
       <div role="tabpanel">

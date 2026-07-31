@@ -144,6 +144,12 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Add corpus citation/source metadata, BibTeX and RIS download, dialect inventories,
   richer public model-card metadata, dynamic document metadata, a sitemap, useful
   no-script links, and privacy-bounded diagnostics.
+- [x] Complete Traditional Chinese interface parity across discovery, research, dataset
+  construction, downloads, learner cards, pronunciation, MT, orthography, models, rights,
+  developer documentation, errors, and diagnostics; add an end-to-end locale workflow.
+- [x] Wrap every static API response in one schema-validated v1 envelope with generation
+  time, canonical URL, release ID, Kakarayan version and commit, and the distinct pinned
+  FormosanBank source commit; update site verification and all three public clients.
 - [x] Complete one full release-only benchmark against pinned public FormosanBank commit
   `40fd519cd82295bd7824e207990d277b871ad47f`: 487,354 sentences, 8,214,390 tokens,
   no publisher warnings, 5.4 GiB output, 9.1 GiB peak memory, and 20 minutes 28 seconds.
@@ -158,7 +164,7 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 
 ## Next slice
 
-Commit the catalogue and learner checkpoint. Finish search-result context, record-unit
-dataset projections, diagnostics, document metadata, and complete interface translation.
-Then run clean deterministic full-data builds, representation reconciliation, all client and
-browser checks, and dependency audits before opening the one draft pull request.
+Implement full-representation reconciliation, then run two clean deterministic full-data
+builds from the pinned public source. Rebuild the full Pages projection, run performance,
+cross-browser, accessibility, client, and dependency checks, and open the single draft pull
+request without merging it.

@@ -1,4 +1,5 @@
 import {normalizeSearch, type SearchMode} from "../data";
+import {useI18n} from "../i18n";
 import type {AppData, SearchRecord} from "../types";
 
 interface Candidate {
@@ -56,11 +57,14 @@ export function CandidateGroups({
   onSave: (record: SearchRecord) => void;
   onOpen: (record: SearchRecord) => void;
 }) {
+  const {number, tx} = useI18n();
   return (
     <div className="candidate-groups">
       <p className="callout callout--info">
-        These are transparent occurrence groups, not reviewed dictionary entries. Conflicting
-        spellings, dialects, and meanings remain separate in the cited occurrences.
+        {tx(
+          "These are transparent occurrence groups, not reviewed dictionary entries. Conflicting spellings, dialects, and meanings remain separate in the cited occurrences.",
+          "這些是透明的出現項目分組，不是經審查的詞典詞條。不同拼法、方言與語義會在附引用的出現項目中分開保留。",
+        )}
       </p>
       {groups(records, query, mode).map((candidate) => {
         const corpora = new Set(candidate.records.map((record) => record.corpus_id));
@@ -77,25 +81,25 @@ export function CandidateGroups({
         );
         return (
           <article key={candidate.key}>
-            <p className="eyebrow">Automatic headword candidate</p>
+            <p className="eyebrow">{tx("Automatic headword candidate", "自動詞目候選")}</p>
             <h3>{candidate.label}</h3>
             <dl className="candidate-stats">
               <div>
-                <dt>Attestations shown</dt>
-                <dd>{candidate.records.length.toLocaleString()}</dd>
+                <dt>{tx("Attestations shown", "顯示實證")}</dt>
+                <dd>{number(candidate.records.length)}</dd>
               </div>
               <div>
-                <dt>Corpora</dt>
-                <dd>{corpora.size.toLocaleString()}</dd>
+                <dt>{tx("Corpora", "語料庫")}</dt>
+                <dd>{number(corpora.size)}</dd>
               </div>
               <div>
-                <dt>Variants</dt>
-                <dd>{variants.size.toLocaleString()}</dd>
+                <dt>{tx("Variants", "變體")}</dt>
+                <dd>{number(variants.size)}</dd>
               </div>
             </dl>
             {pronunciations.size > 0 && (
               <p>
-                <strong>Phonology:</strong> {[...pronunciations].slice(0, 6).join(" · ")}
+                <strong>{tx("Phonology:", "音韻：")}</strong> {[...pronunciations].slice(0, 6).join(" · ")}
               </p>
             )}
             {meanings.size > 0 && (
@@ -118,7 +122,7 @@ export function CandidateGroups({
                 </button>
               ))}
               <button className="text-button" onClick={() => onSave(candidate.records[0]!)}>
-                Save cited example
+                {tx("Save cited example", "儲存附引用例句")}
               </button>
             </div>
           </article>

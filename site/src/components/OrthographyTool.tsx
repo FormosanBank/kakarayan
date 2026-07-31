@@ -1,6 +1,7 @@
 import {useMemo, useState} from "react";
 
 import {convertOrthography, type OrthographyChange} from "../orthography";
+import {useI18n} from "../i18n";
 import type {OrthographyCatalog} from "../types";
 
 export function OrthographyTool({
@@ -10,6 +11,7 @@ export function OrthographyTool({
   catalog: OrthographyCatalog;
   sourceCommit: string;
 }) {
+  const {number, tx} = useI18n();
   const amisTables = useMemo(
     () => catalog.tables.filter((table) => table.language === "Amis"),
     [catalog.tables],
@@ -26,9 +28,9 @@ export function OrthographyTool({
   if (!table) {
     return (
       <section className="model-tool">
-        <h3>Orthography assistant</h3>
+        <h3>{tx("Orthography assistant", "正寫法輔助工具")}</h3>
         <p className="callout callout--warning">
-          This release contains no reviewed Amis conversion table. No conversion is guessed.
+          {tx("This release contains no reviewed Amis conversion table. No conversion is guessed.", "此版本沒有經審查的阿美語轉換表，因此不會猜測任何轉換。")}
         </p>
       </section>
     );
@@ -38,18 +40,20 @@ export function OrthographyTool({
     <section className="model-tool" aria-labelledby="orthography-heading">
       <div className="tool-heading">
         <div>
-          <p className="eyebrow">Deterministic public table</p>
-          <h3 id="orthography-heading">Orthography assistant</h3>
+          <p className="eyebrow">{tx("Deterministic public table", "可重現的公開表格")}</p>
+          <h3 id="orthography-heading">{tx("Orthography assistant", "正寫法輔助工具")}</h3>
         </div>
-        <span className="status status--local">no AI</span>
+        <span className="status status--local">{tx("no AI", "不使用 AI")}</span>
       </div>
       <p>
-        Apply a named FormosanBank conversion table and inspect every change. Empty or
-        ambiguous mappings are preserved and flagged.
+        {tx(
+          "Apply a named FormosanBank conversion table and inspect every change. Empty or ambiguous mappings are preserved and flagged.",
+          "套用具名的 FormosanBank 轉換表，並檢查每一項變更。空白或有歧義的對應會保留並加以標示。",
+        )}
       </p>
       <div className="tool-grid">
         <label className="field">
-          Source table
+          {tx("Source table", "來源表")}
           <select
             value={table.id}
             onChange={(event) => {
@@ -67,7 +71,7 @@ export function OrthographyTool({
           </select>
         </label>
         <label className="field">
-          Target dialect
+          {tx("Target dialect", "目標方言")}
           <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
             {table.dialects.map((value) => (
               <option key={value}>{value}</option>
@@ -76,7 +80,7 @@ export function OrthographyTool({
         </label>
       </div>
       <label className="field">
-        Text to convert
+        {tx("Text to convert", "要轉換的文字")}
         <textarea value={input} onChange={(event) => setInput(event.target.value)} rows={4} />
       </label>
       <button
@@ -84,29 +88,29 @@ export function OrthographyTool({
         disabled={!input || !dialect}
         onClick={() => setResult(convertOrthography(input, table, dialect))}
       >
-        Preview conversion
+        {tx("Preview conversion", "預覽轉換")}
       </button>
       {result && (
         <div className="orthography-result">
-          <span>Preview, not a source transcription</span>
+          <span>{tx("Preview, not a source transcription", "此為預覽，不是來源轉錄")}</span>
           <p>{result.text}</p>
           {result.changes.length ? (
             <ol>
               {result.changes.map((change, index) => (
                 <li key={`${change.position}-${index}`}>
-                  position {change.position + 1}: <code>{change.from}</code> →{" "}
+                  {tx("position", "位置")} {number(change.position + 1)}：<code>{change.from}</code> →{" "}
                   <code>{change.to}</code>
-                  {change.ambiguous && " (no unambiguous mapping; preserved)"}
+                  {change.ambiguous && tx(" (no unambiguous mapping; preserved)", "（無明確對應，已保留）")}
                 </li>
               ))}
             </ol>
           ) : (
-            <small>No table-driven changes.</small>
+            <small>{tx("No table-driven changes.", "轉換表未產生任何變更。")}</small>
           )}
         </div>
       )}
       <p className="source-note">
-        Rule source:{" "}
+        {tx("Rule source:", "規則來源：")}{" "}
         <a
           href={`https://github.com/FormosanBank/FormosanBank/blob/${sourceCommit}/${table.source_path}`}
           target="_blank"

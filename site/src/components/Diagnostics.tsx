@@ -1,4 +1,5 @@
 import {useMemo, useState} from "react";
+import {useI18n} from "../i18n";
 
 interface DiagnosticDocument {
   application: string;
@@ -67,6 +68,7 @@ export function Diagnostics({
   releaseId: string | null;
   error?: Error | null;
 }) {
+  const {tx} = useI18n();
   const [notice, setNotice] = useState("");
   const document = useMemo(() => makeDiagnostics(releaseId, error), [error, releaseId]);
   const body = `Kakarayan diagnostics\n\n\`\`\`json\n${JSON.stringify(document, null, 2)}\n\`\`\``;
@@ -84,18 +86,18 @@ export function Diagnostics({
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(JSON.stringify(document, null, 2));
-            setNotice("Diagnostics copied.");
+            setNotice(tx("Diagnostics copied.", "已複製診斷資訊。"));
           } catch {
-            setNotice("Clipboard unavailable. Download the diagnostics file instead.");
+            setNotice(tx("Clipboard unavailable. Download the diagnostics file instead.", "無法使用剪貼簿，請改為下載診斷檔案。"));
           }
         }}
       >
-        Copy diagnostics
+        {tx("Copy diagnostics", "複製診斷資訊")}
       </button>
       <button className="text-button" onClick={() => download(document)}>
-        Download diagnostics
+        {tx("Download diagnostics", "下載診斷資訊")}
       </button>
-      <a href={issueHref}>Report a public-site problem</a>
+      <a href={issueHref}>{tx("Report a public-site problem", "回報公開網站問題")}</a>
       {notice && (
         <span role="status" aria-live="polite">
           {notice}

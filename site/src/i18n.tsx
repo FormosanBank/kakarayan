@@ -18,6 +18,8 @@ const messages = {
     "nav.developers": "Developers",
     "nav.models": "Models",
     "nav.about": "About",
+    "nav.skip": "Skip to content",
+    "footer.summary": "Public Formosan language resources for research, learning, and revitalization.",
     "common.loading": "Loading public release…",
     "common.unavailable": "Public release data is unavailable.",
     "common.retry": "Try again",
@@ -90,6 +92,8 @@ const messages = {
     "nav.developers": "開發者",
     "nav.models": "模型",
     "nav.about": "關於",
+    "nav.skip": "跳至主要內容",
+    "footer.summary": "供研究、學習與語言復振使用的臺灣南島語公共資源。",
     "common.loading": "正在載入公開資料版本…",
     "common.unavailable": "目前無法取得公開資料版本。",
     "common.retry": "再試一次",
@@ -157,6 +161,9 @@ interface I18nContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: (key: MessageKey) => string;
+  tx: (english: string, traditionalChinese: string) => string;
+  number: (value: number) => string;
+  date: (value: string | Date) => string;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -177,7 +184,16 @@ export function I18nProvider({children}: PropsWithChildren) {
     document.documentElement.lang = locale;
   }, [locale]);
   const value = useMemo<I18nContextValue>(
-    () => ({locale, setLocale, t: (key) => messages[locale][key]}),
+    () => ({
+      locale,
+      setLocale,
+      t: (key) => messages[locale][key],
+      tx: (english, traditionalChinese) =>
+        locale === "zh-Hant" ? traditionalChinese : english,
+      number: (input) => new Intl.NumberFormat(locale).format(input),
+      date: (input) =>
+        new Intl.DateTimeFormat(locale, {dateStyle: "medium"}).format(new Date(input)),
+    }),
     [locale, setLocale],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;

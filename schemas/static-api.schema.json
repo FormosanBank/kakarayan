@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/static-api.schema.json",
+  "title": "Kakarayan static API response",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "api_version",
+    "endpoint",
+    "generated_at",
+    "kakarayan",
+    "source",
+    "release_id",
+    "canonical_url",
+    "data"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "api_version": {"const": "v1"},
+    "endpoint": {
+      "enum": [
+        "meta",
+        "languages",
+        "corpora",
+        "rights",
+        "models",
+        "orthography",
+        "content",
+        "downloads",
+        "releases",
+        "search/manifest"
+      ]
+    },
+    "generated_at": {"type": "string", "format": "date-time"},
+    "kakarayan": {"$ref": "#/$defs/application"},
+    "source": {"$ref": "catalog.schema.json#/$defs/source"},
+    "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
+    "canonical_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://formosanbank[.]github[.]io/kakarayan/api/v1/"
+    },
+    "data": {}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "endpoint": {"const": "meta"},
+        "data": {
+          "type": "object",
+          "required": ["current_release"],
+          "properties": {
+            "current_release": {
+              "type": "string",
+              "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "languages"},
+        "data": {
+          "type": "array",
+          "items": {"$ref": "catalog.schema.json#/$defs/language"}
+        }
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "corpora"},
+        "data": {
+          "type": "array",
+          "items": {"$ref": "catalog.schema.json#/$defs/corpus"}
+        }
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "rights"},
+        "data": {"$ref": "rights.schema.json"}
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "models"},
+        "data": {"$ref": "model-catalog.schema.json"}
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "orthography"},
+        "data": {"$ref": "orthography.schema.json"}
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "content"},
+        "data": {"$ref": "content.schema.json"}
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "downloads"},
+        "data": {"$ref": "downloads.schema.json"}
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "releases"},
+        "data": {"$ref": "#/$defs/releases"}
+      }
+    },
+    {
+      "properties": {
+        "endpoint": {"const": "search/manifest"},
+        "data": {"$ref": "search-manifest.schema.json"}
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "application": {
+      "type": "object",
+      "required": ["repository", "version", "commit"],
+      "properties": {
+        "repository": {"const": "FormosanBank/kakarayan"},
+        "version": {"type": "string", "pattern": "^[0-9]+[.][0-9]+[.][0-9]+$"},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      },
+      "additionalProperties": false
+    },
+    "releases": {
+      "type": "object",
+      "required": ["schema_version", "current", "releases"],
+      "properties": {
+        "schema_version": {"const": "1.0.0"},
+        "current": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
+        "releases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "source_commit", "generated_at", "manifest"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
+              "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "generated_at": {"type": "string", "format": "date-time"},
+              "manifest": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

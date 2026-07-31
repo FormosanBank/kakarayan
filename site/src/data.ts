@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState} from "react";
 
 import type {
   AppData,
+  ApiEnvelope,
   Corpus,
   Language,
   LearningContentCatalog,
@@ -26,6 +27,20 @@ async function json<T>(url: string, signal?: AbortSignal): Promise<T> {
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
   return (await response.json()) as T;
+}
+
+async function apiData<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const envelope = await json<ApiEnvelope<T>>(url, signal);
+  if (
+    envelope.api_version !== "v1" ||
+    !envelope.release_id ||
+    !envelope.source?.commit ||
+    !envelope.kakarayan?.commit ||
+    !("data" in envelope)
+  ) {
+    throw new Error(`Invalid static API envelope: ${url}`);
+  }
+  return envelope.data;
 }
 
 async function sha256(data: ArrayBuffer): Promise<string> {
@@ -76,13 +91,13 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
   const [meta, languages, corpora, rights, models, search, orthography, content] =
     await Promise.all([
     json<Meta>(`${base}api/v1/meta.json`, signal),
-    json<Language[]>(`${base}api/v1/languages.json`, signal),
-    json<Corpus[]>(`${base}api/v1/corpora.json`, signal),
-    json<RightsCatalog>(`${base}api/v1/rights.json`, signal),
-    json<ModelCatalog>(`${base}api/v1/models.json`, signal),
-    json<SearchManifest>(`${base}api/v1/search/manifest.json`, signal),
-      json<OrthographyCatalog>(`${base}api/v1/orthography.json`, signal),
-      json<LearningContentCatalog>(`${base}api/v1/content.json`, signal),
+      apiData<Language[]>(`${base}api/v1/languages.json`, signal),
+      apiData<Corpus[]>(`${base}api/v1/corpora.json`, signal),
+      apiData<RightsCatalog>(`${base}api/v1/rights.json`, signal),
+      apiData<ModelCatalog>(`${base}api/v1/models.json`, signal),
+      apiData<SearchManifest>(`${base}api/v1/search/manifest.json`, signal),
+      apiData<OrthographyCatalog>(`${base}api/v1/orthography.json`, signal),
+      apiData<LearningContentCatalog>(`${base}api/v1/content.json`, signal),
     ]);
   if (search.release_id !== meta.release_id) {
     throw new Error("Search and catalogue release IDs do not match");

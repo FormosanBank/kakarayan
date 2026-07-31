@@ -75,6 +75,12 @@ interface StructuredError {
   };
 }
 
+interface StaticEnvelope<T> {
+  api_version: "v1";
+  release_id: string;
+  data: T;
+}
+
 export class KakarayanError extends Error {
   readonly code: string;
   readonly status: number;
@@ -182,6 +188,18 @@ export class KakarayanClient {
     return `/v1/${name}${query ? `?${query}` : ""}`;
   }
 
+  private async staticData<T>(path: string): Promise<T> {
+    const envelope = await this.json<StaticEnvelope<T>>(path);
+    if (envelope.api_version !== "v1" || !("data" in envelope)) {
+      throw new KakarayanError(
+        "invalid_envelope",
+        "The static API response envelope is invalid",
+        409,
+      );
+    }
+    return envelope.data;
+  }
+
   async ensureRelease(): Promise<void> {
     if (!this.releaseId) return;
     this.releaseCheck ??= this.getMeta().then(() => undefined);
@@ -194,12 +212,16 @@ export class KakarayanClient {
 
   async getLanguages<T = Array<Record<string, unknown>>>(): Promise<T> {
     await this.ensureRelease();
-    return this.json<T>(this.mode === "static" ? staticPath("languages") : "/v1/languages");
+    return this.mode === "static"
+      ? this.staticData<T>(staticPath("languages"))
+      : this.json<T>("/v1/languages");
   }
 
   async getCorpora<T = Array<Record<string, unknown>>>(): Promise<T> {
     await this.ensureRelease();
-    return this.json<T>(this.mode === "static" ? staticPath("corpora") : "/v1/corpora");
+    return this.mode === "static"
+      ? this.staticData<T>(staticPath("corpora"))
+      : this.json<T>("/v1/corpora");
   }
 
   async getSearchManifest<T = StaticSearchManifest>(): Promise<T> {
@@ -211,7 +233,7 @@ export class KakarayanClient {
       );
     }
     await this.ensureRelease();
-    return this.json<T>("/api/v1/search/manifest.json");
+    return this.staticData<T>("/api/v1/search/manifest.json");
   }
 
   private async compressedJson<T>(

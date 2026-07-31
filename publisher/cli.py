@@ -18,6 +18,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--output", type=Path, required=True, help="New or empty output directory")
     result.add_argument("--source-commit", help="Required exact HEAD commit when supplied")
     result.add_argument(
+        "--kakarayan-commit",
+        help="Exact 40-character Kakarayan commit that produces the release",
+    )
+    result.add_argument(
         "--refresh-models",
         action="store_true",
         help="Read current public FormosanBank metadata from the official Hugging Face API",
@@ -57,6 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         site_only=args.site_only,
         compress_database=args.compress_database,
         release_only=args.release_only,
+        application_commit=args.kakarayan_commit,
     )
     print(
         json.dumps(

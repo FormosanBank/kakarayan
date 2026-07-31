@@ -45,9 +45,14 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert amis["counts"]["sentences"] == 2
     assert amis["dialects"] == ["Xiuguluan"]
     assert "audio" in amis["capabilities"]
-    search_manifest = json.loads(
+    search_response = json.loads(
         (first.output / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")
     )
+    search_manifest = search_response["data"]
+    assert search_response["api_version"] == "v1"
+    assert search_response["kakarayan"]["commit"]
+    assert search_response["source"]["commit"] == first.source.commit
+    assert search_response["canonical_url"].endswith("/api/v1/search/manifest.json")
     assert search_manifest["shards"][0]["records"] == 2
     assert search_manifest["shards"][0]["language_id"] == "lang_amis"
     assert search_manifest["shards"][0]["path"].endswith(".json.gz")
@@ -73,14 +78,16 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert first_sentence["words"][0]["morphemes"][0]["class"] == "root"
     orthography = json.loads(
         (first.output / "api" / "v1" / "orthography.json").read_text(encoding="utf-8")
-    )
+    )["data"]
     assert orthography["tables"][0]["language"] == "Amis"
     assert orthography["tables"][0]["rules"][1]["outputs"]["Xiuguluan"] == "o"
-    content = json.loads((first.output / "api" / "v1" / "content.json").read_text(encoding="utf-8"))
+    content = json.loads(
+        (first.output / "api" / "v1" / "content.json").read_text(encoding="utf-8")
+    )["data"]
     assert content == {"schema_version": "1.0.0", "entries": []}
     downloads = json.loads(
         (first.output / "api" / "v1" / "downloads.json").read_text(encoding="utf-8")
-    )
+    )["data"]
     assert downloads["release_id"] == first.release_id
     assert any(item["path"].endswith("csv-tables.zip") for item in downloads["artifacts"])
     assert all(not item["publishable"] for item in downloads["artifacts"])
@@ -132,6 +139,7 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
             ).fetchone()[0]
         )
         assert embedded_meta["release_id"] == first.release_id
+        assert embedded_meta["kakarayan"]["commit"]
 
 
 def test_output_directory_must_be_empty(public_repo: Path, tmp_path: Path) -> None:

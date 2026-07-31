@@ -28,6 +28,35 @@ Endpoints:
 Consumers should first fetch `meta.json`, pin `release_id`, and reject other payloads or
 search manifests that identify a different release.
 
+Every static response uses one validated envelope:
+
+```json
+{
+  "schema_version": "1.0.0",
+  "api_version": "v1",
+  "endpoint": "languages",
+  "generated_at": "2026-07-30T00:00:00Z",
+  "kakarayan": {
+    "repository": "FormosanBank/kakarayan",
+    "version": "0.1.0",
+    "commit": "40-character application commit"
+  },
+  "source": {
+    "repository": "FormosanBank/FormosanBank",
+    "commit": "40-character data-source commit"
+  },
+  "release_id": "fb-20260730-abcdef12",
+  "canonical_url": "https://formosanbank.github.io/kakarayan/api/v1/languages.json",
+  "data": []
+}
+```
+
+Read endpoint content from `data`. `meta.json` also keeps the common release fields at the
+top level so clients can pin the release before reading another response. All endpoint
+envelopes validate against `schemas/static-api.schema.json`. The envelope distinguishes the
+Kakarayan application commit that generated the bytes from the public FormosanBank source
+commit represented by those bytes.
+
 Search index and shard paths in the manifest are relative to the site `data/` directory.
 Load the matching language and corpus vocabulary index first, then fetch only the shard
 parts in its postings. Verify the compressed checksum when raw gzip bytes are returned. If

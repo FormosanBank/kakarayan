@@ -9,6 +9,7 @@ import {
   type SearchMode,
 } from "../data";
 import {downloadExport, type ExportFormat} from "../exports";
+import {useI18n} from "../i18n";
 import {
   projectRecordUnits,
   type RecordUnit,
@@ -44,6 +45,7 @@ function size(bytes: number): string {
 }
 
 export function DatasetBuilder({data}: {data: AppData}) {
+  const {number, tx} = useI18n();
   const [languageId, setLanguageId] = useState("");
   const [corpusId, setCorpusId] = useState("");
   const [query, setQuery] = useState("");
@@ -87,7 +89,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
     if (query.trim()) {
       if (estimate.uncompressedBytes > 512 * 1024 ** 2) {
         throw new Error(
-          "A filtered browser export would scan more than 512 MiB. Narrow the corpus or use a prepared package.",
+          tx(
+            "A filtered browser export would scan more than 512 MiB. Narrow the corpus or use a prepared package.",
+            "經篩選的瀏覽器匯出將掃描超過 512 MiB。請縮小語料庫範圍或使用預備套件。",
+          ),
         );
       }
       sourceRecords = (
@@ -166,27 +171,27 @@ export function DatasetBuilder({data}: {data: AppData}) {
       <div className="builder__steps">
         <div>
           <span>01</span>
-          <strong>Scope</strong>
+          <strong>{tx("Scope", "範圍")}</strong>
         </div>
         <div>
           <span>02</span>
-          <strong>Fields</strong>
+          <strong>{tx("Fields", "欄位")}</strong>
         </div>
         <div>
           <span>03</span>
-          <strong>Preview</strong>
+          <strong>{tx("Preview", "預覽")}</strong>
         </div>
         <div>
           <span>04</span>
-          <strong>Export</strong>
+          <strong>{tx("Export", "匯出")}</strong>
         </div>
       </div>
       <div className="builder__grid">
         <div className="builder__controls">
-          <h2>Build a bounded linguistic dataset</h2>
+          <h2>{tx("Build a bounded linguistic dataset", "建立有界限的語言學資料集")}</h2>
           <div className="form-grid">
             <label className="field">
-              Language
+              {tx("Language", "語言")}
               <select
                 value={languageId}
                 onChange={(event) => {
@@ -195,7 +200,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                   setPreview([]);
                 }}
               >
-                <option value="">Choose a display language…</option>
+                <option value="">{tx("Choose a display language…", "選擇顯示語言…")}</option>
                 {data.languages.map((language) => (
                   <option value={language.id} key={language.id}>
                     {language.name}
@@ -204,9 +209,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
               </select>
             </label>
             <label className="field">
-              Corpus
+              {tx("Corpus", "語料庫")}
               <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
-                <option value="">All compatible corpora</option>
+                <option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>
                 {corpora.map((corpus) => (
                   <option value={corpus.id} key={corpus.id}>
                     {corpus.name}
@@ -215,7 +220,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               </select>
             </label>
             <label className="field">
-              Record unit
+              {tx("Record unit", "記錄單位")}
               <select
                 value={recordUnit}
                 onChange={(event) => {
@@ -223,40 +228,40 @@ export function DatasetBuilder({data}: {data: AppData}) {
                   setPreview([]);
                 }}
               >
-                <option value="text">Text</option>
-                <option value="sentence">Sentence</option>
-                <option value="word">Word</option>
-                <option value="morpheme">Morpheme</option>
-                <option value="token">Token</option>
-                <option value="audio">Audio reference</option>
+                <option value="text">{tx("Text", "文本")}</option>
+                <option value="sentence">{tx("Sentence", "句子")}</option>
+                <option value="word">{tx("Word", "詞")}</option>
+                <option value="morpheme">{tx("Morpheme", "語素")}</option>
+                <option value="token">{tx("Token", "詞元")}</option>
+                <option value="audio">{tx("Audio reference", "音訊參照")}</option>
               </select>
             </label>
             <label className="field">
-              Optional query
+              {tx("Optional query", "選用查詢")}
               <input
                 value={query}
                 maxLength={256}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Leave blank for the first rows in source order"
+                placeholder={tx("Leave blank for the first rows in source order", "留白則依來源順序取得前幾筆")}
               />
             </label>
             <label className="field">
-              Query mode
+              {tx("Query mode", "查詢模式")}
               <select value={mode} onChange={(event) => setMode(event.target.value as SearchMode)}>
-                <option value="source">Source exact</option>
-                <option value="exact">Normalized exact</option>
-                <option value="prefix">Prefix</option>
-                <option value="contains">Contains</option>
-                <option value="translation">Translation</option>
-                <option value="phonology">Phonology</option>
-                <option value="gloss">Morpheme or gloss</option>
-                <option value="fuzzy">Fuzzy</option>
-                <option value="regex">Scoped RE2</option>
+                <option value="source">{tx("Source exact", "來源完全相符")}</option>
+                <option value="exact">{tx("Normalized exact", "正規化後完全相符")}</option>
+                <option value="prefix">{tx("Prefix", "前綴")}</option>
+                <option value="contains">{tx("Contains", "包含")}</option>
+                <option value="translation">{tx("Translation", "翻譯")}</option>
+                <option value="phonology">{tx("Phonology", "音韻")}</option>
+                <option value="gloss">{tx("Morpheme or gloss", "語素或詞彙註釋")}</option>
+                <option value="fuzzy">{tx("Fuzzy", "模糊")}</option>
+                <option value="regex">{tx("Scoped RE2", "限定範圍的 RE2")}</option>
               </select>
             </label>
           </div>
           <fieldset className="field-checks">
-            <legend>Included fields</legend>
+            <legend>{tx("Included fields", "包含欄位")}</legend>
             {FIELDS.map((field) => (
               <label key={field}>
                 <input
@@ -276,7 +281,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
           </fieldset>
           <div className="form-grid">
             <label className="field">
-              Output row cap
+              {tx("Output row cap", "輸出列數上限")}
               <select
                 value={maxRows}
                 onChange={(event) => setMaxRows(Number(event.target.value))}
@@ -287,7 +292,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               </select>
             </label>
             <label className="field">
-              Format
+              {tx("Format", "格式")}
               <select
                 value={format}
                 onChange={(event) => setFormat(event.target.value as ExportFormat)}
@@ -295,12 +300,12 @@ export function DatasetBuilder({data}: {data: AppData}) {
                 <option value="csv">CSV</option>
                 <option value="tsv">TSV</option>
                 <option value="json">JSON</option>
-                <option value="jsonl">JSON Lines</option>
-                <option value="parquet">Parquet via DuckDB-Wasm</option>
-                <option value="plain">Plain text</option>
-                <option value="interlinear">Interlinear text</option>
-                <option value="audio">Audio references</option>
-                <option value="recipe">Reproducible recipe</option>
+                <option value="jsonl">{tx("JSON Lines", "JSON 行格式")}</option>
+                <option value="parquet">{tx("Parquet via DuckDB-Wasm", "透過 DuckDB-Wasm 產生 Parquet")}</option>
+                <option value="plain">{tx("Plain text", "純文字")}</option>
+                <option value="interlinear">{tx("Interlinear text", "逐行對譯文字")}</option>
+                <option value="audio">{tx("Audio references", "音訊參照")}</option>
+                <option value="recipe">{tx("Reproducible recipe", "可重現操作配方")}</option>
               </select>
             </label>
           </div>
@@ -310,7 +315,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               disabled={!languageId || Boolean(busy)}
               onClick={runPreview}
             >
-              {busy === "preview" ? "Loading preview…" : "Preview"}
+              {busy === "preview" ? tx("Loading preview…", "載入預覽中…") : tx("Preview", "預覽")}
             </button>
             <button
               className="button button--primary"
@@ -323,72 +328,70 @@ export function DatasetBuilder({data}: {data: AppData}) {
               }
               onClick={runExport}
             >
-              {busy === "export" ? "Preparing export…" : "Download"}
+              {busy === "export" ? tx("Preparing export…", "準備匯出中…") : tx("Download", "下載")}
             </button>
             {busy && (
               <button className="text-button" onClick={() => controller.current?.abort()}>
-                Cancel
+                {tx("Cancel", "取消")}
               </button>
             )}
           </div>
         </div>
         <aside className="builder__estimate">
-          <p className="eyebrow">Selection estimate</p>
+          <p className="eyebrow">{tx("Selection estimate", "選取範圍估算")}</p>
           <dl>
             <div>
-              <dt>Source sentences in scope</dt>
-              <dd>{estimate.records.toLocaleString()}</dd>
+              <dt>{tx("Source sentences in scope", "範圍內來源句子")}</dt>
+              <dd>{number(estimate.records)}</dd>
             </div>
             <div>
-              <dt>Network transfer</dt>
+              <dt>{tx("Network transfer", "網路傳輸量")}</dt>
               <dd>{size(estimate.compressedBytes)}</dd>
             </div>
             <div>
-              <dt>Decoded input</dt>
+              <dt>{tx("Decoded input", "解碼後輸入量")}</dt>
               <dd>{size(estimate.uncompressedBytes)}</dd>
             </div>
             <div>
-              <dt>{recordUnit} row bound</dt>
-              <dd>{Math.min(maxRows, estimate.records).toLocaleString()} rows</dd>
+              <dt>{recordUnit} {tx("row bound", "列數上限")}</dt>
+              <dd>{number(Math.min(maxRows, estimate.records))} {tx("rows", "列")}</dd>
             </div>
           </dl>
           <p>
-            The estimate covers source shards, not the final file. Queries may return fewer
-            rows. Word, morpheme, token, and audio totals are known after the bounded source
-            records load. Ordering follows source path and tier order.
+            {tx(
+              "The estimate covers source shards, not the final file. Queries may return fewer rows. Word, morpheme, token, and audio totals are known after the bounded source records load. Ordering follows source path and tier order.",
+              "估算涵蓋來源分片，而非最終檔案。查詢可能傳回較少列數。詞、語素、詞元與音訊總數會在載入有界限的來源記錄後確定；排列順序依來源路徑與層級順序。",
+            )}
           </p>
           {overMemoryBudget && (
             <p className="callout callout--warning">
-              This scope exceeds the 1 GiB browser safety limit. Narrow it or use a prepared
-              download.
+              {tx("This scope exceeds the 1 GiB browser safety limit. Narrow it or use a prepared download.", "此範圍超過瀏覽器 1 GiB 安全限制。請縮小範圍或使用預備下載檔案。")}
             </p>
           )}
           {blockedRights.length > 0 && (
             <p className="callout callout--warning">
-              Data export is disabled because at least one corpus does not have a reviewed
-              redistribution decision. A recipe may still be saved.
+              {tx("Data export is disabled because at least one corpus does not have a reviewed redistribution decision. A recipe may still be saved.", "至少一個語料庫尚無經審查的再散布決定，因此停用資料匯出；仍可儲存操作配方。")}
             </p>
           )}
-          <Link to="/downloads">Browse prepared packages →</Link>
+          <Link to="/downloads">{tx("Browse prepared packages →", "瀏覽預備套件 →")}</Link>
         </aside>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
       {preview.length > 0 && (
         <div className="builder__preview">
-          <h2>Preview in deterministic source order</h2>
+          <h2>{tx("Preview in deterministic source order", "依可重現來源順序預覽")}</h2>
           <p>
-            Showing {preview.length.toLocaleString()} projected {recordUnit} row
-            {preview.length === 1 ? "" : "s"}. Empty units mean the selected source lacks that
-            structure.
+            {tx("Showing", "顯示")} {number(preview.length)} {tx("projected", "筆投影的")}{" "}
+            {recordUnit} {tx("rows. Empty units mean the selected source lacks that structure.", "列。空白單位表示所選來源缺少該結構。")}
           </p>
           <div className="table-scroll" tabIndex={0}>
             <table>
               <thead>
                 <tr>
-                  <th>Source form</th>
-                  <th>Translation</th>
-                  <th>Corpus</th>
-                  <th>Locator</th>
+                  <th>{tx("Source form", "來源形式")}</th>
+                  <th>{tx("Translation", "翻譯")}</th>
+                  <th>{tx("Corpus", "語料庫")}</th>
+                  <th>{tx("Locator", "定位資訊")}</th>
                 </tr>
               </thead>
               <tbody>

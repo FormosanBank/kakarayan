@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState, type FormEvent} from "react";
 
 import {translate, type ServiceStage, type TranslationRequest} from "../modelServices";
+import {useI18n} from "../i18n";
 import type {ModelCatalog} from "../types";
 
 const directions: TranslationRequest["direction"][] = [
@@ -29,6 +30,7 @@ const languages = [
 ];
 
 export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
+  const {number, tx} = useI18n();
   const [text, setText] = useState("");
   const [direction, setDirection] =
     useState<TranslationRequest["direction"]>("English → Formosan");
@@ -68,11 +70,11 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") {
         setStage("cancelled");
-        setStatus("Request cancelled. Your input remains in this browser.");
+        setStatus(tx("Request cancelled. Your input remains in this browser.", "已取消請求。輸入內容仍保留在此瀏覽器。"));
       } else {
         setStage("error");
         setStatus(
-          `${cause instanceof Error ? cause.message : String(cause)} Use corpus translation search while the public service is unavailable.`,
+          `${cause instanceof Error ? cause.message : String(cause)} ${tx("Use corpus translation search while the public service is unavailable.", "公開服務無法使用時，請改用語料翻譯搜尋。")}`,
         );
       }
     }
@@ -82,19 +84,21 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
     <section className="model-tool" aria-labelledby="translation-heading">
       <div className="tool-heading">
         <div>
-          <p className="eyebrow">Optional public service</p>
-          <h3 id="translation-heading">Machine translation</h3>
+          <p className="eyebrow">{tx("Optional public service", "選用公開服務")}</p>
+          <h3 id="translation-heading">{tx("Machine translation", "機器翻譯")}</h3>
         </div>
         <span className="status status--unchecked">{service?.status ?? "unavailable"}</span>
       </div>
       <p>
-        Results are machine-generated drafts, not reviewed Amis. Corpus translation search
-        remains available when this service is asleep.
+        {tx(
+          "Results are machine-generated drafts, not reviewed Amis. Corpus translation search remains available when this service is asleep.",
+          "結果是機器產生的草稿，並非經審查的阿美語。此服務休眠時，語料翻譯搜尋仍可使用。",
+        )}
       </p>
       <form onSubmit={submit}>
         <div className="tool-grid">
           <label className="field">
-            Direction
+            {tx("Direction", "方向")}
             <select
               value={direction}
               onChange={(event) =>
@@ -102,12 +106,19 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
               }
             >
               {directions.map((value) => (
-                <option key={value}>{value}</option>
+                <option key={value} value={value}>
+                  {{
+                    "Formosan → English": tx("Formosan → English", "南島語 → 英文"),
+                    "English → Formosan": tx("English → Formosan", "英文 → 南島語"),
+                    "Formosan → Chinese": tx("Formosan → Chinese", "南島語 → 中文"),
+                    "Chinese → Formosan": tx("Chinese → Formosan", "中文 → 南島語"),
+                  }[value]}
+                </option>
               ))}
             </select>
           </label>
           <label className="field">
-            Formosan language
+            {tx("Formosan language", "臺灣南島語")}
             <select value={language} onChange={(event) => setLanguage(event.target.value)}>
               {languages.map((value) => (
                 <option key={value}>{value}</option>
@@ -115,26 +126,26 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
             </select>
           </label>
           <label className="field">
-            Dialect
+            {tx("Dialect", "方言")}
             <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
-              <option>Default / unknown</option>
-              <option>Coastal</option>
-              <option>Hengchun</option>
-              <option>Malan</option>
-              <option>Southern</option>
-              <option>Xiuguluan</option>
+              <option value="Default / unknown">{tx("Default / unknown", "預設／未知")}</option>
+              <option value="Coastal">{tx("Coastal", "海岸")}</option>
+              <option value="Hengchun">{tx("Hengchun", "恆春")}</option>
+              <option value="Malan">{tx("Malan", "馬蘭")}</option>
+              <option value="Southern">{tx("Southern", "南勢")}</option>
+              <option value="Xiuguluan">{tx("Xiuguluan", "秀姑巒")}</option>
             </select>
           </label>
         </div>
         <label className="field">
-          Text
+          {tx("Text", "文字")}
           <textarea
             value={text}
             onChange={(event) => setText(event.target.value)}
             maxLength={1500}
             rows={5}
           />
-          <small>{text.length}/1500 characters</small>
+          <small>{number(text.length)}/1,500 {tx("characters", "字元")}</small>
         </label>
         <label className="consent">
           <input
@@ -143,8 +154,10 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
             onChange={(event) => setConsent(event.target.checked)}
           />
           <span>
-            Send this text directly to the public FormosanBank Space on Hugging Face. Hugging
-            Face may process infrastructure logs under its terms.
+            {tx(
+              "Send this text directly to the public FormosanBank Space on Hugging Face. Hugging Face may process infrastructure logs under its terms.",
+              "將此文字直接傳送到 Hugging Face 上公開的 FormosanBank Space。Hugging Face 可能依其條款處理基礎設施日誌。",
+            )}
           </span>
         </label>
         <div className="button-row">
@@ -152,7 +165,7 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
             className="button button--primary"
             disabled={!consent || !text.trim() || !["idle", "complete", "cancelled", "error"].includes(stage)}
           >
-            Translate
+            {tx("Translate", "翻譯")}
           </button>
           {!["idle", "complete", "cancelled", "error"].includes(stage) && (
             <button
@@ -160,7 +173,7 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
               type="button"
               onClick={() => controller.current?.abort()}
             >
-              Cancel
+              {tx("Cancel", "取消")}
             </button>
           )}
         </div>
@@ -172,7 +185,7 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
       )}
       {result && (
         <div className="machine-output">
-          <span>Machine output</span>
+          <span>{tx("Machine output", "機器輸出")}</span>
           <p>{result}</p>
           {metadata && <small>{metadata}</small>}
         </div>
@@ -180,4 +193,3 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
     </section>
   );
 }
-

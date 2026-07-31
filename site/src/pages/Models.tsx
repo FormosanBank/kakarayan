@@ -17,7 +17,7 @@ function size(bytes: number | null): string {
 }
 
 export function Models({data}: {data: AppData}) {
-  const {t} = useI18n();
+  const {number, t, tx} = useI18n();
   const [task, setTask] = useState<"all" | "translation" | "automatic-speech-recognition">(
     "all",
   );
@@ -29,12 +29,14 @@ export function Models({data}: {data: AppData}) {
     <div className="page-wrap">
       <PageIntro title={t("models.title")} lede={t("models.lede")} />
       <p className="callout callout--info">
-        Model metadata comes from public Hugging Face cards. Public model cards may disclose
-        private training lineage; Kakarayan does not access or package that private data.
+        {tx(
+          "Model metadata comes from public Hugging Face cards. Public model cards may disclose private training lineage; Kakarayan does not access or package that private data.",
+          "模型中繼資料來自公開的 Hugging Face 模型卡。公開模型卡可能揭露私有訓練資料的來源脈絡；Kakarayan 不會存取或打包該私有資料。",
+        )}
       </p>
       <div className="segmented">
         <button aria-pressed={task === "all"} onClick={() => setTask("all")}>
-          All <span>{data.models.models.length}</span>
+          {tx("All", "全部")} <span>{number(data.models.models.length)}</span>
         </button>
         <button aria-pressed={task === "translation"} onClick={() => setTask("translation")}>
           MT
@@ -63,45 +65,46 @@ export function Models({data}: {data: AppData}) {
               </p>
               <dl>
                 <div>
-                  <dt>License</dt>
+                  <dt>{tx("License", "授權")}</dt>
                   <dd>{model.license}</dd>
                 </div>
                 <div>
-                  <dt>Updated</dt>
-                  <dd>{model.last_modified?.slice(0, 10) ?? "unknown"}</dd>
+                  <dt>{tx("Updated", "更新日期")}</dt>
+                  <dd>{model.last_modified?.slice(0, 10) ?? tx("unknown", "未知")}</dd>
                 </div>
                 <div>
-                  <dt>Languages</dt>
-                  <dd>{model.languages.length}</dd>
+                  <dt>{tx("Languages", "語言")}</dt>
+                  <dd>{number(model.languages.length)}</dd>
                 </div>
                 <div>
-                  <dt>Framework</dt>
+                  <dt>{tx("Framework", "框架")}</dt>
                   <dd>{model.framework}</dd>
                 </div>
                 <div>
-                  <dt>Model family</dt>
+                  <dt>{tx("Model family", "模型系列")}</dt>
                   <dd>{model.model_family}</dd>
                 </div>
                 <div>
-                  <dt>Repository size</dt>
+                  <dt>{tx("Repository size", "儲存庫大小")}</dt>
                   <dd>{size(model.artifact_bytes)}</dd>
                 </div>
                 <div>
-                  <dt>Browser tool</dt>
-                  <dd>{service ? service.status : "not registered"}</dd>
+                  <dt>{tx("Browser tool", "瀏覽器工具")}</dt>
+                  <dd>{service ? service.status : tx("not registered", "未登錄")}</dd>
                 </div>
               </dl>
               <p>
-                <strong>Intended use from metadata:</strong> {model.intended_use}
+                <strong>{tx("Intended use from metadata:", "中繼資料所載預定用途：")}</strong>{" "}
+                {model.intended_use}
               </p>
               <p>
-                <strong>License evidence:</strong> {model.license_source}
+                <strong>{tx("License evidence:", "授權證據：")}</strong> {model.license_source}
               </p>
               {model.training_lineage && <p className="lineage">{model.training_lineage}</p>}
               <p>{model.limitations}</p>
               {model.evaluation_metrics.length > 0 && (
                 <details>
-                  <summary>Structured evaluation metrics</summary>
+                  <summary>{tx("Structured evaluation metrics", "結構化評估指標")}</summary>
                   <ul>
                     {model.evaluation_metrics.map((metric, index) => (
                       <li key={`${metric.name}-${index}`}>
@@ -113,18 +116,19 @@ export function Models({data}: {data: AppData}) {
               )}
               <div className="model-card__links">
                 <a href={model.url} target="_blank" rel="noreferrer">
-                  Public model card
+                  {tx("Public model card", "公開模型卡")}
                 </a>
                 <a
                   href={`https://github.com/FormosanBank/kakarayan/issues/new?title=${encodeURIComponent(
                     `Model metadata: ${model.repository}`,
                   )}`}
                 >
-                  Report metadata problem
+                  {tx("Report metadata problem", "回報中繼資料問題")}
                 </a>
               </div>
               <small>
-                Service check: {service?.checked_at ?? "not automatically checked in this release"}
+                {tx("Service check:", "服務檢查：")}{" "}
+                {service?.checked_at ?? tx("not automatically checked in this release", "此版本未自動檢查")}
               </small>
             </article>
           );
@@ -132,11 +136,14 @@ export function Models({data}: {data: AppData}) {
       </div>
       {!models.length && (
         <div className="empty-state">
-          No public models were registered in this release. Corpus tools still work.
+          {tx(
+            "No public models were registered in this release. Corpus tools still work.",
+            "此版本沒有登錄公開模型，語料工具仍可正常使用。",
+          )}
         </div>
       )}
       <section className="service-register">
-        <h2>Optional public services</h2>
+        <h2>{tx("Optional public services", "選用公開服務")}</h2>
         {data.models.services.map((service) => (
           <article key={service.id}>
             <div>
@@ -144,7 +151,7 @@ export function Models({data}: {data: AppData}) {
               <p>{service.third_party_notice}</p>
             </div>
             <StatusBadge value={service.status} />
-            <a href={service.url}>Open Space</a>
+            <a href={service.url}>{tx("Open Space", "開啟 Space")}</a>
           </article>
         ))}
       </section>

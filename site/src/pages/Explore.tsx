@@ -6,7 +6,7 @@ import {Link} from "../routing";
 import type {AppData} from "../types";
 
 export function Explore({data}: {data: AppData}) {
-  const {locale, t} = useI18n();
+  const {locale, number, t, tx} = useI18n();
   const [view, setView] = useState<"languages" | "corpora">("languages");
   const [filter, setFilter] = useState("");
   const rights = useMemo(
@@ -20,19 +20,23 @@ export function Explore({data}: {data: AppData}) {
       <div className="explore-toolbar">
         <div className="segmented">
           <button aria-pressed={view === "languages"} onClick={() => setView("languages")}>
-            Languages <span>{data.languages.length}</span>
+            {tx("Languages", "語言")} <span>{number(data.languages.length)}</span>
           </button>
           <button aria-pressed={view === "corpora"} onClick={() => setView("corpora")}>
-            Corpora <span>{data.corpora.length}</span>
+            {tx("Corpora", "語料庫")} <span>{number(data.corpora.length)}</span>
           </button>
         </div>
         <label className="field field--compact">
-          <span className="sr-only">Filter {view}</span>
+          <span className="sr-only">
+            {view === "languages" ? tx("Filter languages", "篩選語言") : tx("Filter corpora", "篩選語料庫")}
+          </span>
           <input
             type="search"
             value={filter}
             onChange={(event) => setFilter(event.target.value)}
-            placeholder={`Filter ${view}…`}
+            placeholder={
+              view === "languages" ? tx("Filter languages…", "篩選語言…") : tx("Filter corpora…", "篩選語料庫…")
+            }
           />
         </label>
       </div>
@@ -53,12 +57,12 @@ export function Explore({data}: {data: AppData}) {
                 </p>
                 <h2>{language.name}</h2>
                 <p>
-                  ISO <code>{language.iso639_3}</code>
+                  {tx("ISO", "ISO 代碼")} <code>{language.iso639_3}</code>
                 </p>
                 <p>
                   {language.dialects.length
                     ? language.dialects.slice(0, 4).join(" · ")
-                    : "No dialect label supplied"}
+                    : tx("No dialect label supplied", "未提供方言標籤")}
                 </p>
                 <div className="capabilities">
                   {language.capabilities.map((capability) => (
@@ -67,15 +71,17 @@ export function Explore({data}: {data: AppData}) {
                 </div>
                 <dl className="mini-stats">
                   <div>
-                    <dt>Sentences</dt>
-                    <dd>{(language.counts.sentences ?? 0).toLocaleString()}</dd>
+                    <dt>{tx("Sentences", "句子")}</dt>
+                    <dd>{number(language.counts.sentences ?? 0)}</dd>
                   </div>
                   <div>
-                    <dt>Tokens</dt>
-                    <dd>{(language.counts.tokens ?? 0).toLocaleString()}</dd>
+                    <dt>{tx("Tokens", "詞元")}</dt>
+                    <dd>{number(language.counts.tokens ?? 0)}</dd>
                   </div>
                 </dl>
-                <Link to={`/languages/${language.id}`}>Language details →</Link>
+                <Link to={`/languages/${language.id}`}>
+                  {tx("Language details →", "語言詳細資料 →")}
+                </Link>
               </article>
             ))}
         </div>
@@ -99,25 +105,27 @@ export function Explore({data}: {data: AppData}) {
                   </div>
                   <dl className="mini-stats">
                     <div>
-                      <dt>Texts</dt>
-                      <dd>{(corpus.counts.texts ?? 0).toLocaleString()}</dd>
+                      <dt>{tx("Texts", "文本")}</dt>
+                      <dd>{number(corpus.counts.texts ?? 0)}</dd>
                     </div>
                     <div>
-                      <dt>Sentences</dt>
-                      <dd>{(corpus.counts.sentences ?? 0).toLocaleString()}</dd>
+                      <dt>{tx("Sentences", "句子")}</dt>
+                      <dd>{number(corpus.counts.sentences ?? 0)}</dd>
                     </div>
                     <div>
-                      <dt>Audio refs</dt>
-                      <dd>{(corpus.counts.audio ?? 0).toLocaleString()}</dd>
+                      <dt>{tx("Audio refs", "音訊參照")}</dt>
+                      <dd>{number(corpus.counts.audio ?? 0)}</dd>
                     </div>
                   </dl>
                   <div className="corpus-actions">
                     <StatusBadge value={policy?.redistribution ?? "review_required"} />
-                    <Link to={`/corpora/${corpus.id}`}>Corpus details →</Link>
+                    <Link to={`/corpora/${corpus.id}`}>
+                      {tx("Corpus details →", "語料庫詳細資料 →")}
+                    </Link>
                     <a
                       href={`https://github.com/FormosanBank/FormosanBank/tree/${data.meta.source.commit}/${corpus.source_path}`}
                     >
-                      Source
+                      {tx("Source", "來源")}
                     </a>
                   </div>
                 </article>

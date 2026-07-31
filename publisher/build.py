@@ -6,6 +6,7 @@ import csv
 import gzip
 import hashlib
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -22,7 +23,7 @@ from typing import Any, TextIO, cast
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
-from publisher import SCHEMA_VERSION
+from publisher import API_VERSION, APPLICATION_VERSION, SCHEMA_VERSION
 from publisher.languages import language_rows
 from publisher.orthography import build_orthography_catalog
 from publisher.prepared import build_prepared_formats
@@ -31,6 +32,8 @@ from publisher.tables import TABLE_COLUMNS, sqlite_type
 from publisher.xml_records import Projection, discover_xml, project_xml
 
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+_API_BASE = "https://formosanbank.github.io/kakarayan/api/v1"
+_APPLICATION_REPOSITORY = "FormosanBank/kakarayan"
 
 
 class BuildError(RuntimeError):
@@ -86,6 +89,46 @@ def inspect_source(repo: Path, expected_commit: str | None = None) -> Source:
         commit=commit,
         committed_at=committed_at,
     )
+
+
+def inspect_application_commit(expected_commit: str | None = None) -> str:
+    """Resolve the exact Kakarayan revision that produced publication bytes."""
+    commit = (
+        expected_commit
+        or os.environ.get("KAKARAYAN_COMMIT")
+        or os.environ.get("GITHUB_SHA")
+        or _git(Path(__file__).resolve().parents[1], "rev-parse", "HEAD")
+    ).lower()
+    if not _COMMIT_RE.fullmatch(commit):
+        raise BuildError(f"Invalid Kakarayan commit: {commit!r}")
+    return commit
+
+
+def _api_envelope(
+    endpoint: str,
+    data: object,
+    *,
+    release_id: str,
+    generated_at: str,
+    source: Source,
+    application_commit: str,
+) -> dict[str, object]:
+    path = f"{endpoint}.json"
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "api_version": API_VERSION,
+        "endpoint": endpoint,
+        "generated_at": generated_at,
+        "kakarayan": {
+            "repository": _APPLICATION_REPOSITORY,
+            "version": APPLICATION_VERSION,
+            "commit": application_commit,
+        },
+        "source": {"repository": source.repository, "commit": source.commit},
+        "release_id": release_id,
+        "canonical_url": f"{_API_BASE}/{path}",
+        "data": data,
+    }
 
 
 def _timestamp(value: str) -> datetime:
@@ -336,6 +379,7 @@ def _build_catalog(
     source: Source,
     release_id: str,
     generated_at: str,
+    application_commit: str,
     rights: dict[str, object],
 ) -> dict[str, object]:
     corpus_counts, language_counts = _scope_counts(connection)
@@ -403,6 +447,11 @@ def _build_catalog(
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,
         "generated_at": generated_at,
+        "kakarayan": {
+            "repository": _APPLICATION_REPOSITORY,
+            "version": APPLICATION_VERSION,
+            "commit": application_commit,
+        },
         "source": {"repository": source.repository, "commit": source.commit},
         "languages": languages,
         "corpora": corpora,
@@ -954,6 +1003,7 @@ def build_release(
     site_only: bool = False,
     compress_database: bool = False,
     release_only: bool = False,
+    application_commit: str | None = None,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
     if site_only and include_prepared:
@@ -964,6 +1014,7 @@ def build_release(
         raise BuildError("A release-only build requires prepared formats and a compressed database")
     repo = repo.resolve()
     source = inspect_source(repo, expected_commit)
+    kakarayan_commit = inspect_application_commit(application_commit)
     output = output.resolve()
     _prepare_output(output)
     schema_dir = schemas or Path(__file__).resolve().parents[1] / "schemas"
@@ -1024,6 +1075,7 @@ def build_release(
             source=source,
             release_id=release_id,
             generated_at=generated_at,
+            application_commit=kakarayan_commit,
             rights=rights,
         )
         search_manifest = _write_search_data(
@@ -1031,18 +1083,18 @@ def build_release(
             output,
             release_id=release_id,
         )
+        meta = _api_envelope(
+            "meta",
+            {"current_release": release_id},
+            release_id=release_id,
+            generated_at=generated_at,
+            source=source,
+            application_commit=kakarayan_commit,
+        )
         _add_publication_metadata(
             connection,
             {
-                "meta": {
-                    "schema_version": SCHEMA_VERSION,
-                    "release_id": release_id,
-                    "generated_at": generated_at,
-                    "source": {
-                        "repository": source.repository,
-                        "commit": source.commit,
-                    },
-                },
+                "meta": meta,
                 "languages": catalog["languages"],
                 "corpora": catalog["corpora"],
                 "rights": rights,
@@ -1057,22 +1109,30 @@ def build_release(
         connection.close()
 
     api = output / "api" / "v1"
-    _write_json(
-        api / "meta.json",
-        {
-            "schema_version": SCHEMA_VERSION,
-            "release_id": release_id,
-            "generated_at": generated_at,
-            "source": {"repository": source.repository, "commit": source.commit},
-        },
-    )
-    _write_json(api / "languages.json", catalog["languages"])
-    _write_json(api / "corpora.json", catalog["corpora"])
-    _write_json(api / "rights.json", rights)
-    _write_json(api / "models.json", models)
-    _write_json(api / "orthography.json", orthography)
-    _write_json(api / "content.json", content)
-    _write_json(api / "search" / "manifest.json", search_manifest)
+    api_payloads: dict[str, object] = {
+        "meta": {"current_release": release_id},
+        "languages": catalog["languages"],
+        "corpora": catalog["corpora"],
+        "rights": rights,
+        "models": models,
+        "orthography": orthography,
+        "content": content,
+        "search/manifest": search_manifest,
+    }
+    api_documents = {
+        endpoint: _api_envelope(
+            endpoint,
+            data,
+            release_id=release_id,
+            generated_at=generated_at,
+            source=source,
+            application_commit=kakarayan_commit,
+        )
+        for endpoint, data in api_payloads.items()
+    }
+    for endpoint, document in api_documents.items():
+        _write_json(api / f"{endpoint}.json", document)
+        validate_document(document, schema_dir / "static-api.schema.json")
     _write_json(output / "catalog.json", catalog)
     _write_json(output / "rights.json", rights)
     _write_json(output / "models.json", models)
@@ -1201,8 +1261,17 @@ def build_release(
         ],
     }
     if not release_only:
-        _write_json(api / "downloads.json", downloads)
-        _write_json(api / "releases.json", releases)
+        for endpoint, data in (("downloads", downloads), ("releases", releases)):
+            document = _api_envelope(
+                endpoint,
+                data,
+                release_id=release_id,
+                generated_at=generated_at,
+                source=source,
+                application_commit=kakarayan_commit,
+            )
+            _write_json(api / f"{endpoint}.json", document)
+            validate_document(document, schema_dir / "static-api.schema.json")
         for path in (api / "downloads.json", api / "releases.json"):
             artifacts.append(
                 _artifact(
@@ -1218,6 +1287,11 @@ def build_release(
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,
         "generated_at": generated_at,
+        "kakarayan": {
+            "repository": _APPLICATION_REPOSITORY,
+            "version": APPLICATION_VERSION,
+            "commit": kakarayan_commit,
+        },
         "source": {"repository": source.repository, "commit": source.commit},
         "counts": catalog["counts"],
         "formats": prepared_summary,
