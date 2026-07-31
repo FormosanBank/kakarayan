@@ -100,6 +100,7 @@ export function Downloads({data}: {data: AppData}) {
           <select value={format} onChange={(event) => setFormat(event.target.value)}>
             <option value="all">All prepared formats</option>
             <option value=".zip">ZIP packages</option>
+            <option value=".gz">SQLite gzip</option>
             <option value=".parquet">Parquet</option>
             <option value=".xlsx">XLSX</option>
           </select>
@@ -154,7 +155,10 @@ export function Downloads({data}: {data: AppData}) {
           </article>
           <article>
             <h3>SQLite</h3>
-            <p>Portable relational snapshot for SQL, R, Python, Datasette, and local APIs.</p>
+            <p>
+              Gzip-compressed portable relational snapshot for SQL, R, Python, Datasette,
+              and local APIs.
+            </p>
           </article>
           <article>
             <h3>JSON Lines</h3>

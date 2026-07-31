@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type PropsWithChildren,
@@ -160,9 +161,11 @@ export function I18nProvider({children}: PropsWithChildren) {
   const [locale, updateLocale] = useState<Locale>(initialLocale);
   const setLocale = useCallback((next: Locale) => {
     window.localStorage.setItem("kakarayan-locale", next);
-    document.documentElement.lang = next;
     updateLocale(next);
   }, []);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   const value = useMemo<I18nContextValue>(
     () => ({locale, setLocale, t: (key) => messages[locale][key]}),
     [locale, setLocale],
@@ -175,4 +178,3 @@ export function useI18n(): I18nContextValue {
   if (!value) throw new Error("useI18n must be used within I18nProvider");
   return value;
 }
-

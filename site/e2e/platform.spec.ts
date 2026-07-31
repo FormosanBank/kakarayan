@@ -33,6 +33,17 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   );
 });
 
+test("Traditional Chinese navigation updates content and document language", async ({page}) => {
+  await page.goto("");
+  await page.getByLabel("Interface language").selectOption("zh-Hant");
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hant");
+  await expect(page.getByRole("heading", {level: 1})).toContainText(
+    "仔細聆聽，深入搜尋，讓語言繼續流傳",
+  );
+  await page.getByRole("link", {name: "探索"}).click();
+  await expect(page.getByRole("heading", {level: 1})).toContainText("探索語料庫");
+});
+
 test("primary pages have no serious accessibility violations", async ({page}, testInfo) => {
   for (const [route] of routes) {
     await page.goto(route);
