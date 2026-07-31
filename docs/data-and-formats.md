@@ -194,6 +194,25 @@ uv run python -m publisher.recipe_cli \
 The runner uses the build search file when present and otherwise streams the packaged
 hierarchical JSONL.
 
+## Cross-representation reconciliation
+
+The release reconciler verifies SQLite integrity, manifest counts, and every relational
+table across CSV, TSV, flat JSONL, Parquet, and XLSX. It reconstructs the sentence-oriented
+hierarchical JSONL counts, compares duration totals, and compares one deterministic complete
+row per table across machine-readable formats. Text-owned tiers are explicit exclusions
+from the sentence hierarchy and remain fully reconciled in every flat relational format.
+
+With a clean public source checkout, it hashes every XML file in both its canonical ZIP and
+source tree. With an assembled Pages tree, it also decodes every browser search shard and
+reconciles sentence and token totals.
+
+```bash
+uv run python -m publisher.reconcile \
+  --release build/data-release \
+  --source-repo build/formosanbank-main \
+  --site build/pages
+```
+
 ## Choosing a format
 
 - Preserve and audit the source: canonical XML.

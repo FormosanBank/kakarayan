@@ -150,6 +150,9 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Wrap every static API response in one schema-validated v1 envelope with generation
   time, canonical URL, release ID, Kakarayan version and commit, and the distinct pinned
   FormosanBank source commit; update site verification and all three public clients.
+- [x] Add cross-representation reconciliation for manifest, SQLite, CSV, TSV, flat and
+  hierarchical JSONL, Parquet, XLSX, duration totals, deterministic complete-row samples,
+  canonical XML bytes, and assembled browser shard counts.
 - [x] Complete one full release-only benchmark against pinned public FormosanBank commit
   `40fd519cd82295bd7824e207990d277b871ad47f`: 487,354 sentences, 8,214,390 tokens,
   no publisher warnings, 5.4 GiB output, 9.1 GiB peak memory, and 20 minutes 28 seconds.
