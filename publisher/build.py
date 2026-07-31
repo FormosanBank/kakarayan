@@ -93,14 +93,18 @@ def inspect_source(repo: Path, expected_commit: str | None = None) -> Source:
 
 def inspect_application_commit(expected_commit: str | None = None) -> str:
     """Resolve the exact Kakarayan revision that produced publication bytes."""
+    repository = Path(__file__).resolve().parents[1]
+    head = _git(repository, "rev-parse", "HEAD").lower()
     commit = (
         expected_commit
         or os.environ.get("KAKARAYAN_COMMIT")
         or os.environ.get("GITHUB_SHA")
-        or _git(Path(__file__).resolve().parents[1], "rev-parse", "HEAD")
+        or head
     ).lower()
     if not _COMMIT_RE.fullmatch(commit):
         raise BuildError(f"Invalid Kakarayan commit: {commit!r}")
+    if commit != head:
+        raise BuildError(f"Kakarayan HEAD {head} does not match expected commit {commit}")
     return commit
 
 

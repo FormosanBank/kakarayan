@@ -156,6 +156,11 @@ def test_source_commit_must_match(public_repo: Path, tmp_path: Path) -> None:
         build_release(public_repo, tmp_path / "output", expected_commit="0" * 40)
 
 
+def test_application_commit_must_match(public_repo: Path, tmp_path: Path) -> None:
+    with pytest.raises(BuildError, match="Kakarayan HEAD"):
+        build_release(public_repo, tmp_path / "output", application_commit="0" * 40)
+
+
 def test_model_catalog_is_validated_before_corpus_projection(
     public_repo: Path,
     tmp_path: Path,
