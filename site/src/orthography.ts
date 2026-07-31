@@ -6,7 +6,6 @@ export interface OrthographyChange {
   position: number;
   ambiguous: boolean;
 }
-
 export function convertOrthography(
   text: string,
   table: OrthographyTable,
@@ -34,4 +33,3 @@ export function convertOrthography(
   }
   return {text: output, changes};
 }
-

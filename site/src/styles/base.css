@@ -22,7 +22,6 @@
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --max: 1240px;
 }
-
 * {
   box-sizing: border-box;
 }
@@ -251,4 +250,3 @@ h2 {
   background: var(--paper-light);
   font-weight: 700;
 }
-

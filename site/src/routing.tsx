@@ -12,7 +12,6 @@ interface LocationValue {
   path: string;
   search: URLSearchParams;
 }
-
 const LocationContext = createContext<LocationValue>({path: "/", search: new URLSearchParams()});
 
 function readHash(): LocationValue {
@@ -71,4 +70,3 @@ export function useSearchParams(): [
   };
   return [search, setSearch];
 }
-

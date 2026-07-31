@@ -5,7 +5,6 @@ self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(cacheName).then((cache) => cache.add("./")));
   self.skipWaiting();
 });
-
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -41,4 +40,3 @@ self.addEventListener("fetch", (event) => {
       }),
   );
 });
-
