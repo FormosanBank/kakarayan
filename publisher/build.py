@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import json
 import re
+import shutil
 import sqlite3
 import subprocess
 from collections import Counter, defaultdict
@@ -470,6 +471,7 @@ def _write_search_data(
                 "bytes": len(data),
                 "uncompressed_bytes": len(uncompressed),
                 "sha256": hashlib.sha256(data).hexdigest(),
+                "uncompressed_sha256": hashlib.sha256(uncompressed).hexdigest(),
             }
         )
         current_records = []
@@ -559,8 +561,11 @@ def build_release(
     rights_overrides: Path | None = None,
     model_catalog: dict[str, object] | None = None,
     include_prepared: bool = True,
+    site_only: bool = False,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
+    if site_only and include_prepared:
+        raise BuildError("A site-only build cannot include prepared download formats")
     repo = repo.resolve()
     source = inspect_source(repo, expected_commit)
     output = output.resolve()
@@ -695,6 +700,10 @@ def build_release(
             "aligned": {},
             "canonical_packages": 0,
         }
+    if site_only:
+        shutil.rmtree(tables_dir)
+        sqlite_path.unlink()
+        (output / "search" / "sentences.jsonl").unlink()
     rights_rows = cast(list[dict[str, object]], rights["entries"])
     rights_ids = [str(entry["id"]) for entry in rights_rows]
     rights_by_id: dict[str, Mapping[str, object]] = {
@@ -728,15 +737,6 @@ def build_release(
                 rights_entries=rights_by_id,
             )
         )
-    manifest = {
-        "schema_version": SCHEMA_VERSION,
-        "release_id": release_id,
-        "generated_at": generated_at,
-        "source": {"repository": source.repository, "commit": source.commit},
-        "counts": catalog["counts"],
-        "formats": prepared_summary,
-        "artifacts": artifacts,
-    }
     prepared_artifacts = [
         {
             **artifact,
@@ -771,6 +771,26 @@ def build_release(
     }
     _write_json(api / "downloads.json", downloads)
     _write_json(api / "releases.json", releases)
+    for path in (api / "downloads.json", api / "releases.json"):
+        artifacts.append(
+            _artifact(
+                path,
+                output,
+                scope="site-query-data",
+                rights_ids=rights_ids,
+                rights_entries=rights_by_id,
+            )
+        )
+    artifacts.sort(key=lambda artifact: str(artifact["path"]))
+    manifest = {
+        "schema_version": SCHEMA_VERSION,
+        "release_id": release_id,
+        "generated_at": generated_at,
+        "source": {"repository": source.repository, "commit": source.commit},
+        "counts": catalog["counts"],
+        "formats": prepared_summary,
+        "artifacts": artifacts,
+    }
     _write_json(output / "release-manifest.json", manifest)
     _validate(downloads, schema_dir / "downloads.schema.json")
     _validate(manifest, schema_dir / "release-manifest.schema.json")

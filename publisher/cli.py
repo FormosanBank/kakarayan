@@ -25,7 +25,12 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--no-prepared",
         action="store_true",
-        help="Skip bulk linguist formats when building the Pages search data",
+        help="Skip bulk linguist formats but keep core tables and SQLite",
+    )
+    result.add_argument(
+        "--site-only",
+        action="store_true",
+        help="Keep only static API and compressed search data for GitHub Pages",
     )
     return result
 
@@ -38,7 +43,8 @@ def main(argv: list[str] | None = None) -> int:
         args.output,
         expected_commit=args.source_commit,
         model_catalog=models,
-        include_prepared=not args.no_prepared,
+        include_prepared=not args.no_prepared and not args.site_only,
+        site_only=args.site_only,
     )
     print(
         json.dumps(

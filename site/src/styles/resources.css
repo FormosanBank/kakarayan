@@ -193,6 +193,10 @@
   background: var(--ink-dark);
 }
 
+.code-samples .eyebrow {
+  color: #f0aa99;
+}
+
 .code-samples pre {
   margin: 0;
   overflow-x: auto;
@@ -331,5 +335,4 @@
 .release-note a {
   color: white;
 }
-
 

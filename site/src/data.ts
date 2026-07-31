@@ -34,7 +34,8 @@ async function sha256(data: ArrayBuffer): Promise<string> {
 
 async function compressedJson<T>(
   url: string,
-  expectedSha256: string,
+  expectedCompressedSha256: string,
+  expectedUncompressedSha256: string,
   signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(url, {
@@ -42,21 +43,30 @@ async function compressedJson<T>(
     ...(signal ? {signal} : {}),
   });
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
-  const compressed = await response.arrayBuffer();
-  if ((await sha256(compressed)) !== expectedSha256) {
-    throw new Error(`Search shard checksum mismatch: ${url}`);
-  }
-  let text: string;
-  if ("DecompressionStream" in globalThis) {
-    const stream = new Blob([compressed])
-      .stream()
-      .pipeThrough(new DecompressionStream("gzip"));
-    text = await new Response(stream).text();
+  const received = await response.arrayBuffer();
+  const bytes = new Uint8Array(received);
+  const isGzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
+  let uncompressed: ArrayBuffer;
+  if (isGzip) {
+    if ((await sha256(received)) !== expectedCompressedSha256) {
+      throw new Error(`Search shard checksum mismatch: ${url}`);
+    }
+    if ("DecompressionStream" in globalThis) {
+      const stream = new Blob([received])
+        .stream()
+        .pipeThrough(new DecompressionStream("gzip"));
+      uncompressed = await new Response(stream).arrayBuffer();
+    } else {
+      const {gunzipSync} = await import("fflate");
+      uncompressed = gunzipSync(bytes).buffer as ArrayBuffer;
+    }
   } else {
-    const {gunzipSync, strFromU8} = await import("fflate");
-    text = strFromU8(gunzipSync(new Uint8Array(compressed)));
+    uncompressed = received;
   }
-  return JSON.parse(text) as T;
+  if ((await sha256(uncompressed)) !== expectedUncompressedSha256) {
+    throw new Error(`Search shard content checksum mismatch: ${url}`);
+  }
+  return JSON.parse(new TextDecoder().decode(uncompressed)) as T;
 }
 
 export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
@@ -130,6 +140,7 @@ async function loadShard(shard: SearchShard, signal?: AbortSignal): Promise<Sear
   const request = compressedJson<SearchRecord[]>(
     `${dataBase}${shard.path}`,
     shard.sha256,
+    shard.uncompressed_sha256,
     signal,
   );
   shardCache.set(shard.path, request);

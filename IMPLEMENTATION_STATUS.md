@@ -84,7 +84,7 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   cold-start states, and source-preserving failure behavior.
 - [x] Implement the model catalogue and static developer documentation against versioned
   generated contracts.
-- [x] Verify the frontend with lint, strict TypeScript, six unit tests, a production build,
+- [x] Verify the frontend with lint, strict TypeScript, nine unit tests, a production build,
   a zero-vulnerability npm audit, desktop interaction, mobile rendering, and browser logs.
 - [x] Implement the optional read-only FastAPI service with checksummed release acquisition,
   immutable SQLite startup, health/readiness, structured errors, exact CORS, bounded
@@ -103,14 +103,20 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   local validation, pinned-release execution, and a public-checkout fallback.
 - [x] Keep bulk packages off Pages, attach artifact-level rights decisions, and fail closed
   when a corpus redistribution conclusion remains unreviewed.
-- [ ] Implement deterministic full-data publisher and release artifacts.
-- [ ] Implement guarded CI, Pages, release, and Space workflows.
+- [x] Add host-independent compressed-shard integrity, bounded Pages output, release
+  verification, site budgets, and incremental prepared-format cleanup.
+- [x] Add desktop and mobile Playwright coverage with route, compressed search, and WCAG
+  checks. Correct the accessibility issues found by those checks.
+- [x] Implement guarded CI, Pages, draft data-release, and optional Space workflows with
+  pinned actions, least-purpose jobs, immutable source refs, rights gates, and no pull
+  request deployments.
+- [ ] Complete deterministic full-data publisher and release validation.
 - [ ] Complete full-corpus, browser, accessibility, security, and reproducibility validation.
 - [ ] Open one draft pull request and leave it unmerged.
 
 ## Next slice
 
-Commit and push the prepared-format checkpoint. Rerun the full public corpus after the first
-measurement pass identified and fixed CLDF source-text exclusions, oversized JSONL
-partitioning, and XLSX normalization memory use. Record measured output and performance
-before wiring guarded CI and deployment workflows.
+Commit and push the guarded automation checkpoint. Run the optimized publisher from a clean
+output directory against the pinned public FormosanBank commit. Verify every artifact,
+measure final and peak storage, assemble the real Pages tree, and rerun production browser
+checks before completing documentation and opening the draft pull request.

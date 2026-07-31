@@ -1,0 +1,136 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Public FormosanBank branch, tag, or commit
+        required: true
+        default: main
+        type: string
+
+concurrency:
+  group: github-pages-production
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and validate the production site
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    env:
+      SOURCE_REF: ${{ inputs.source_ref || 'main' }}
+    steps:
+      - name: Check out Kakarayan
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Require an approved software license
+        run: |
+          if [[ ! -f LICENSE && ! -f LICENSE.md ]]; then
+            echo "Production deployment is disabled until maintainers add an approved software license."
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Validate the public source ref
+        shell: bash
+        run: |
+          if [[ ! "$SOURCE_REF" =~ ^[A-Za-z0-9._/-]+$ ]] \
+            || [[ "$SOURCE_REF" == -* ]] \
+            || [[ "$SOURCE_REF" == *".."* ]] \
+            || [[ "$SOURCE_REF" == *"@{"* ]]; then
+            echo "Invalid FormosanBank source ref."
+            exit 1
+          fi
+
+      - name: Check out the exact public FormosanBank source
+        shell: bash
+        run: |
+          git init -q build/formosanbank
+          git -C build/formosanbank remote add origin \
+            https://github.com/FormosanBank/FormosanBank.git
+          git -C build/formosanbank fetch --depth=1 origin "$SOURCE_REF"
+          git -C build/formosanbank checkout --detach FETCH_HEAD
+          git -C build/formosanbank status --short
+          echo "SOURCE_COMMIT=$(git -C build/formosanbank rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Install locked dependencies
+        run: |
+          uv sync --locked --all-groups
+          npm ci --prefix site
+
+      - name: Build the static publication profile
+        run: |
+          uv run python -m publisher.cli \
+            --repo build/formosanbank \
+            --output build/pages-release \
+            --source-commit "$SOURCE_COMMIT" \
+            --refresh-models \
+            --site-only
+          uv run python -m publisher.verify_release \
+            --release build/pages-release \
+            --require-publishable-scope site-query-data
+          uv run python -m publisher.assemble_site \
+            --release build/pages-release \
+            --public site/public
+
+      - name: Test and build the production site
+        run: |
+          npm --prefix site audit --audit-level=high
+          npm --prefix site run lint
+          npm --prefix site run typecheck
+          npm --prefix site test
+          npm --prefix site run build
+          uv run python -m publisher.verify_site --site site/dist
+
+      - name: Install Chromium
+        working-directory: site
+        run: npx playwright install --with-deps chromium
+
+      - name: Run production browser checks
+        run: npm --prefix site run test:e2e
+
+      - name: Configure Pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: site/dist
+
+  deploy:
+    name: Publish GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy the validated artifact
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

@@ -61,7 +61,7 @@ export function Developers({data}: {data: AppData}) {
       <section className="code-samples">
         <div>
           <p className="eyebrow">Browser</p>
-          <pre>
+          <pre tabIndex={0}>
             <code>{`const release = await fetch(
   "${base}/meta.json"
 ).then(r => r.json());
@@ -71,7 +71,7 @@ console.log(release.release_id);`}</code>
         </div>
         <div>
           <p className="eyebrow">Python</p>
-          <pre>
+          <pre tabIndex={0}>
             <code>{`from urllib.request import urlopen
 import json
 
@@ -81,7 +81,7 @@ with urlopen("${base}/languages.json") as r:
         </div>
         <div>
           <p className="eyebrow">R</p>
-          <pre>
+          <pre tabIndex={0}>
             <code>{`languages <- jsonlite::fromJSON(
   "${base}/languages.json"
 )

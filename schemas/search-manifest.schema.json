@@ -19,7 +19,8 @@
           "records",
           "bytes",
           "uncompressed_bytes",
-          "sha256"
+          "sha256",
+          "uncompressed_sha256"
         ],
         "properties": {
           "path": {"type": "string", "pattern": "^search/shards/.+\\.json\\.gz$"},
@@ -28,7 +29,8 @@
           "records": {"type": "integer", "minimum": 1, "maximum": 1000},
           "bytes": {"type": "integer", "minimum": 1},
           "uncompressed_bytes": {"type": "integer", "minimum": 1},
-          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "uncompressed_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
         },
         "additionalProperties": false
       }

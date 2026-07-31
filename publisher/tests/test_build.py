@@ -49,6 +49,7 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert (
         search_manifest["shards"][0]["uncompressed_bytes"] > search_manifest["shards"][0]["bytes"]
     )
+    assert len(search_manifest["shards"][0]["uncompressed_sha256"]) == 64
     orthography = json.loads(
         (first.output / "api" / "v1" / "orthography.json").read_text(encoding="utf-8")
     )

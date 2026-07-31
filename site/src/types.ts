@@ -103,6 +103,7 @@ export interface SearchShard {
   bytes: number;
   uncompressed_bytes: number;
   sha256: string;
+  uncompressed_sha256: string;
 }
 
 export interface SearchManifest {

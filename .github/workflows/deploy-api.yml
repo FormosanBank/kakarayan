@@ -1,0 +1,113 @@
+name: Deploy optional Hugging Face API
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Published Kakarayan release ID, for example fb-20260730-abcdef12
+        required: true
+        type: string
+
+concurrency:
+  group: hugging-face-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate and update the public Docker Space
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    environment:
+      name: hugging-face-space
+      url: https://huggingface.co/spaces/${{ vars.HF_SPACE_REPO }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HF_SPACE_REPO: ${{ vars.HF_SPACE_REPO }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      RELEASE_ID: ${{ inputs.release_id }}
+    steps:
+      - name: Check out Kakarayan
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Require approved deployment configuration
+        shell: bash
+        run: |
+          if [[ ! -f LICENSE && ! -f LICENSE.md ]]; then
+            echo "API deployment is disabled until maintainers add an approved software license."
+            exit 1
+          fi
+          if [[ -z "$HF_SPACE_REPO" || -z "$HF_TOKEN" ]]; then
+            echo "Configure the HF_SPACE_REPO environment variable and HF_TOKEN secret."
+            exit 1
+          fi
+          if [[ ! "$HF_SPACE_REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "HF_SPACE_REPO must be an organization/name pair."
+            exit 1
+          fi
+          if [[ ! "$RELEASE_ID" =~ ^fb-[0-9]{8}-[0-9a-f]{7,12}$ ]]; then
+            echo "Invalid release ID."
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Require a published immutable data release
+        shell: bash
+        run: |
+          TAG="data-$RELEASE_ID"
+          gh release view "$TAG" \
+            --json isDraft,isPrerelease,tagName \
+            > build-release.json
+          if [[ "$(jq -r .isDraft build-release.json)" != "false" ]] \
+            || [[ "$(jq -r .isPrerelease build-release.json)" != "false" ]]; then
+            echo "The data release must be published and non-prerelease."
+            exit 1
+          fi
+          mkdir -p build/release-check
+          gh release download "$TAG" \
+            --pattern release-manifest.json \
+            --pattern formosanbank.sqlite \
+            --dir build/release-check
+          expected="$(
+            jq -r '.artifacts[] | select(.path == "formosanbank.sqlite") | .sha256' \
+              build/release-check/release-manifest.json
+          )"
+          echo "$expected  build/release-check/formosanbank.sqlite" | sha256sum --check
+
+      - name: Assemble and build the pinned Space
+        run: |
+          uv run python -m publisher.assemble_space \
+            --source api \
+            --output build/space \
+            --release-id "$RELEASE_ID"
+          docker build build/space
+
+      - name: Update the Hugging Face Space
+        shell: bash
+        run: |
+          git clone \
+            "https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO}" \
+            build/space-repo
+          rsync -a --delete --exclude .git build/space/ build/space-repo/
+          git -C build/space-repo config user.name "FormosanBank release automation"
+          git -C build/space-repo config user.email "noreply@formosanbank.org"
+          git -C build/space-repo add --all
+          if git -C build/space-repo diff --cached --quiet; then
+            echo "The Space already matches $RELEASE_ID."
+            exit 0
+          fi
+          git -C build/space-repo commit -m "Deploy Kakarayan API $RELEASE_ID"
+          git -C build/space-repo push --force-with-lease origin HEAD:main

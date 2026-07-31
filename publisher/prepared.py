@@ -111,7 +111,7 @@ def _sqlite_schema(database: Path) -> str:
         return "\n\n".join(f"-- {row['type']} {row['name']}\n{row['sql']};" for row in rows) + "\n"
 
 
-def _prepared_packages(output: Path) -> None:
+def _package_core_tables(output: Path) -> None:
     prepared = output / "prepared"
     tables = output / "tables"
     write_zip(
@@ -123,15 +123,26 @@ def _prepared_packages(output: Path) -> None:
         ((path.name, path.read_bytes()) for path in sorted(tables.glob("*.jsonl"))),
     )
     shutil.rmtree(tables)
-    for name, root in {
-        "tsv-tables.zip": prepared / "tsv",
-        "parquet-tables.zip": prepared / "parquet",
-        "text-exports.zip": prepared / "text",
-    }.items():
-        write_zip(prepared / name, directory_entries(root))
-        shutil.rmtree(root)
+
+
+def _package_directory(root: Path, destination: Path) -> None:
+    write_zip(destination, directory_entries(root))
+    shutil.rmtree(root)
+
+
+def _package_metadata(prepared: Path) -> None:
     entries: list[tuple[str, bytes]] = []
-    for name in (
+    for name, source in _metadata_files(prepared):
+        if not source.is_file():
+            raise FileNotFoundError(f"Prepared metadata is missing: {name}")
+        entries.append((name, source.read_bytes()))
+    write_zip(prepared / "metadata-and-audio.zip", entries)
+    for name, _data in entries:
+        (prepared / name).unlink()
+
+
+def _metadata_files(prepared: Path) -> list[tuple[str, Path]]:
+    names = (
         "README.txt",
         "data-dictionary.json",
         "arrow-schema.json",
@@ -139,12 +150,8 @@ def _prepared_packages(output: Path) -> None:
         "audio-manifest.tsv",
         "format-exclusions.json",
         "jsonl-manifest.json",
-    ):
-        source = prepared / name
-        entries.append((name, source.read_bytes()))
-    write_zip(prepared / "metadata-and-audio.zip", entries)
-    for name, _data in entries:
-        (prepared / name).unlink()
+    )
+    return [(name, prepared / name) for name in names]
 
 
 def build_prepared_formats(
@@ -162,8 +169,11 @@ def build_prepared_formats(
     text = prepared / "text"
     prepared.mkdir(parents=True, exist_ok=True)
 
+    _package_core_tables(output)
     write_tsv(database, tsv)
+    _package_directory(tsv, prepared / "tsv-tables.zip")
     arrow_schemas = write_parquet(database, parquet, release_id)
+    _package_directory(parquet, prepared / "parquet-tables.zip")
     jsonl_manifest = write_hierarchical_jsonl(
         database,
         prepared / "jsonl",
@@ -171,6 +181,7 @@ def build_prepared_formats(
     )
     (prepared / "jsonl-manifest.json").write_bytes(_bytes(jsonl_manifest))
     write_plain_text(database, text)
+    _package_directory(text, prepared / "text-exports.zip")
     write_audio_manifest(database, prepared / "audio-manifest.tsv")
     write_xlsx(
         database,
@@ -232,7 +243,7 @@ def build_prepared_formats(
         source_commit=source_commit,
         rights=rights,
     )
-    _prepared_packages(output)
+    _package_metadata(prepared)
     (output / "search" / "sentences.jsonl").unlink()
     for path in prepared.rglob("*"):
         if path.is_file():

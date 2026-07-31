@@ -14,7 +14,7 @@
   --moss: #637e55;
   --blue: #357787;
   --line: #cfc4af;
-  --line-dark: #aa9d83;
+  --line-dark: #746956;
   --danger: #a2322e;
   --success: #3e714c;
   --shadow: 0 20px 60px rgb(39 51 43 / 10%);
@@ -251,5 +251,4 @@ h2 {
   background: var(--paper-light);
   font-weight: 700;
 }
-
 
