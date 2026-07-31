@@ -21,10 +21,16 @@ def parser() -> argparse.ArgumentParser:
         "--kakarayan-commit",
         help="Exact 40-character Kakarayan commit that produces the release",
     )
-    result.add_argument(
+    models = result.add_mutually_exclusive_group()
+    models.add_argument(
         "--refresh-models",
         action="store_true",
         help="Read current public FormosanBank metadata from the official Hugging Face API",
+    )
+    models.add_argument(
+        "--model-catalog",
+        type=Path,
+        help="Use a previously captured public model-catalog JSON document",
     )
     result.add_argument(
         "--no-prepared",
@@ -51,7 +57,13 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
-    models = build_model_catalog() if args.refresh_models else None
+    models = (
+        build_model_catalog()
+        if args.refresh_models
+        else json.loads(args.model_catalog.read_text(encoding="utf-8"))
+        if args.model_catalog
+        else None
+    )
     result = build_release(
         args.repo,
         args.output,

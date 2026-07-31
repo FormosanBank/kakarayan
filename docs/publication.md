@@ -136,6 +136,11 @@ To rehearse all research formats, replace `--site-only` with both
 `--compress-database` and `--release-only`, then verify `build/data-release`. The live API
 verifies and expands that deterministic gzip snapshot at startup.
 
+For a repeated determinism check, capture one public model-catalog document and supply the
+same bytes to both builds with `--model-catalog path/to/models.json`. `--model-catalog` and
+`--refresh-models` are mutually exclusive. This separates external Hugging Face metadata
+changes from publisher determinism and records the exact catalogue input under test.
+
 ## Release verification
 
 `publisher.verify_release` requires:
