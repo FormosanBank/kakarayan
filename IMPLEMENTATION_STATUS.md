@@ -177,7 +177,8 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   reproducibility validation.
 - [x] Add reviewed screenshots for the English desktop home and search experiences and the
   Traditional Chinese mobile learner experience.
-- [ ] Open one draft pull request and leave it unmerged.
+- [x] Open draft pull request
+  [#1](https://github.com/FormosanBank/kakarayan/pull/1) and leave it unmerged.
 
 ## Final full-data evidence
 
@@ -262,5 +263,5 @@ Screenshots:
 
 ## Next slice
 
-Review the complete branch diff, open the one draft pull request, monitor every check, and
-fix any branch-owned failure until CI is green. Do not merge or deploy.
+Monitor every pull request check and fix any branch-owned failure until CI is green. Do
+not merge or deploy.
