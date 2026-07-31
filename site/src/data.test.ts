@@ -1,4 +1,8 @@
+import {RE2JS} from "re2js";
+
+import golden from "../../tests/fixtures/search-golden.json";
 import {indexCandidateParts, normalizeSearch, recordMatches} from "./data";
+import type {SearchMode} from "./data";
 import type {SearchIndexDocument, SearchRecord} from "./types";
 
 const record: SearchRecord = {
@@ -57,6 +61,8 @@ describe("transparent static search", () => {
   it("normalizes NFC and case without stripping contrastive letters", () => {
     expect(normalizeSearch("  FANGCALAY ")).toBe("fangcalay");
     expect(normalizeSearch("ʉ")).toBe("ʉ");
+    expect(normalizeSearch("“lima!”")).toBe("lima");
+    expect(normalizeSearch("lj'u")).toBe("lj'u");
   });
 
   it("supports source, normalized, tier, fuzzy, and meaning modes", () => {
@@ -92,5 +98,117 @@ describe("transparent static search", () => {
     expect([...indexCandidateParts(index, "fan", "prefix")]).toEqual([0]);
     expect([...indexCandidateParts(index, "eaut", "translation")]).toEqual([0]);
     expect([...indexCandidateParts(index, "limx", "fuzzy")]).toEqual([1]);
+  });
+});
+
+interface GoldenRecord {
+  id: string;
+  language_id: string;
+  corpus_id: string;
+  dialect: string;
+  xml_id: string;
+  standard: string;
+  original: string;
+  translations: Array<{text: string; xml_lang: string}>;
+  tokens: Array<{surface: string; normalized: string}>;
+  forms: Array<{text: string; normalized: string}>;
+  phonology: string[];
+  glosses: string[];
+}
+
+function searchRecord(value: GoldenRecord): SearchRecord {
+  return {
+    id: value.id,
+    text_id: `text_${value.id}`,
+    corpus_id: value.corpus_id,
+    language_id: value.language_id,
+    dialect: value.dialect,
+    source_path: `Corpora/Golden/XML/${value.id}.xml`,
+    xml_id: value.xml_id,
+    standard: value.standard,
+    original: value.original,
+    translations: value.translations.map((translation) => ({
+      ...translation,
+      kind: "",
+      version: "",
+    })),
+    tokens: value.tokens.map((token, position) => ({
+      ...token,
+      position,
+      word_id: "",
+    })),
+    forms: value.forms.map((form, position) => ({
+      ...form,
+      owner_type: "sentence",
+      owner_id: value.id,
+      position,
+      unclear: 0,
+      kind: "standard",
+      notes: "",
+    })),
+    phonology: value.phonology.map((text, position) => ({
+      owner_type: "sentence",
+      owner_id: value.id,
+      position,
+      text,
+      unclear: 0,
+      kind: "standard",
+    })),
+    tier_translations: value.glosses.map((text, position) => ({
+      owner_type: "morpheme",
+      owner_id: `${value.id}_morpheme`,
+      position,
+      text,
+      normalized: normalizeSearch(text),
+      xml_lang: "eng",
+      kind: "gloss",
+      version: "",
+      unclear: 0,
+      notes: "",
+    })),
+    words: [],
+    audio: [],
+  };
+}
+
+describe("shared golden search occurrences", () => {
+  const records = (golden.records as GoldenRecord[]).map(searchRecord);
+
+  for (const testCase of golden.cases) {
+    it(testCase.name, () => {
+      const scoped = records.filter(
+        (candidate) =>
+          (!testCase.language_ids ||
+            testCase.language_ids.includes(candidate.language_id)) &&
+          (!testCase.corpus_ids || testCase.corpus_ids.includes(candidate.corpus_id)),
+      );
+      const regex =
+        testCase.mode === "regex" ? RE2JS.compile(testCase.query.normalize("NFC")) : null;
+      const actual = scoped
+        .filter((candidate) =>
+          regex
+            ? [
+                candidate.standard,
+                candidate.original,
+                ...candidate.tokens.map((token) => token.surface),
+                ...candidate.forms.map((form) => form.text),
+                ...candidate.translations.map((translation) => translation.text),
+                ...candidate.phonology.map((phonology) => phonology.text),
+                ...candidate.tier_translations.map((translation) => translation.text),
+              ].some((value) => regex.test(value.normalize("NFC")))
+            : recordMatches(candidate, testCase.query, testCase.mode as SearchMode),
+        )
+        .map((candidate) => candidate.id)
+        .sort();
+      expect(actual).toEqual([...testCase.expected_ids].sort());
+    });
+  }
+
+  it("rejects malformed and overlong query state", async () => {
+    const {searchRecords} = await import("./data");
+    await expect(searchRecords([], "[", "regex")).rejects.toThrow("Invalid RE2 pattern");
+    await expect(searchRecords([], "x".repeat(257), "exact")).rejects.toThrow(
+      "Query is too long",
+    );
   });
 });

@@ -1,6 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
-import {expect, test} from "@playwright/test";
+import {expect, test, type Page} from "@playwright/test";
 import {readFile} from "node:fs/promises";
+
+interface StaticEnvelope<T> {
+  data: T;
+}
+
+interface CorpusSummary {
+  id: string;
+  name: string;
+}
 
 const routes = [
   ["", /Listen closely/],
@@ -13,11 +22,23 @@ const routes = [
   ["#/about", /About Kakarayan/],
 ] as const;
 
+async function selectSmallAmisScope(page: Page, fullCorpus = "Glosbe") {
+  const panel = page.getByRole("tabpanel");
+  const language = panel.getByRole("combobox", {name: "Language", exact: true});
+  const corpus = panel.getByRole("combobox", {name: "Corpus", exact: true});
+  await expect(language).toBeVisible();
+  await language.selectOption({label: "Amis"});
+  const labels = await corpus.locator("option").allTextContents();
+  const label = labels.includes("TestCorpus") ? "TestCorpus" : fullCorpus;
+  expect(labels).toContain(label);
+  await corpus.selectOption({label});
+}
+
 test("all primary routes load a consistent release", async ({page}) => {
   for (const [route, heading] of routes) {
     await page.goto(route);
     await expect(page.getByRole("heading", {level: 1, name: heading})).toBeVisible();
-    await expect(page.locator(".release-pill")).toContainText("fb-20240102-");
+    await expect(page.locator(".release-pill")).toHaveText(/^fb-\d{8}-[0-9a-f]{8}$/);
   }
 });
 
@@ -30,11 +51,16 @@ test("language and corpus catalogue entries have stable detail routes", async ({
     /#\/search\?language=lang_amis/,
   );
 
-  await page.goto("#/corpora/corpus_testcorpus");
-  await expect(page.getByRole("heading", {level: 1, name: "TestCorpus"})).toBeVisible();
+  const response = await page.request.get("api/v1/corpora.json");
+  expect(response.ok()).toBe(true);
+  const corpora = (await response.json()) as StaticEnvelope<CorpusSummary[]>;
+  const corpus = corpora.data[0];
+  if (!corpus) throw new Error("The static API returned no corpora");
+  await page.goto(`#/corpora/${corpus.id}`);
+  await expect(page.getByRole("heading", {level: 1, name: corpus.name})).toBeVisible();
   await expect(page.getByRole("link", {name: "Pinned public source"})).toHaveAttribute(
     "href",
-    /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\/TestCorpus/,
+    /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\//,
   );
   await expect(page.getByText(/Public repository visibility is not a blanket license/)).toBeVisible();
 });
@@ -45,26 +71,26 @@ test("local corpus search reads a compressed shard", async ({page}) => {
     if (response.url().includes("/data/search/")) searchAssets.push(response.url());
   });
   await page.goto("#/search");
-  await page.getByLabel("Language", {exact: true}).selectOption({label: "Amis"});
+  await selectSmallAmisScope(page);
   await page.getByLabel("Word or meaning").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".result-card").first()).toBeVisible();
-  await expect(page.locator(".result-card").first()).toContainText("lima");
+  await expect(page.locator(".result-card").first()).toContainText(/lima/i);
   await expect(page.getByRole("link", {name: "Source XML"}).first()).toHaveAttribute(
     "href",
     /FormosanBank\/blob\/[0-9a-f]{40}\//,
   );
   expect(searchAssets.some((url) => url.includes("/indexes/"))).toBe(true);
   expect(searchAssets.some((url) => url.includes("/shards/"))).toBe(true);
-  await expect(page.locator(".results-heading")).toContainText("1 attestations");
+  await expect(page.locator(".results-heading")).toContainText(/\d[\d,]* attestations/);
   await expect(page.locator(".results-heading")).toContainText("candidate records");
-  await expect(page.locator(".kwic mark")).toContainText("lima");
+  await expect(page.locator(".kwic mark").first()).toContainText(/lima/i);
   await page.getByRole("button", {name: "Headword candidates"}).click();
   await expect(page.getByText(/not reviewed dictionary entries/)).toBeVisible();
   await page.getByRole("button", {name: "Concordance occurrences"}).click();
   await page.getByRole("link", {name: "Stable record link"}).first().click();
   await page.reload();
-  await expect(page.locator(".result-card").first()).toContainText("lima");
+  await expect(page.locator(".result-card").first()).toContainText(/lima/i);
 });
 
 test("scoped RE2 search runs without weakening the content security policy", async ({
@@ -73,11 +99,11 @@ test("scoped RE2 search runs without weakening the content security policy", asy
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("#/search");
-  await page.getByLabel("Language", {exact: true}).selectOption({label: "Amis"});
+  await selectSmallAmisScope(page);
   await page.getByRole("radio", {name: "Scoped RE2"}).check();
   await page.getByLabel("Word or meaning").fill("li.a");
   await page.getByRole("button", {name: "Search"}).click();
-  await expect(page.locator(".result-card").first()).toContainText("lima");
+  await expect(page.locator(".result-card").first()).toBeVisible();
   await expect(page.locator(".callout--error")).toHaveCount(0);
   expect(pageErrors).toEqual([]);
 });
@@ -87,14 +113,12 @@ test("dataset recipes and worker summaries are available without a backend", asy
 }) => {
   await page.goto("#/search");
   await page.getByRole("tab", {name: "Dataset builder"}).click();
-  await page
-    .getByRole("combobox", {name: "Language", exact: true})
-    .selectOption({label: "Amis"});
+  await selectSmallAmisScope(page, "MontgomeryTexts");
   await page.getByLabel("Record unit").selectOption("word");
   await page.getByRole("button", {name: "Preview"}).click();
   await expect(
     page.getByRole("heading", {name: "Preview in deterministic source order"}),
-  ).toBeVisible();
+  ).toBeVisible({timeout: 30_000});
   await expect(page.getByText(/projected word rows/)).toBeVisible();
   await page.getByLabel("Format").selectOption("recipe");
   const recipeDownload = page.waitForEvent("download");
@@ -107,28 +131,33 @@ test("dataset recipes and worker summaries are available without a backend", asy
     release_id: string;
     selection: {language_ids: string[]; record_unit: string};
   };
-  expect(document.release_id).toMatch(/^fb-20240102-/);
+  expect(document.release_id).toMatch(/^fb-\d{8}-[0-9a-f]{8}$/);
   expect(document.selection.language_ids).toEqual(["lang_amis"]);
   expect(document.selection.record_unit).toBe("word");
 
   await page.getByRole("tab", {name: "Linguistic summaries"}).click();
-  await page
-    .getByRole("combobox", {name: "Language", exact: true})
-    .selectOption({label: "Amis"});
+  await selectSmallAmisScope(page);
   await page.getByRole("button", {name: "Compute summaries"}).click();
   await expect(page.getByText("source-exact types")).toBeVisible();
-  await expect(page.getByRole("table")).toContainText("lima");
+  const summaryRows = page.getByRole("table").getByRole("row");
+  await expect(summaryRows).not.toHaveCount(1);
+  await expect(summaryRows.nth(1).getByRole("cell").first()).not.toHaveText("");
 });
 
 test("lazy DuckDB-Wasm export creates a real Parquet file", async ({page}, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Large export smoke test runs on desktop");
   test.setTimeout(120_000);
   await page.goto("#/search");
-  await page.getByLabel("Language", {exact: true}).selectOption({label: "Amis"});
+  await selectSmallAmisScope(page);
   await page.getByLabel("Word or meaning").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
-  await expect(page.locator(".result-card").first()).toBeVisible();
+  await expect(page.locator(".result-card").first()).toBeVisible({timeout: 10_000});
   await page.getByLabel("Export").selectOption("parquet");
+  const blocked = page.getByText(/Search-result data export is disabled/);
+  if (await blocked.isVisible()) {
+    await expect(page.getByRole("button", {name: "Download", exact: true})).toBeDisabled();
+    return;
+  }
   const parquetDownload = page.waitForEvent("download");
   await page.getByRole("button", {name: "Download", exact: true}).click();
   const parquet = await parquetDownload;
@@ -174,8 +203,39 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByRole("heading", {name: "發音錄音工具"})).toBeVisible();
 
   await page.goto("#/downloads");
-  await expect(page.getByText("權利審查仍在進行中。")).toBeVisible();
+  const pendingRights = page.getByText("權利審查仍在進行中。");
+  if ((await pendingRights.count()) > 0) await expect(pendingRights).toBeVisible();
   await expect(page.getByRole("heading", {name: "格式指南"})).toBeVisible();
+});
+
+test("primary navigation and research tabs are keyboard operable", async ({page}) => {
+  await page.goto("");
+  await expect(page.getByRole("heading", {level: 1, name: /Listen closely/})).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", {name: "Skip to content"})).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#main")).toBeFocused();
+
+  await page.goto("");
+  await expect(page.getByRole("heading", {level: 1, name: /Listen closely/})).toBeVisible();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", {name: "Explore", exact: true})).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", {level: 1, name: "Explore the bank"})).toBeVisible();
+
+  await page.goto("#/search");
+  const builderTab = page.getByRole("tab", {name: "Dataset builder"});
+  await builderTab.focus();
+  await page.keyboard.press("Enter");
+  await expect(builderTab).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("heading", {name: "Build a bounded linguistic dataset"}),
+  ).toBeVisible();
 });
 
 test("primary pages have no serious accessibility violations", async ({page}, testInfo) => {

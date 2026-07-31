@@ -217,8 +217,17 @@ export type SearchMode =
   | "fuzzy"
   | "regex";
 
+const edgePunctuation = new Set([
+  ..." \t\n\r!\"#$%&()*+,-./:;<=>?@[\\]^_`{|}~…—–“”‘’„‚«»「」『』，。！？、；：（）〈〉《》【】",
+]);
+
 export function normalizeSearch(value: string): string {
-  return value.normalize("NFC").trim().toLocaleLowerCase();
+  const characters = [...value.normalize("NFC")];
+  let start = 0;
+  let end = characters.length;
+  while (start < end && edgePunctuation.has(characters[start] ?? "")) start += 1;
+  while (end > start && edgePunctuation.has(characters[end - 1] ?? "")) end -= 1;
+  return characters.slice(start, end).join("").toLowerCase();
 }
 
 function sourceForms(record: SearchRecord): string[] {

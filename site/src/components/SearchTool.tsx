@@ -82,6 +82,15 @@ export function SearchTool({
     () => matchingIndexes(data.search, languageId, corpusId),
     [corpusId, data.search, languageId],
   );
+  const exportBlocked = useMemo(() => {
+    const corporaById = new Map(data.corpora.map((corpus) => [corpus.id, corpus]));
+    const rightsById = new Map(data.rights.entries.map((entry) => [entry.id, entry]));
+    return records.some((record) => {
+      const corpus = corporaById.get(record.corpus_id);
+      const rights = corpus ? rightsById.get(corpus.rights_id) : undefined;
+      return rights?.redistribution !== "allowed";
+    });
+  }, [data.corpora, data.rights.entries, records]);
 
   useEffect(
     () => () => {
@@ -304,7 +313,7 @@ export function SearchTool({
               </label>
               <button
                 className="button button--quiet"
-                disabled={exporting}
+                disabled={exporting || (exportBlocked && exportFormat !== "recipe")}
                 onClick={async () => {
                   setExporting(true);
                   setError("");
@@ -330,6 +339,14 @@ export function SearchTool({
                 {exporting ? tx("Preparing…", "準備中…") : tx("Download", "下載")}
               </button>
             </div>
+          )}
+          {exportBlocked && records.length > 0 && (
+            <p className="callout callout--warning">
+              {tx(
+                "Search-result data export is disabled because one or more source corpora do not have reviewed redistribution permission. A reproducible recipe remains available.",
+                "一個或多個來源語料庫尚無經審查的再散布許可，因此停用搜尋結果資料匯出。仍可下載可重現的操作配方。",
+              )}
+            </p>
           )}
         </div>
       )}

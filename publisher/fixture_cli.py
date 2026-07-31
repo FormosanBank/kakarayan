@@ -18,6 +18,7 @@ def _run(*args: str, env: dict[str, str] | None = None) -> None:
 
 def build_fixture(output: Path, *, include_prepared: bool = False) -> None:
     fixture = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "formosanbank"
+    rights = Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "rights-overrides.json"
     with tempfile.TemporaryDirectory(prefix="kakarayan-fixture-") as temporary:
         repo = Path(temporary) / "FormosanBank"
         shutil.copytree(fixture, repo)
@@ -43,6 +44,7 @@ def build_fixture(output: Path, *, include_prepared: bool = False) -> None:
         build_release(
             repo,
             output,
+            rights_overrides=rights,
             include_prepared=include_prepared,
             site_only=not include_prepared,
         )

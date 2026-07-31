@@ -54,7 +54,9 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
           </label>
         </div>
       </header>
-      <main id="main">{children}</main>
+      <main id="main" tabIndex={-1}>
+        {children}
+      </main>
       <footer className="footer">
         <div>
           <strong>Kakarayan</strong>
