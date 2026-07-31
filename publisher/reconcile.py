@@ -25,6 +25,8 @@ from openpyxl import load_workbook
 from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS
 from publisher.verify_release import VerificationError, verify_release
 
+_DELIMITED_FIELD_LIMIT = 64 * 1024 * 1024
+
 
 class ReconciliationError(RuntimeError):
     """Raised when two generated representations disagree."""
@@ -126,30 +128,43 @@ def _delimited_archive(
     counts: dict[str, int] = {}
     found: dict[str, dict[str, Any]] = {}
     durations: list[float] = []
-    with zipfile.ZipFile(path) as archive:
-        for table in TABLE_COLUMNS:
-            name = f"{table}.{suffix}"
-            if name not in archive.namelist():
-                raise ReconciliationError(f"{path.name} has no {name}")
-            with (
-                archive.open(name) as raw,
-                io.TextIOWrapper(raw, encoding="utf-8", newline="") as stream,
-            ):
-                reader = csv.DictReader(stream, delimiter=delimiter)
-                _require_equal(
-                    f"{path.name}:{name} header",
-                    tuple(reader.fieldnames or ()),
-                    TABLE_COLUMNS[table],
-                )
-                count = 0
-                sample_id = samples.get(table, {}).get("id")
-                for row in reader:
-                    count += 1
-                    if row.get("id") == sample_id:
-                        found[table] = _coerce_row(table, row)
-                    if table == "audio" and row.get("duration") not in {None, "", r"\N"}:
-                        durations.append(float(row["duration"]))
-                counts[table] = count
+    previous_limit = csv.field_size_limit()
+    csv.field_size_limit(max(previous_limit, _DELIMITED_FIELD_LIMIT))
+    try:
+        with zipfile.ZipFile(path) as archive:
+            for table in TABLE_COLUMNS:
+                name = f"{table}.{suffix}"
+                if name not in archive.namelist():
+                    raise ReconciliationError(f"{path.name} has no {name}")
+                with (
+                    archive.open(name) as raw,
+                    io.TextIOWrapper(raw, encoding="utf-8", newline="") as stream,
+                ):
+                    reader = csv.DictReader(stream, delimiter=delimiter)
+                    _require_equal(
+                        f"{path.name}:{name} header",
+                        tuple(reader.fieldnames or ()),
+                        TABLE_COLUMNS[table],
+                    )
+                    count = 0
+                    sample_id = samples.get(table, {}).get("id")
+                    for row in reader:
+                        count += 1
+                        if row.get("id") == sample_id:
+                            found[table] = _coerce_row(table, row)
+                        if table == "audio" and row.get("duration") not in {
+                            None,
+                            "",
+                            r"\N",
+                        }:
+                            durations.append(float(row["duration"]))
+                    counts[table] = count
+    except csv.Error as error:
+        raise ReconciliationError(
+            f"{path.name} has a delimited field above {_DELIMITED_FIELD_LIMIT} characters"
+        ) from error
+    finally:
+        csv.field_size_limit(previous_limit)
     return counts, found, math.fsum(durations)
 
 
