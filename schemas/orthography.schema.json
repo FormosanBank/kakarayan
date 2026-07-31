@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/orthography.schema.json",
+  "title": "Reviewed public orthography conversion tables",
+  "type": "object",
+  "required": ["schema_version", "source_commit", "tables"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "tables": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "language", "name", "source_path", "dialects", "rules"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^orthography_"},
+          "language": {"type": "string"},
+          "name": {"type": "string"},
+          "source_path": {"type": "string", "pattern": "^Orthographies/ConversionTables/"},
+          "dialects": {"type": "array", "items": {"type": "string"}},
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["input", "outputs"],
+              "properties": {
+                "input": {"type": "string", "minLength": 1},
+                "outputs": {
+                  "type": "object",
+                  "additionalProperties": {"type": "string"}
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

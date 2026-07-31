@@ -74,10 +74,19 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Implement fail-closed rights entries and official public Hugging Face metadata
   collection.
 - [x] Add synthetic fixture publication and schema/integrity/determinism tests.
+- [x] Implement scalable language/corpus search shards, public orthography tables, release
+  discovery, and deterministic site-data assembly.
+- [x] Implement the responsive bilingual application shell, catalogues, local corpus search,
+  result export, source citations, and fail-closed download interface.
+- [x] Implement the Amis-first learner studio with local IndexedDB cards, deterministic SRS,
+  JSON backup/restore, Anki TSV export, pronunciation recording, and orthography conversion.
+- [x] Implement optional direct-browser MT and ASR adapters with consent, cancellation,
+  cold-start states, and source-preserving failure behavior.
+- [x] Implement the model catalogue and static developer documentation against versioned
+  generated contracts.
+- [x] Verify the frontend with lint, strict TypeScript, six unit tests, a production build,
+  a zero-vulnerability npm audit, desktop interaction, mobile rendering, and browser logs.
 - [ ] Implement deterministic full-data publisher and release artifacts.
-- [ ] Implement the static research and download application.
-- [ ] Implement the learner studio and offline local progress.
-- [ ] Implement MT/ASR adapters and model catalogue.
 - [ ] Implement the static API, optional live API, and clients.
 - [ ] Implement guarded CI, Pages, release, and Space workflows.
 - [ ] Complete full-corpus, browser, accessibility, security, and reproducibility validation.
@@ -85,6 +94,5 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 
 ## Next slice
 
-Commit and push the publisher foundation. Then implement the static application shell,
-fixture-data assembly, bilingual navigation, research catalogue, dictionary, learner
-workflows, and model catalogue against these contracts.
+Commit and push the static application checkpoint. Then implement the read-only FastAPI
+service and its JavaScript, Python, and R clients against the generated SQLite release.

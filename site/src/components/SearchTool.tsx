@@ -1,0 +1,279 @@
+import {useEffect, useMemo, useRef, useState, type FormEvent} from "react";
+import {matchingShards, searchRecords, type SearchMode} from "../data";
+import {useI18n} from "../i18n";
+import {Link, useSearchParams} from "../routing";
+import {cardFromRecord, saveCard} from "../study";
+import type {AppData, SearchRecord} from "../types";
+
+const VALID_MODES: SearchMode[] = ["exact", "prefix", "contains", "translation"];
+
+function csvCell(value: string): string {
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
+function downloadResults(records: SearchRecord[]) {
+  const lines = [
+    ["id", "standard", "original", "translations", "language", "corpus", "dialect", "source"],
+    ...records.map((record) => [
+      record.id,
+      record.standard,
+      record.original,
+      record.translations.map((item) => `${item.xml_lang}:${item.text}`).join(" | "),
+      record.language_id,
+      record.corpus_id,
+      record.dialect,
+      record.source_path,
+    ]),
+  ].map((row) => row.map(csvCell).join(","));
+  const url = URL.createObjectURL(
+    new Blob([`\uFEFF${lines.join("\n")}\n`], {type: "text/csv;charset=utf-8"}),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "kakarayan-search.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export function SearchTool({
+  data,
+  learner = false,
+}: {
+  data: AppData;
+  learner?: boolean;
+}) {
+  const {t} = useI18n();
+  const [params, setParams] = useSearchParams();
+  const amis = data.languages.find((language) => language.name === "Amis");
+  const initialLanguage = params.get("language") ?? (learner ? (amis?.id ?? "") : "");
+  const initialMode = params.get("mode");
+  const [query, setQuery] = useState(params.get("q") ?? "");
+  const [languageId, setLanguageId] = useState(initialLanguage);
+  const [corpusId, setCorpusId] = useState(params.get("corpus") ?? "");
+  const [mode, setMode] = useState<SearchMode>(
+    VALID_MODES.includes(initialMode as SearchMode) ? (initialMode as SearchMode) : "exact",
+  );
+  const [records, setRecords] = useState<SearchRecord[]>([]);
+  const [scanned, setScanned] = useState(0);
+  const [truncated, setTruncated] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const controller = useRef<AbortController | null>(null);
+
+  const relevantCorpora = useMemo(
+    () =>
+      data.corpora.filter(
+        (corpus) => !languageId || corpus.languages.includes(languageId),
+      ),
+    [data.corpora, languageId],
+  );
+  const shards = useMemo(
+    () => matchingShards(data.search, languageId, corpusId),
+    [corpusId, data.search, languageId],
+  );
+
+  useEffect(
+    () => () => {
+      controller.current?.abort();
+    },
+    [],
+  );
+
+  async function runSearch(event: FormEvent) {
+    event.preventDefault();
+    if (!languageId || !query.trim()) return;
+    controller.current?.abort();
+    const nextController = new AbortController();
+    controller.current = nextController;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setParams({q: query.trim(), language: languageId, ...(corpusId && {corpus: corpusId}), mode});
+    try {
+      const result = await searchRecords(
+        shards,
+        query,
+        mode,
+        nextController.signal,
+        learner ? 60 : 200,
+      );
+      setRecords(result.records);
+      setScanned(result.scanned);
+      setTruncated(result.truncated);
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      if (controller.current === nextController) setBusy(false);
+    }
+  }
+
+  async function addToDeck(record: SearchRecord) {
+    try {
+      await saveCard(cardFromRecord(record, data.meta.release_id));
+      setNotice(`${record.standard || record.original} saved locally.`);
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  return (
+    <section className={`search-tool ${learner ? "search-tool--learner" : ""}`}>
+      <form className="search-form" onSubmit={runSearch}>
+        <div className="field field--query">
+          <label htmlFor={`query-${learner ? "learn" : "research"}`}>{t("search.query")}</label>
+          <input
+            id={`query-${learner ? "learn" : "research"}`}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            autoComplete="off"
+            placeholder={learner ? "fangcalay, salikaka…" : "form, translation, gloss…"}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor={`language-${learner ? "learn" : "research"}`}>
+            {t("search.language")}
+          </label>
+          <select
+            id={`language-${learner ? "learn" : "research"}`}
+            value={languageId}
+            onChange={(event) => {
+              setLanguageId(event.target.value);
+              setCorpusId("");
+            }}
+          >
+            {!learner && <option value="">Choose…</option>}
+            {data.languages.map((language) => (
+              <option key={language.id} value={language.id}>
+                {language.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor={`corpus-${learner ? "learn" : "research"}`}>
+            {t("search.corpus")}
+          </label>
+          <select
+            id={`corpus-${learner ? "learn" : "research"}`}
+            value={corpusId}
+            onChange={(event) => setCorpusId(event.target.value)}
+          >
+            <option value="">All available</option>
+            {relevantCorpora.map((corpus) => (
+              <option key={corpus.id} value={corpus.id}>
+                {corpus.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <fieldset className="mode-picker">
+          <legend>{t("search.mode")}</legend>
+          {VALID_MODES.map((value) => (
+            <label key={value}>
+              <input
+                type="radio"
+                name={`mode-${learner ? "learn" : "research"}`}
+                checked={mode === value}
+                onChange={() => setMode(value)}
+              />
+              <span>{t(`search.${value}`)}</span>
+            </label>
+          ))}
+        </fieldset>
+        <button className="button button--primary" disabled={busy || !languageId || !query.trim()}>
+          {busy ? "Searching…" : t("search.submit")}
+        </button>
+      </form>
+
+      {!languageId && <p className="tool-note">{t("search.scope")}</p>}
+      {languageId && shards.length === 0 && (
+        <p className="callout callout--warning">
+          This release has no interactive search shard for the selected scope. Use a prepared
+          download or choose another scope.
+        </p>
+      )}
+      {error && <p className="callout callout--error">{error}</p>}
+      {notice && (
+        <p className="callout callout--success" role="status">
+          {notice}
+        </p>
+      )}
+
+      {(records.length > 0 || (!busy && scanned > 0)) && (
+        <div className="results-heading" aria-live="polite">
+          <p>
+            <strong>{records.length}</strong> {t("search.results")} · {scanned.toLocaleString()}{" "}
+            records scanned
+            {truncated && " · first 200 shown"}
+          </p>
+          {records.length > 0 && (
+            <button className="button button--quiet" onClick={() => downloadResults(records)}>
+              Download CSV
+            </button>
+          )}
+        </div>
+      )}
+
+      {!busy && scanned > 0 && records.length === 0 && (
+        <div className="empty-state">{t("search.noResults")}</div>
+      )}
+
+      <div className="result-list">
+        {records.map((record) => (
+          <article className="result-card" key={record.id}>
+            <div className="result-card__scope">
+              <span>{data.languages.find((item) => item.id === record.language_id)?.name}</span>
+              {record.dialect && <span>{record.dialect}</span>}
+              <span>{data.corpora.find((item) => item.id === record.corpus_id)?.name}</span>
+            </div>
+            <h3>{record.standard || record.original || "Untranscribed sentence"}</h3>
+            {record.original && record.original !== record.standard && (
+              <dl className="tier-pair">
+                <div>
+                  <dt>{t("search.original")}</dt>
+                  <dd lang={record.language_id}>{record.original}</dd>
+                </div>
+                <div>
+                  <dt>{t("search.standard")}</dt>
+                  <dd lang={record.language_id}>{record.standard}</dd>
+                </div>
+              </dl>
+            )}
+            <div className="translations">
+              {record.translations.map((translation, index) => (
+                <p key={`${translation.xml_lang}-${index}`} lang={translation.xml_lang}>
+                  <span>{translation.xml_lang || "translation"}</span>
+                  {translation.text}
+                </p>
+              ))}
+            </div>
+            <footer>
+              <code>{record.xml_id}</code>
+              <a
+                href={`https://github.com/FormosanBank/FormosanBank/blob/${data.meta.source.commit}/${record.source_path}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Source XML
+              </a>
+              <button className="text-button" onClick={() => addToDeck(record)}>
+                {t("search.save")}
+              </button>
+              {learner && (
+                <Link
+                  className="text-button"
+                  to={`/search?q=${encodeURIComponent(query)}&language=${record.language_id}`}
+                >
+                  {t("search.research")}
+                </Link>
+              )}
+            </footer>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}

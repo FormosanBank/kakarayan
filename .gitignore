@@ -22,6 +22,8 @@ db.sqlite3
 /build/
 /site/dist/
 /site/node_modules/
+/site/public/api/
+/site/public/data/
 /.pytest_cache/
 /.mypy_cache/
 /.ruff_cache/

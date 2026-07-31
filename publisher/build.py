@@ -21,6 +21,7 @@ from referencing import Registry, Resource
 
 from publisher import SCHEMA_VERSION
 from publisher.languages import language_rows
+from publisher.orthography import build_orthography_catalog
 from publisher.rights import build_rights_catalog
 from publisher.tables import TABLE_COLUMNS, sqlite_type
 from publisher.xml_records import Projection, discover_xml, project_xml
@@ -289,9 +290,47 @@ def _build_catalog(
     }
 
 
-def _write_search_records(connection: sqlite3.Connection, path: Path) -> None:
-    """Write a portable sentence-level search projection for fixture and small builds."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+def _search_record(connection: sqlite3.Connection, row: tuple[object, ...]) -> dict[str, object]:
+    translations = [
+        {"text": item[0], "xml_lang": item[1], "kind": item[2], "version": item[3]}
+        for item in connection.execute(
+            "SELECT text, xml_lang, kind, version FROM translations "
+            "WHERE owner_type = 'sentence' AND owner_id = ? ORDER BY position",
+            (row[0],),
+        )
+    ]
+    tokens = [
+        {"surface": item[0], "normalized": item[1], "position": item[2]}
+        for item in connection.execute(
+            "SELECT surface, normalized, position FROM tokens "
+            "WHERE sentence_id = ? ORDER BY position",
+            (row[0],),
+        )
+    ]
+    return {
+        "id": row[0],
+        "corpus_id": row[1],
+        "language_id": row[2],
+        "dialect": row[3],
+        "source_path": row[4],
+        "xml_id": row[5],
+        "standard": row[6],
+        "original": row[7],
+        "translations": translations,
+        "tokens": tokens,
+    }
+
+
+def _write_search_data(
+    connection: sqlite3.Connection,
+    output: Path,
+    *,
+    release_id: str,
+    shard_size: int = 1000,
+) -> dict[str, object]:
+    """Write portable JSONL plus bounded Pages-origin JSON shards."""
+    search_dir = output / "search"
+    search_dir.mkdir(parents=True, exist_ok=True)
     query = """
         SELECT
           s.id,
@@ -312,41 +351,56 @@ def _write_search_records(connection: sqlite3.Connection, path: Path) -> None:
           ), '')
         FROM sentences s
         JOIN texts t ON t.id = s.parent_id
-        ORDER BY t.source_path, s.position
+        ORDER BY t.language_id, t.corpus_id, t.source_path, s.position
     """
-    with path.open("w", encoding="utf-8", newline="\n") as stream:
-        for row in connection.execute(query):
-            translations = [
-                {"text": item[0], "xml_lang": item[1], "kind": item[2], "version": item[3]}
-                for item in connection.execute(
-                    "SELECT text, xml_lang, kind, version FROM translations "
-                    "WHERE owner_type = 'sentence' AND owner_id = ? ORDER BY position",
-                    (row[0],),
-                )
-            ]
-            tokens = [
-                {"surface": item[0], "normalized": item[1], "position": item[2]}
-                for item in connection.execute(
-                    "SELECT surface, normalized, position FROM tokens "
-                    "WHERE sentence_id = ? ORDER BY position",
-                    (row[0],),
-                )
-            ]
-            value = {
-                "id": row[0],
-                "corpus_id": row[1],
-                "language_id": row[2],
-                "dialect": row[3],
-                "source_path": row[4],
-                "xml_id": row[5],
-                "standard": row[6],
-                "original": row[7],
-                "translations": translations,
-                "tokens": tokens,
+    shards: list[dict[str, object]] = []
+    current_scope: tuple[str, str] | None = None
+    current_records: list[dict[str, object]] = []
+    scope_part = 0
+
+    def flush() -> None:
+        nonlocal current_records, scope_part
+        if not current_records or current_scope is None:
+            return
+        corpus_id, language_id = current_scope
+        relative = Path("search") / "shards" / language_id / corpus_id / f"{scope_part:04d}.json"
+        path = output / relative
+        _write_json(path, current_records)
+        data = path.read_bytes()
+        shards.append(
+            {
+                "path": relative.as_posix(),
+                "language_id": language_id,
+                "corpus_id": corpus_id,
+                "records": len(current_records),
+                "bytes": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
             }
+        )
+        current_records = []
+        scope_part += 1
+
+    with (search_dir / "sentences.jsonl").open("w", encoding="utf-8", newline="\n") as stream:
+        for row in connection.execute(query):
+            scope = (str(row[1]), str(row[2]))
+            if current_scope != scope:
+                flush()
+                current_scope = scope
+                scope_part = 0
+            value = _search_record(connection, row)
             stream.write(
                 json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
             )
+            current_records.append(value)
+            if len(current_records) >= shard_size:
+                flush()
+    flush()
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "release_id": release_id,
+        "record_unit": "sentence",
+        "shards": shards,
+    }
 
 
 def _artifact(path: Path, root: Path, *, scope: str, rights_ids: list[str]) -> dict[str, object]:
@@ -389,6 +443,7 @@ def build_release(
     model_catalog: dict[str, object] | None = None,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
+    repo = repo.resolve()
     source = inspect_source(repo, expected_commit)
     output = output.resolve()
     _prepare_output(output)
@@ -405,6 +460,8 @@ def build_release(
         "models": [],
         "services": [],
     }
+    models = {**models, "generated_at": generated_at}
+    orthography = build_orthography_catalog(repo, source.commit)
 
     tables_dir = output / "tables"
     tables_dir.mkdir()
@@ -448,7 +505,11 @@ def build_release(
             generated_at=generated_at,
             rights=rights,
         )
-        _write_search_records(connection, output / "search" / "sentences.jsonl")
+        search_manifest = _write_search_data(
+            connection,
+            output,
+            release_id=release_id,
+        )
     finally:
         connection.close()
 
@@ -466,13 +527,18 @@ def build_release(
     _write_json(api / "corpora.json", catalog["corpora"])
     _write_json(api / "rights.json", rights)
     _write_json(api / "models.json", models)
+    _write_json(api / "orthography.json", orthography)
+    _write_json(api / "search" / "manifest.json", search_manifest)
     _write_json(output / "catalog.json", catalog)
     _write_json(output / "rights.json", rights)
     _write_json(output / "models.json", models)
+    _write_json(output / "orthography.json", orthography)
 
     _validate(catalog, schema_dir / "catalog.schema.json")
     _validate(rights, schema_dir / "rights.schema.json")
     _validate(models, schema_dir / "model-catalog.schema.json")
+    _validate(orthography, schema_dir / "orthography.schema.json")
+    _validate(search_manifest, schema_dir / "search-manifest.schema.json")
 
     rights_ids = [str(entry["id"]) for entry in cast(list[dict[str, object]], rights["entries"])]
     artifact_paths = sorted(
@@ -495,6 +561,25 @@ def build_release(
         "counts": catalog["counts"],
         "artifacts": artifacts,
     }
+    downloads = {
+        "schema_version": SCHEMA_VERSION,
+        "release_id": release_id,
+        "artifacts": artifacts,
+    }
+    releases = {
+        "schema_version": SCHEMA_VERSION,
+        "current": release_id,
+        "releases": [
+            {
+                "id": release_id,
+                "source_commit": source.commit,
+                "generated_at": generated_at,
+                "manifest": "data/release-manifest.json",
+            }
+        ],
+    }
+    _write_json(api / "downloads.json", downloads)
+    _write_json(api / "releases.json", releases)
     _write_json(output / "release-manifest.json", manifest)
     _validate(manifest, schema_dir / "release-manifest.schema.json")
     checksum_lines = [f"{artifact['sha256']}  {artifact['path']}" for artifact in artifacts]

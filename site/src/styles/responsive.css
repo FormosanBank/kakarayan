@@ -1,0 +1,182 @@
+@media (max-width: 1080px) {
+  .topbar {
+    grid-template-columns: auto auto;
+  }
+
+  .primary-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .primary-nav a {
+    padding: 0.8rem 0 1rem;
+    white-space: nowrap;
+  }
+
+  .topbar-tools {
+    justify-self: end;
+  }
+
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero__field-card {
+    max-width: 600px;
+  }
+
+  .pathways {
+    grid-template-columns: 1fr;
+    padding: 3rem 4vw;
+  }
+
+  .pathway {
+    min-height: 300px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .pathway__index {
+    margin-bottom: 1.5rem;
+  }
+
+  .catalog-grid,
+  .model-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .studio-tabs {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .code-samples,
+  .format-guide > div {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    padding: 0.6rem 1rem 0;
+  }
+
+  .release-pill {
+    display: none;
+  }
+
+  .hero,
+  .page-wrap,
+  .collection-band {
+    padding-right: 1.1rem;
+    padding-left: 1.1rem;
+  }
+
+  .hero {
+    min-height: auto;
+    padding-top: 4rem;
+    padding-bottom: 5rem;
+  }
+
+  .page-intro h1 {
+    font-size: clamp(2.55rem, 13vw, 4rem);
+  }
+
+  .hero__field-card {
+    padding: 2.3rem 1.8rem;
+    box-shadow: 10px 10px 0 var(--gold);
+  }
+
+  .stats-grid,
+  .catalog-grid,
+  .model-grid,
+  .download-principles,
+  .api-choice,
+  .code-samples,
+  .format-guide > div {
+    grid-template-columns: 1fr;
+  }
+
+  .explore-toolbar,
+  .download-toolbar,
+  .deck-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .field--compact {
+    min-width: 0;
+  }
+
+  .corpus-list > article,
+  .artifact-list > article,
+  .endpoint-list article,
+  .service-register > article {
+    grid-template-columns: 1fr;
+  }
+
+  .corpus-actions {
+    justify-items: start;
+  }
+
+  .search-tool,
+  .study-deck,
+  .model-tool {
+    padding: 1rem;
+  }
+
+  .search-form {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-picker {
+    overflow-x: auto;
+  }
+
+  .tier-pair,
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-tabs {
+    display: flex;
+    overflow-x: auto;
+  }
+
+  .studio-tabs button {
+    min-width: 170px;
+  }
+
+  .learning-boundary {
+    grid-template-columns: 1fr;
+  }
+
+  .review-card {
+    padding: 1.5rem;
+  }
+
+  .review-card h3 {
+    margin-top: 2rem;
+  }
+
+  .grade-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .artifact-list > article > div:last-child {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .footer {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 3rem 1.2rem;
+  }
+
+  .release-note {
+    grid-template-columns: 1fr;
+  }
+}
+

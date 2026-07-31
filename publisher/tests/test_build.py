@@ -36,6 +36,21 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     amis = next(row for row in catalog["languages"] if row["name"] == "Amis")
     assert amis["counts"]["sentences"] == 2
     assert "audio" in amis["capabilities"]
+    search_manifest = json.loads(
+        (first.output / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert search_manifest["shards"][0]["records"] == 2
+    assert search_manifest["shards"][0]["language_id"] == "lang_amis"
+    orthography = json.loads(
+        (first.output / "api" / "v1" / "orthography.json").read_text(encoding="utf-8")
+    )
+    assert orthography["tables"][0]["language"] == "Amis"
+    assert orthography["tables"][0]["rules"][1]["outputs"]["Xiuguluan"] == "o"
+    downloads = json.loads(
+        (first.output / "api" / "v1" / "downloads.json").read_text(encoding="utf-8")
+    )
+    assert downloads["release_id"] == first.release_id
+    assert any(item["path"] == "formosanbank.sqlite" for item in downloads["artifacts"])
 
     with closing(sqlite3.connect(first.output / "formosanbank.sqlite")) as database:
         assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)
