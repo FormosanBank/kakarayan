@@ -42,6 +42,26 @@ describe("local study scheduling", () => {
     expect(next.dueAt).toBe("2026-01-01T00:10:00.000Z");
   });
 
+  it("keeps hard reviews bounded and lengthens easy reviews", () => {
+    const hard = scheduleCard(
+      {...card, intervalDays: 10, ease: 1.35, repetitions: 3},
+      "hard",
+      now,
+    );
+    expect(hard.intervalDays).toBe(12);
+    expect(hard.ease).toBe(1.3);
+    expect(hard.dueAt).toBe("2026-01-13T00:00:00.000Z");
+
+    const easy = scheduleCard(
+      {...card, intervalDays: 10, ease: 2.5, repetitions: 3},
+      "easy",
+      now,
+    );
+    expect(easy.intervalDays).toBe(33);
+    expect(easy.ease).toBe(2.65);
+    expect(easy.dueAt).toBe("2026-02-03T00:00:00.000Z");
+  });
+
   it("protects tabular exports from formulas", () => {
     expect(cardsAsAnkiTsv([{...card, front: "=1+1"}])).toContain("'=1+1");
     expect(cardsAsCsv([{...card, front: "=1+1"}])).toContain("'=1+1");

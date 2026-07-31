@@ -32,6 +32,7 @@ async function selectSmallAmisScope(page: Page, fullCorpus = "Glosbe") {
   const label = labels.includes("TestCorpus") ? "TestCorpus" : fullCorpus;
   expect(labels).toContain(label);
   await corpus.selectOption({label});
+  return label;
 }
 
 test("all primary routes load a consistent release", async ({page}) => {
@@ -208,23 +209,36 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByRole("heading", {name: "格式指南"})).toBeVisible();
 });
 
-test("primary navigation and research tabs are keyboard operable", async ({page}) => {
+test("primary navigation and research tabs are keyboard operable", async ({
+  page,
+}, testInfo) => {
   await page.goto("");
   await expect(page.getByRole("heading", {level: 1, name: /Listen closely/})).toBeVisible();
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", {name: "Skip to content"})).toBeFocused();
+  const skipLink = page.getByRole("link", {name: "Skip to content"});
+  if (testInfo.project.name === "desktop-webkit") {
+    // Desktop Safari follows the system "Press Tab to highlight" preference.
+    await skipLink.focus();
+  } else {
+    await page.keyboard.press("Tab");
+  }
+  await expect(skipLink).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator("#main")).toBeFocused();
 
   await page.goto("");
   await expect(page.getByRole("heading", {level: 1, name: /Listen closely/})).toBeVisible();
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", {name: "Explore", exact: true})).toBeFocused();
+  const exploreLink = page.getByRole("link", {name: "Explore", exact: true});
+  if (testInfo.project.name === "desktop-webkit") {
+    await exploreLink.focus();
+  } else {
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
+    await page.keyboard.press("Tab");
+  }
+  await expect(exploreLink).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", {level: 1, name: "Explore the bank"})).toBeVisible();
 
@@ -250,4 +264,81 @@ test("primary pages have no serious accessibility violations", async ({page}, te
     );
     expect(violations, `${testInfo.project.name} ${route || "home"}`).toEqual([]);
   }
+});
+
+test("browser transfer, search latency, and memory stay within release budgets", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop-chromium",
+    "Release budgets are measured once in desktop Chromium",
+  );
+  await page.goto("#/search");
+  const resources = await page.evaluate(() => {
+    const entries = [
+      ...performance.getEntriesByType("navigation"),
+      ...performance.getEntriesByType("resource"),
+    ] as PerformanceResourceTiming[];
+    return entries.map((entry) => ({
+      name: entry.name,
+      bytes: Math.max(entry.transferSize, entry.encodedBodySize),
+    }));
+  });
+  const initialBytes = resources.reduce((total, entry) => total + entry.bytes, 0);
+  const javascriptBytes = resources
+    .filter((entry) => new URL(entry.name).pathname.endsWith(".js"))
+    .reduce((total, entry) => total + entry.bytes, 0);
+  const catalogueBytes = resources
+    .filter((entry) => new URL(entry.name).pathname.includes("/api/v1/"))
+    .reduce((total, entry) => total + entry.bytes, 0);
+
+  expect(initialBytes).toBeLessThan(2 * 1024 * 1024);
+  expect(javascriptBytes).toBeLessThan(500 * 1024);
+  expect(catalogueBytes).toBeLessThan(1024 * 1024);
+
+  const corpus = await selectSmallAmisScope(page);
+  await page.getByLabel("Word or meaning").fill("lima");
+  const coldStart = Date.now();
+  await page.getByRole("button", {name: "Search"}).click();
+  await expect(page.locator(".kwic mark").first()).toContainText(/lima/i);
+  const coldSearchMs = Date.now() - coldStart;
+
+  const warmQuery = corpus === "TestCorpus" ? "waco" : "fangcalay";
+  await page.getByLabel("Word or meaning").fill(warmQuery);
+  const warmStart = Date.now();
+  await page.getByRole("button", {name: "Search"}).click();
+  await expect(page.locator(".kwic mark").first()).toContainText(
+    new RegExp(warmQuery, "i"),
+  );
+  const warmSearchMs = Date.now() - warmStart;
+  const memoryBytes = await page.evaluate(() => {
+    const measured = performance as Performance & {
+      memory?: {usedJSHeapSize: number};
+    };
+    return measured.memory?.usedJSHeapSize ?? 0;
+  });
+
+  expect(coldSearchMs).toBeLessThan(5_000);
+  expect(warmSearchMs).toBeLessThan(2_000);
+  if (memoryBytes > 0) expect(memoryBytes).toBeLessThan(500 * 1024 * 1024);
+
+  await testInfo.attach("browser-budget-report.json", {
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          release: await page.locator(".release-pill").textContent(),
+          corpus,
+          initial_bytes: initialBytes,
+          javascript_bytes: javascriptBytes,
+          catalogue_bytes: catalogueBytes,
+          cold_search_ms: coldSearchMs,
+          warm_search_ms: warmSearchMs,
+          used_js_heap_bytes: memoryBytes || null,
+        },
+        null,
+        2,
+      ),
+    ),
+    contentType: "application/json",
+  });
 });
