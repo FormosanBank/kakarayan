@@ -17,8 +17,12 @@
     "README.md"
   ],
   "scripts": {
-    "build": "../../site/node_modules/.bin/tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/index.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.3"
   },
   "license": "UNLICENSED",
   "engines": {

@@ -150,7 +150,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: site/package-lock.json
+          cache-dependency-path: |
+            site/package-lock.json
+            clients/javascript/package-lock.json
 
       - name: Set up R
         uses: r-lib/actions/setup-r@929c772977a3a13c8733b363bf5a2f685c25dd91
@@ -164,6 +166,7 @@ jobs:
         run: |
           uv sync --locked --all-groups
           npm ci --prefix site
+          npm ci --prefix clients/javascript
 
       - name: Test JavaScript client
         run: |
