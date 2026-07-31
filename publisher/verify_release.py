@@ -97,6 +97,16 @@ def _verify_search(root: Path) -> None:
     if not manifest_path.is_file():
         raise VerificationError("Release is missing its search manifest")
     manifest = _json(manifest_path)
+    schema_root = Path(__file__).resolve().parents[1] / "schemas"
+    registry = Registry()
+    for candidate in schema_root.glob("*.schema.json"):
+        schema = _json(candidate)
+        registry = registry.with_resource(schema["$id"], Resource.from_contents(schema))
+    Draft202012Validator(
+        _json(schema_root / "search-manifest.schema.json"),
+        registry=registry,
+    ).validate(manifest)
+    scope_parts: dict[tuple[str, str], set[int]] = {}
     for shard in manifest.get("shards", []):
         path = _path(root, str(shard["path"]))
         if _sha256(path) != shard["sha256"]:
@@ -112,6 +122,58 @@ def _verify_search(root: Path) -> None:
         records = json.loads(content)
         if not isinstance(records, list) or len(records) != shard["records"]:
             raise VerificationError(f"Search record count mismatch: {shard['path']}")
+        scope = (str(shard["language_id"]), str(shard["corpus_id"]))
+        parts = scope_parts.setdefault(scope, set())
+        part = int(shard["part"])
+        if part in parts:
+            raise VerificationError(f"Duplicate search shard part for {scope}: {part}")
+        parts.add(part)
+
+    indexes_by_scope: dict[tuple[str, str], dict[str, Any]] = {}
+    index_schema = _json(schema_root / "search-index.schema.json")
+    for entry in manifest.get("indexes", []):
+        scope = (str(entry["language_id"]), str(entry["corpus_id"]))
+        if scope in indexes_by_scope:
+            raise VerificationError(f"Duplicate search index for {scope}")
+        path = _path(root, str(entry["path"]))
+        if _sha256(path) != entry["sha256"]:
+            raise VerificationError(f"Compressed search checksum mismatch: {entry['path']}")
+        try:
+            content = gzip.decompress(path.read_bytes())
+        except (OSError, EOFError) as error:
+            raise VerificationError(f"Invalid gzip search index: {entry['path']}") from error
+        if len(content) != entry["uncompressed_bytes"]:
+            raise VerificationError(f"Search index size mismatch: {entry['path']}")
+        if hashlib.sha256(content).hexdigest() != entry["uncompressed_sha256"]:
+            raise VerificationError(f"Search index checksum mismatch: {entry['path']}")
+        try:
+            document = json.loads(content)
+            Draft202012Validator(index_schema, registry=registry).validate(document)
+        except (json.JSONDecodeError, TypeError) as error:
+            raise VerificationError(f"Invalid search index JSON: {entry['path']}") from error
+        if (
+            document["release_id"] != manifest["release_id"]
+            or document["language_id"] != scope[0]
+            or document["corpus_id"] != scope[1]
+            or document["shards"] != entry["shards"]
+        ):
+            raise VerificationError(f"Search index scope mismatch: {entry['path']}")
+        term_count = sum(len(values) for values in document["terms"].values())
+        if term_count != entry["terms"]:
+            raise VerificationError(f"Search index term count mismatch: {entry['path']}")
+        valid_parts = set(range(int(document["shards"])))
+        for vocabulary in document["terms"].values():
+            for postings in vocabulary.values():
+                if not set(postings) <= valid_parts:
+                    raise VerificationError(f"Search index has an invalid posting: {entry['path']}")
+        indexes_by_scope[scope] = entry
+
+    if set(indexes_by_scope) != set(scope_parts):
+        raise VerificationError("Search index scopes do not match search shard scopes")
+    for scope, parts in scope_parts.items():
+        expected = set(range(len(parts)))
+        if parts != expected or indexes_by_scope[scope]["shards"] != len(parts):
+            raise VerificationError(f"Search shard parts are not contiguous for {scope}")
 
 
 def verify_release(

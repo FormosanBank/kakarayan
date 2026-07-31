@@ -1,5 +1,10 @@
 import {useEffect, useMemo, useRef, useState, type FormEvent} from "react";
-import {matchingShards, searchRecords, type SearchMode} from "../data";
+import {
+  matchingIndexes,
+  matchingShards,
+  searchRecords,
+  type SearchMode,
+} from "../data";
 import {downloadExport, type ExportFormat} from "../exports";
 import {useI18n} from "../i18n";
 import {Link, useSearchParams} from "../routing";
@@ -39,6 +44,7 @@ export function SearchTool({
   const [records, setRecords] = useState<SearchRecord[]>([]);
   const [scanned, setScanned] = useState(0);
   const [truncated, setTruncated] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -55,6 +61,10 @@ export function SearchTool({
   );
   const shards = useMemo(
     () => matchingShards(data.search, languageId, corpusId),
+    [corpusId, data.search, languageId],
+  );
+  const indexes = useMemo(
+    () => matchingIndexes(data.search, languageId, corpusId),
     [corpusId, data.search, languageId],
   );
 
@@ -74,6 +84,7 @@ export function SearchTool({
     setBusy(true);
     setError("");
     setNotice("");
+    setSearched(false);
     setParams({q: query.trim(), language: languageId, ...(corpusId && {corpus: corpusId}), mode});
     try {
       const result = await searchRecords(
@@ -82,10 +93,12 @@ export function SearchTool({
         mode,
         nextController.signal,
         learner ? 60 : 200,
+        indexes,
       );
       setRecords(result.records);
       setScanned(result.scanned);
       setTruncated(result.truncated);
+      setSearched(true);
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -193,7 +206,7 @@ export function SearchTool({
         </p>
       )}
 
-      {(records.length > 0 || (!busy && scanned > 0)) && (
+      {(records.length > 0 || (!busy && searched)) && (
         <div className="results-heading" aria-live="polite">
           <p>
             <strong>{records.length}</strong> {t("search.results")} · {scanned.toLocaleString()}{" "}
@@ -251,7 +264,7 @@ export function SearchTool({
         </div>
       )}
 
-      {!busy && scanned > 0 && records.length === 0 && (
+      {!busy && searched && records.length === 0 && (
         <div className="empty-state">{t("search.noResults")}</div>
       )}
 

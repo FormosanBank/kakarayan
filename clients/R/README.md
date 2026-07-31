@@ -9,10 +9,19 @@ static <- kakarayan_client(
   release_id = "fb-YYYYMMDD-commit"
 )
 kakarayan_languages(static)
+manifest <- kakarayan_search_manifest(static)
+shard <- manifest$shards[[1L]]
+records <- kakarayan_search_shard(
+  static,
+  shard$path,
+  shard$sha256,
+  shard$uncompressed_sha256
+)
 
 live <- kakarayan_client("https://PUBLIC_SPACE.hf.space", mode = "live")
 kakarayan_dictionary(live, "lima", "lang_amis", match = "exact")
 ```
 
 It provides exact release pinning, timeouts, cursor collection, structured conditions, and
-SHA-256 download verification. Runtime dependencies are `curl`, `jsonlite`, and `digest`.
+SHA-256 verification for compressed and decoded static search data. Runtime dependencies
+are `curl`, `jsonlite`, and `digest`.

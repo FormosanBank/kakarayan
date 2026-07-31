@@ -53,9 +53,16 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         search_manifest["shards"][0]["uncompressed_bytes"] > search_manifest["shards"][0]["bytes"]
     )
     assert len(search_manifest["shards"][0]["uncompressed_sha256"]) == 64
+    assert search_manifest["shards"][0]["part"] == 0
+    assert len(search_manifest["indexes"]) == 1
     search_records = json.loads(
         gzip.decompress(first.output.joinpath(search_manifest["shards"][0]["path"]).read_bytes())
     )
+    search_index = json.loads(
+        gzip.decompress(first.output.joinpath(search_manifest["indexes"][0]["path"]).read_bytes())
+    )
+    assert search_index["terms"]["source"]["lima waco"] == [0]
+    assert search_index["terms"]["gloss"]["five"] == [0]
     first_sentence = search_records[0]
     assert first_sentence["phonology"][0]["text"] == "lima watso"
     assert first_sentence["tier_translations"][1]["kind"] == "gloss"

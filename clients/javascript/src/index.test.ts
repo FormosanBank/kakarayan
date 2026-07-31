@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import test from "node:test";
+import {gzipSync} from "node:zlib";
 
 import {KakarayanClient, KakarayanError} from "./index.js";
 
@@ -56,4 +58,30 @@ test("rejects release mismatches", async () => {
   await assert.rejects(client.getMeta(), (error: unknown) => {
     return error instanceof KakarayanError && error.code === "release_mismatch";
   });
+});
+
+test("verifies and expands static search data", async () => {
+  const document = [{id: "sentence_fixture"}];
+  const content = Buffer.from(JSON.stringify(document));
+  const compressed = gzipSync(content);
+  const digest = (value: Uint8Array) =>
+    createHash("sha256").update(value).digest("hex");
+  const client = new KakarayanClient({
+    baseUrl: "https://example.test/kakarayan",
+    fetch: async () =>
+      new Response(
+        compressed.buffer.slice(
+          compressed.byteOffset,
+          compressed.byteOffset + compressed.byteLength,
+        ) as ArrayBuffer,
+      ),
+  });
+  assert.deepEqual(
+    await client.getSearchShard(
+      "search/shards/lang_amis/corpus_fixture/0000.json.gz",
+      digest(compressed),
+      digest(content),
+    ),
+    document,
+  );
 });

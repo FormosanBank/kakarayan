@@ -22,6 +22,10 @@ test("all primary routes load a consistent release", async ({page}) => {
 });
 
 test("local corpus search reads a compressed shard", async ({page}) => {
+  const searchAssets: string[] = [];
+  page.on("response", (response) => {
+    if (response.url().includes("/data/search/")) searchAssets.push(response.url());
+  });
   await page.goto("#/search");
   await page.getByLabel("Language", {exact: true}).selectOption({label: "Amis"});
   await page.getByLabel("Word or meaning").fill("lima");
@@ -32,6 +36,8 @@ test("local corpus search reads a compressed shard", async ({page}) => {
     "href",
     /FormosanBank\/blob\/[0-9a-f]{40}\//,
   );
+  expect(searchAssets.some((url) => url.includes("/indexes/"))).toBe(true);
+  expect(searchAssets.some((url) => url.includes("/shards/"))).toBe(true);
 });
 
 test("scoped RE2 search runs without weakening the content security policy", async ({

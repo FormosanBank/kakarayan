@@ -41,6 +41,13 @@ def verify_site(root: Path, *, total_limit: int, file_limit: int) -> dict[str, i
     }
     if actual != expected:
         raise VerificationError("Assembled search shard set does not match its manifest")
+    expected_indexes = {f"data/{entry['path']}" for entry in search["indexes"]}
+    actual_indexes = {
+        path.relative_to(root).as_posix()
+        for path in (root / "data" / "search" / "indexes").rglob("*.json.gz")
+    }
+    if actual_indexes != expected_indexes:
+        raise VerificationError("Assembled search index set does not match its manifest")
     return {"files": len(files), "bytes": total, "largest_file_bytes": largest}
 
 

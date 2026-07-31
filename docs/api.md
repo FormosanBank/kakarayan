@@ -23,14 +23,16 @@ Endpoints:
 | `orthography.json` | Public reviewed conversion-table projection |
 | `downloads.json` | Prepared artifacts, checksums, rights, blockers, and release URLs |
 | `releases.json` | Current release discovery |
-| `search/manifest.json` | Compressed browser shard inventory |
+| `search/manifest.json` | Compressed vocabulary-index and record-shard inventory |
 
 Consumers should first fetch `meta.json`, pin `release_id`, and reject other payloads or
 search manifests that identify a different release.
 
-Search shard paths in the manifest are relative to the site `data/` directory. Verify the
-compressed checksum when raw gzip bytes are returned. If the host transparently decodes the
-response, verify `uncompressed_sha256`. Then parse the JSON array.
+Search index and shard paths in the manifest are relative to the site `data/` directory.
+Load the matching language and corpus vocabulary index first, then fetch only the shard
+parts in its postings. Verify the compressed checksum when raw gzip bytes are returned. If
+the host transparently decodes the response, verify `uncompressed_sha256`. Indexes are JSON
+objects and sentence shards are JSON arrays.
 
 ## Optional live API
 
@@ -108,10 +110,17 @@ const client = new KakarayanClient({
 });
 
 const languages = await client.getLanguages();
+const manifest = await client.getSearchManifest();
+const shard = manifest.shards[0];
+const records = await client.getSearchShard(
+  shard.path,
+  shard.sha256,
+  shard.uncompressed_sha256,
+);
 ```
 
 Set `mode: "live"` for bounded live routes. The client supports cursor iteration, timeouts,
-structured errors, release checks, static shards, and streaming download checksums.
+structured errors, release checks, checksummed gzip search data, and download checksums.
 
 ## Python client and CLI
 

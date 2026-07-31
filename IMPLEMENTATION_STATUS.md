@@ -121,6 +121,10 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   signatures in Chromium, Firefox, and WebKit without a backend.
 - [x] Add a validated reviewed-content registry and visibly fail closed while no reviewed
   lessons have been contributed.
+- [x] Add checksummed per-language and per-corpus vocabulary indexes with deterministic
+  shard postings so common search modes fetch only candidate sentence records.
+- [x] Verify compressed and decoded search index/shard bytes in the browser and JavaScript,
+  Python, and R clients.
 - [x] Complete one full release-only benchmark against pinned public FormosanBank commit
   `40fd519cd82295bd7824e207990d277b871ad47f`: 487,354 sentences, 8,214,390 tokens,
   no publisher warnings, 5.4 GiB output, 9.1 GiB peak memory, and 20 minutes 28 seconds.

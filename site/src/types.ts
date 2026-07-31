@@ -99,6 +99,7 @@ export interface SearchShard {
   path: string;
   language_id: string;
   corpus_id: string;
+  part: number;
   records: number;
   bytes: number;
   uncompressed_bytes: number;
@@ -106,11 +107,40 @@ export interface SearchShard {
   uncompressed_sha256: string;
 }
 
+export interface SearchIndex {
+  path: string;
+  language_id: string;
+  corpus_id: string;
+  shards: number;
+  terms: number;
+  bytes: number;
+  uncompressed_bytes: number;
+  sha256: string;
+  uncompressed_sha256: string;
+}
+
+export interface SearchIndexDocument {
+  schema_version: string;
+  release_id: string;
+  language_id: string;
+  corpus_id: string;
+  shards: number;
+  terms: {
+    source_exact: Record<string, number[]>;
+    source: Record<string, number[]>;
+    translation: Record<string, number[]>;
+    phonology: Record<string, number[]>;
+    gloss: Record<string, number[]>;
+    regex: Record<string, number[]>;
+  };
+}
+
 export interface SearchManifest {
   schema_version: string;
   release_id: string;
   record_unit: "sentence";
   shards: SearchShard[];
+  indexes: SearchIndex[];
 }
 
 export interface Translation {

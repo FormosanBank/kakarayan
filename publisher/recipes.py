@@ -50,7 +50,12 @@ def _edit_distance(left: str, right: str, maximum: int) -> int:
     return previous[-1]
 
 
-def _matches(record: dict[str, Any], query: str, match: str) -> bool:
+def _matches(
+    record: dict[str, Any],
+    query: str,
+    match: str,
+    pattern: regex.Pattern[str] | None = None,
+) -> bool:
     needle = _normalize(query)
     if match == "translation":
         return any(needle in _normalize(item["text"]) for item in record["translations"])
@@ -76,8 +81,9 @@ def _matches(record: dict[str, Any], query: str, match: str) -> bool:
     ]
     forms = [value for value in forms if value]
     if match == "regex":
+        if pattern is None:
+            raise BuildError("Recipe regular expression was not compiled")
         try:
-            pattern = regex.compile(unicodedata.normalize("NFC", query), regex.VERSION1)
             values = [
                 *source_forms,
                 *(item["text"] for item in record["translations"]),
@@ -87,8 +93,6 @@ def _matches(record: dict[str, Any], query: str, match: str) -> bool:
             return any(pattern.search(value, timeout=0.05) is not None for value in values)
         except TimeoutError as error:
             raise BuildError("Recipe regular expression exceeded its work limit") from error
-        except regex.error as error:
-            raise BuildError(f"Invalid recipe regular expression: {error}") from error
     if match == "fuzzy":
         maximum = 1 if len(needle) <= 4 else 2
         return any(
@@ -145,17 +149,33 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
     record_ids = set(selection["record_ids"])
     languages = set(selection["language_ids"])
     corpora = set(selection["corpus_ids"])
+    match = str(selection["match"])
+    pattern: regex.Pattern[str] | None = None
+    if match == "regex":
+        try:
+            pattern = regex.compile(
+                unicodedata.normalize("NFC", str(selection["query"])),
+                regex.VERSION1,
+            )
+        except regex.error as error:
+            raise BuildError(f"Invalid recipe regular expression: {error}") from error
     result = []
+    scanned = 0
     for line in _record_lines(release):
         record = _recipe_record(json.loads(line))
         if record["language_id"] not in languages:
             continue
         if corpora and record["corpus_id"] not in corpora:
             continue
+        scanned += 1
+        if match in {"regex", "fuzzy"} and scanned > 200_000:
+            raise BuildError(
+                "Recipe regex and fuzzy searches are limited to 200,000 scoped records"
+            )
         if record_ids:
             selected = record["id"] in record_ids
         else:
-            selected = _matches(record, selection["query"], selection["match"])
+            selected = _matches(record, selection["query"], match, pattern)
         if selected:
             result.append(record)
             if len(result) >= selection["max_rows"]:

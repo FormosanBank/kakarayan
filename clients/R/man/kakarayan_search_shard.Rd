@@ -4,12 +4,16 @@
 \alias{kakarayan_search_shard}
 \title{Read one allowlisted static search shard}
 \usage{
-kakarayan_search_shard(client, path)
+kakarayan_search_shard(client, path, sha256, uncompressed_sha256)
 }
 \arguments{
 \item{client}{Kakarayan client.}
 
 \item{path}{Path from the search manifest.}
+
+\item{sha256}{Compressed SHA-256 from the search manifest.}
+
+\item{uncompressed_sha256}{Content SHA-256 from the search manifest.}
 }
 \description{
 Read one allowlisted static search shard

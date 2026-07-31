@@ -13,6 +13,34 @@ export interface Page<T> {
   next_cursor: string | null;
 }
 
+export interface StaticSearchArtifact {
+  path: string;
+  language_id: string;
+  corpus_id: string;
+  bytes: number;
+  uncompressed_bytes: number;
+  sha256: string;
+  uncompressed_sha256: string;
+}
+
+export interface StaticSearchShard extends StaticSearchArtifact {
+  part: number;
+  records: number;
+}
+
+export interface StaticSearchIndex extends StaticSearchArtifact {
+  shards: number;
+  terms: number;
+}
+
+export interface StaticSearchManifest {
+  schema_version: string;
+  release_id: string;
+  record_unit: "sentence";
+  shards: StaticSearchShard[];
+  indexes: StaticSearchIndex[];
+}
+
 export interface QueryOptions {
   language_id: string;
   corpus_id?: string;
@@ -174,7 +202,7 @@ export class KakarayanClient {
     return this.json<T>(this.mode === "static" ? staticPath("corpora") : "/v1/corpora");
   }
 
-  async getSearchManifest<T = Record<string, unknown>>(): Promise<T> {
+  async getSearchManifest<T = StaticSearchManifest>(): Promise<T> {
     if (this.mode !== "static") {
       throw new KakarayanError(
         "static_api_required",
@@ -186,12 +214,76 @@ export class KakarayanClient {
     return this.json<T>("/api/v1/search/manifest.json");
   }
 
-  async getSearchShard<T = Array<Record<string, unknown>>>(path: string): Promise<T> {
-    if (this.mode !== "static" || !/^search\/shards\/[\w./-]+\.json$/.test(path)) {
+  private async compressedJson<T>(
+    path: string,
+    compressedSha256: string,
+    uncompressedSha256: string,
+  ): Promise<T> {
+    const response = await this.response(`/data/${path}`);
+    if (!response.ok) {
+      throw new KakarayanError(
+        "search_data_failed",
+        `Search data returned HTTP ${response.status}`,
+        response.status,
+      );
+    }
+    const received = await response.arrayBuffer();
+    const bytes = new Uint8Array(received);
+    let uncompressed = received;
+    if (bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      const compressedDigest = hex(await crypto.subtle.digest("SHA-256", received));
+      if (compressedDigest !== compressedSha256.toLowerCase()) {
+        throw new KakarayanError(
+          "checksum_mismatch",
+          "Compressed search checksum verification failed",
+          409,
+        );
+      }
+      const stream = new Blob([received])
+        .stream()
+        .pipeThrough(new DecompressionStream("gzip"));
+      uncompressed = await new Response(stream).arrayBuffer();
+    }
+    const contentDigest = hex(await crypto.subtle.digest("SHA-256", uncompressed));
+    if (contentDigest !== uncompressedSha256.toLowerCase()) {
+      throw new KakarayanError(
+        "checksum_mismatch",
+        "Search content checksum verification failed",
+        409,
+      );
+    }
+    try {
+      return JSON.parse(new TextDecoder().decode(uncompressed)) as T;
+    } catch {
+      throw new KakarayanError("invalid_json", "Search data contains invalid JSON", 409);
+    }
+  }
+
+  async getSearchShard<T = Array<Record<string, unknown>>>(
+    path: string,
+    compressedSha256: string,
+    uncompressedSha256: string,
+  ): Promise<T> {
+    if (this.mode !== "static" || !/^search\/shards\/[\w./-]+\.json\.gz$/.test(path)) {
       throw new KakarayanError("invalid_shard", "The search shard path is invalid", 400);
     }
     await this.ensureRelease();
-    return this.json<T>(`/data/${path}`);
+    return this.compressedJson<T>(path, compressedSha256, uncompressedSha256);
+  }
+
+  async getSearchIndex<T = Record<string, unknown>>(
+    path: string,
+    compressedSha256: string,
+    uncompressedSha256: string,
+  ): Promise<T> {
+    if (
+      this.mode !== "static" ||
+      !/^search\/indexes\/[\w./-]+\/vocabulary\.json\.gz$/.test(path)
+    ) {
+      throw new KakarayanError("invalid_index", "The search index path is invalid", 400);
+    }
+    await this.ensureRelease();
+    return this.compressedJson<T>(path, compressedSha256, uncompressedSha256);
   }
 
   dictionary<T = Record<string, unknown>>(options: DictionaryOptions): Promise<Page<T>> {

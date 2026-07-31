@@ -10,6 +10,8 @@ import type {
   OrthographyCatalog,
   RightsCatalog,
   SearchManifest,
+  SearchIndex,
+  SearchIndexDocument,
   SearchRecord,
   SearchShard,
 } from "./types";
@@ -137,6 +139,17 @@ export function matchingShards(
   );
 }
 
+export function matchingIndexes(
+  manifest: SearchManifest,
+  languageId: string,
+  corpusId: string,
+): SearchIndex[] {
+  return manifest.indexes.filter(
+    (index) =>
+      index.language_id === languageId && (!corpusId || index.corpus_id === corpusId),
+  );
+}
+
 async function loadShard(shard: SearchShard, signal?: AbortSignal): Promise<SearchRecord[]> {
   const existing = shardCache.get(shard.path);
   if (existing) return existing;
@@ -151,6 +164,29 @@ async function loadShard(shard: SearchShard, signal?: AbortSignal): Promise<Sear
     return await request;
   } catch (error) {
     shardCache.delete(shard.path);
+    throw error;
+  }
+}
+
+const indexCache = new Map<string, Promise<SearchIndexDocument>>();
+
+async function loadIndex(
+  index: SearchIndex,
+  signal?: AbortSignal,
+): Promise<SearchIndexDocument> {
+  const existing = indexCache.get(index.path);
+  if (existing) return existing;
+  const request = compressedJson<SearchIndexDocument>(
+    `${dataBase}${index.path}`,
+    index.sha256,
+    index.uncompressed_sha256,
+    signal,
+  );
+  indexCache.set(index.path, request);
+  try {
+    return await request;
+  } catch (error) {
+    indexCache.delete(index.path);
     throw error;
   }
 }
@@ -225,6 +261,47 @@ function fuzzyDistance(record: SearchRecord, query: string): number {
   return best;
 }
 
+type RegexMatcher = {test(value: string): boolean};
+
+export function indexCandidateParts(
+  index: SearchIndexDocument,
+  query: string,
+  mode: SearchMode,
+  regex: RegexMatcher | null = null,
+): Set<number> {
+  const parts = new Set<number>();
+  const needle = normalizeSearch(query);
+  let vocabulary: Record<string, number[]>;
+  let matches: (term: string) => boolean;
+  if (mode === "source") {
+    vocabulary = index.terms.source_exact;
+    const source = query.normalize("NFC").trim();
+    matches = (term) => term === source;
+  } else if (mode === "regex") {
+    if (!regex) throw new Error("A compiled RE2 expression is required");
+    vocabulary = index.terms.regex;
+    matches = (term) => regex.test(term);
+  } else if (mode === "translation" || mode === "phonology" || mode === "gloss") {
+    vocabulary = index.terms[mode];
+    matches = (term) => term.includes(needle);
+  } else {
+    vocabulary = index.terms.source;
+    if (mode === "exact") matches = (term) => term === needle;
+    else if (mode === "prefix") matches = (term) => term.startsWith(needle);
+    else if (mode === "contains") matches = (term) => term.includes(needle);
+    else {
+      const maximum = needle.length <= 4 ? 1 : 2;
+      matches = (term) =>
+        term.length <= 80 && editDistance(term, needle, maximum) <= maximum;
+    }
+  }
+  for (const [term, postings] of Object.entries(vocabulary)) {
+    if (!matches(term)) continue;
+    for (const part of postings) parts.add(part);
+  }
+  return parts;
+}
+
 export function recordMatches(record: SearchRecord, query: string, mode: SearchMode): boolean {
   const needle = normalizeSearch(query);
   if (!needle) return false;
@@ -268,6 +345,7 @@ export async function searchRecords(
   mode: SearchMode,
   signal?: AbortSignal,
   limit = 200,
+  indexes: SearchIndex[] = [],
 ): Promise<SearchResult> {
   if (query.length > (mode === "regex" ? 128 : 256)) {
     throw new Error(`${mode === "regex" ? "Regular expression" : "Query"} is too long`);
@@ -290,11 +368,28 @@ export async function searchRecords(
       );
     }
   }
-  const records: SearchRecord[] = [];
+  let selectedShards = shards;
+  if (indexes.length > 0) {
+    const candidateParts = new Map<string, Set<number>>();
+    for (const index of indexes) {
+      if (signal?.aborted) throw new DOMException("Search cancelled", "AbortError");
+      const document = await loadIndex(index, signal);
+      candidateParts.set(
+        `${index.language_id}\0${index.corpus_id}`,
+        indexCandidateParts(document, query, mode, regex),
+      );
+    }
+    selectedShards = shards.filter((shard) =>
+      candidateParts
+        .get(`${shard.language_id}\0${shard.corpus_id}`)
+        ?.has(shard.part),
+    );
+  }
+  let records: SearchRecord[] = [];
   const fuzzyScores = new Map<string, number>();
   let scanned = 0;
   let truncated = false;
-  for (const shard of shards) {
+  for (const shard of selectedShards) {
     if (signal?.aborted) throw new DOMException("Search cancelled", "AbortError");
     const shardRecords = await loadShard(shard, signal);
     for (const record of shardRecords) {
@@ -309,7 +404,7 @@ export async function searchRecords(
         : recordMatches(record, query, mode);
       if (matches) {
         if (mode === "fuzzy") fuzzyScores.set(record.id, fuzzyDistance(record, query));
-        if (records.length < limit) records.push(record);
+        if (mode === "fuzzy" || records.length < limit) records.push(record);
         else truncated = true;
       }
     }
@@ -321,6 +416,8 @@ export async function searchRecords(
         left.source_path.localeCompare(right.source_path) ||
         left.id.localeCompare(right.id),
     );
+    truncated = records.length > limit;
+    records = records.slice(0, limit);
   }
   return {records, scanned, truncated};
 }

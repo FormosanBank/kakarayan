@@ -96,6 +96,7 @@ def assemble(
     shutil.copytree(release / "api", api_target)
     data_target.mkdir()
     shutil.copytree(search / "shards", data_target / "search" / "shards")
+    shutil.copytree(search / "indexes", data_target / "search" / "indexes")
     if download_manifest is not None:
         try:
             published = json.loads(download_manifest.read_text(encoding="utf-8"))

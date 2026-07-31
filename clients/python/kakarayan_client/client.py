@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -50,8 +51,7 @@ class KakarayanClient:
             f"{self.base_url}{path}",
             headers={
                 "Accept": "application/json",
-                "User-Agent": "kakarayan-python/0.1 "
-                "(+https://formosanbank.github.io/kakarayan/)",
+                "User-Agent": "kakarayan-python/0.1 (+https://formosanbank.github.io/kakarayan/)",
                 "X-Kakarayan-Client": "python/0.1",
             },
         )
@@ -133,16 +133,80 @@ class KakarayanClient:
         self._ensure_release()
         return self._json("/api/v1/search/manifest.json")
 
-    def search_shard(self, path: str) -> list[dict[str, Any]]:
+    def _compressed_json(
+        self,
+        path: str,
+        compressed_sha256: str,
+        uncompressed_sha256: str,
+    ) -> Any:
+        request = self._request(f"/data/{path}")
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                received = response.read()
+        except (TimeoutError, urllib.error.URLError) as error:
+            message = str(error.reason) if isinstance(error, urllib.error.URLError) else str(error)
+            raise KakarayanError("network_error", message, 0) from error
+        if received.startswith(b"\x1f\x8b"):
+            if hashlib.sha256(received).hexdigest() != compressed_sha256.lower():
+                raise KakarayanError(
+                    "checksum_mismatch",
+                    "Compressed search checksum verification failed",
+                    409,
+                )
+            try:
+                content = gzip.decompress(received)
+            except OSError as error:
+                raise KakarayanError(
+                    "invalid_compression",
+                    "Search data is not valid gzip",
+                    409,
+                ) from error
+        else:
+            content = received
+        if hashlib.sha256(content).hexdigest() != uncompressed_sha256.lower():
+            raise KakarayanError(
+                "checksum_mismatch",
+                "Search content checksum verification failed",
+                409,
+            )
+        try:
+            return json.loads(content)
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise KakarayanError(
+                "invalid_json", "Search data contains invalid JSON", 409
+            ) from error
+
+    def search_shard(
+        self,
+        path: str,
+        compressed_sha256: str,
+        uncompressed_sha256: str,
+    ) -> list[dict[str, Any]]:
         if (
             self.mode != "static"
             or not path.startswith("search/shards/")
-            or not path.endswith(".json")
+            or not path.endswith(".json.gz")
             or ".." in path.split("/")
         ):
             raise KakarayanError("invalid_shard", "The search shard path is invalid", 400)
         self._ensure_release()
-        return self._json(f"/data/{path}")
+        return self._compressed_json(path, compressed_sha256, uncompressed_sha256)
+
+    def search_index(
+        self,
+        path: str,
+        compressed_sha256: str,
+        uncompressed_sha256: str,
+    ) -> dict[str, Any]:
+        if (
+            self.mode != "static"
+            or not path.startswith("search/indexes/")
+            or not path.endswith("/vocabulary.json.gz")
+            or ".." in path.split("/")
+        ):
+            raise KakarayanError("invalid_index", "The search index path is invalid", 400)
+        self._ensure_release()
+        return self._compressed_json(path, compressed_sha256, uncompressed_sha256)
 
     def dictionary(self, q: str, language_id: str, **options: object) -> dict[str, Any]:
         return self._json(
@@ -214,10 +278,13 @@ class KakarayanClient:
         temporary = Path(temporary_name)
         digest = hashlib.sha256()
         try:
-            with os.fdopen(handle, "wb") as output, urllib.request.urlopen(
-                request,
-                timeout=self.timeout,
-            ) as response:
+            with (
+                os.fdopen(handle, "wb") as output,
+                urllib.request.urlopen(
+                    request,
+                    timeout=self.timeout,
+                ) as response,
+            ):
                 while chunk := response.read(1024 * 1024):
                     digest.update(chunk)
                     output.write(chunk)

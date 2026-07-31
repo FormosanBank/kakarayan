@@ -75,6 +75,12 @@ Fuzzy work is bounded by a documented Unicode edit distance and record cap. User
 compile through RE2JS, a non-backtracking engine, only after language and corpus scope
 limits are checked. The browser never evaluates a pattern as JavaScript.
 
+Each language and corpus scope has a checksummed vocabulary index for source-exact,
+normalized source, translation, phonology, gloss, and RE2 candidate selection. Postings
+name deterministic shard parts. Common queries scan the compact vocabulary and download
+only candidate record shards, then recheck every record before display. An empty posting
+set produces an immediate empty result without downloading sentence records.
+
 The dataset builder preflights shard transfer and decoded size before reading data. It caps
 rows, refuses unsafe scopes, and preserves deterministic source order. Linguistic summaries
 run in a dedicated Worker and cap the record count. DuckDB-Wasm is a separate lazy chunk

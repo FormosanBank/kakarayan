@@ -11,6 +11,13 @@ const staticApi = new KakarayanClient({
   releaseId: "fb-YYYYMMDD-commit",
 });
 const languages = await staticApi.getLanguages();
+const manifest = await staticApi.getSearchManifest();
+const shard = manifest.shards[0];
+const records = await staticApi.getSearchShard(
+  shard.path,
+  shard.sha256,
+  shard.uncompressed_sha256,
+);
 
 const liveApi = new KakarayanClient({
   baseUrl: "https://PUBLIC_SPACE.hf.space",
@@ -24,4 +31,5 @@ const matches = await liveApi.dictionary({
 ```
 
 The client supports timeouts, opaque cursor iteration, structured errors, release pinning,
-static search shards, and SHA-256 download verification.
+static search indexes and shards, gzip expansion, and SHA-256 verification of compressed
+and decoded bytes.

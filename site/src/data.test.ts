@@ -1,5 +1,5 @@
-import {normalizeSearch, recordMatches} from "./data";
-import type {SearchRecord} from "./types";
+import {indexCandidateParts, normalizeSearch, recordMatches} from "./data";
+import type {SearchIndexDocument, SearchRecord} from "./types";
 
 const record: SearchRecord = {
   id: "sentence_1",
@@ -69,5 +69,27 @@ describe("transparent static search", () => {
     expect(recordMatches(record, "beautiful", "gloss")).toBe(true);
     expect(recordMatches(record, "fangcalai", "fuzzy")).toBe(true);
     expect(recordMatches(record, "ugly", "translation")).toBe(false);
+  });
+
+  it("uses vocabulary postings to select only candidate record shards", () => {
+    const index: SearchIndexDocument = {
+      schema_version: "1.0.0",
+      release_id: "fb-20240102-deadbeef",
+      language_id: "lang_amis",
+      corpus_id: "corpus_fixture",
+      shards: 3,
+      terms: {
+        source_exact: {Fangcalay: [0], lima: [1]},
+        source: {fangcalay: [0], lima: [1], wacu: [2]},
+        translation: {beautiful: [0], five: [1], dog: [2]},
+        phonology: {"faŋcalaj": [0]},
+        gloss: {beautiful: [0]},
+        regex: {Fangcalay: [0], lima: [1], wacu: [2]},
+      },
+    };
+    expect([...indexCandidateParts(index, "lima", "exact")]).toEqual([1]);
+    expect([...indexCandidateParts(index, "fan", "prefix")]).toEqual([0]);
+    expect([...indexCandidateParts(index, "eaut", "translation")]).toEqual([0]);
+    expect([...indexCandidateParts(index, "limx", "fuzzy")]).toEqual([1]);
   });
 });

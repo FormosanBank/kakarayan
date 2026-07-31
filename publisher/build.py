@@ -10,6 +10,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 from contextlib import ExitStack
@@ -606,9 +607,90 @@ def _write_search_data(
         ORDER BY t.language_id, t.corpus_id, t.source_path, s.position
     """
     shards: list[dict[str, object]] = []
+    indexes: list[dict[str, object]] = []
     current_scope: tuple[str, str] | None = None
     current_rows: list[tuple[object, ...]] = []
     scope_part = 0
+    scope_terms: dict[str, dict[str, set[int]]] = {}
+
+    def reset_terms() -> None:
+        nonlocal scope_terms
+        scope_terms = {
+            "source_exact": {},
+            "source": {},
+            "translation": {},
+            "phonology": {},
+            "gloss": {},
+            "regex": {},
+        }
+
+    def add_term(kind: str, value: object, part: int, *, normalize: bool = True) -> None:
+        text = str(value or "")
+        if normalize:
+            text = unicodedata.normalize("NFC", text).strip().casefold()
+        else:
+            text = unicodedata.normalize("NFC", text).strip()
+        if text:
+            scope_terms[kind].setdefault(text, set()).add(part)
+
+    def index_records(records: list[dict[str, object]], part: int) -> None:
+        for record in records:
+            source_values = [
+                record["standard"],
+                record["original"],
+                *(item["surface"] for item in cast(list[dict[str, object]], record["tokens"])),
+                *(item["text"] for item in cast(list[dict[str, object]], record["forms"])),
+            ]
+            for value in source_values:
+                add_term("source_exact", value, part, normalize=False)
+                add_term("source", value, part)
+                add_term("regex", value, part, normalize=False)
+            for item in cast(list[dict[str, object]], record["translations"]):
+                add_term("translation", item["text"], part)
+                add_term("regex", item["text"], part, normalize=False)
+            for item in cast(list[dict[str, object]], record["phonology"]):
+                add_term("phonology", item["text"], part)
+                add_term("regex", item["text"], part, normalize=False)
+            for item in cast(list[dict[str, object]], record["tier_translations"]):
+                add_term("regex", item["text"], part, normalize=False)
+                if item["owner_type"] != "sentence":
+                    add_term("gloss", item["text"], part)
+                    add_term("gloss", item["normalized"], part)
+
+    def write_index() -> None:
+        if current_scope is None or scope_part == 0:
+            return
+        corpus_id, language_id = current_scope
+        relative = Path("search") / "indexes" / language_id / corpus_id / "vocabulary.json.gz"
+        path = output / relative
+        document = {
+            "schema_version": SCHEMA_VERSION,
+            "release_id": release_id,
+            "language_id": language_id,
+            "corpus_id": corpus_id,
+            "shards": scope_part,
+            "terms": {
+                kind: {term: sorted(parts) for term, parts in values.items()}
+                for kind, values in scope_terms.items()
+            },
+        }
+        uncompressed = _json_bytes(document)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(gzip.compress(uncompressed, compresslevel=9, mtime=0))
+        data = path.read_bytes()
+        indexes.append(
+            {
+                "path": relative.as_posix(),
+                "language_id": language_id,
+                "corpus_id": corpus_id,
+                "shards": scope_part,
+                "terms": sum(len(values) for values in scope_terms.values()),
+                "bytes": len(data),
+                "uncompressed_bytes": len(uncompressed),
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "uncompressed_sha256": hashlib.sha256(uncompressed).hexdigest(),
+            }
+        )
 
     def flush() -> None:
         nonlocal current_rows, scope_part
@@ -616,6 +698,7 @@ def _write_search_data(
             return
         corpus_id, language_id = current_scope
         current_records = _search_records(connection, current_rows)
+        index_records(current_records, scope_part)
         for value in current_records:
             stream.write(
                 json.dumps(
@@ -637,6 +720,7 @@ def _write_search_data(
                 "path": relative.as_posix(),
                 "language_id": language_id,
                 "corpus_id": corpus_id,
+                "part": scope_part,
                 "records": len(current_records),
                 "bytes": len(data),
                 "uncompressed_bytes": len(uncompressed),
@@ -648,21 +732,26 @@ def _write_search_data(
         scope_part += 1
 
     with (search_dir / "sentences.jsonl").open("w", encoding="utf-8", newline="\n") as stream:
+        reset_terms()
         for row in connection.execute(query):
             scope = (str(row[1]), str(row[2]))
             if current_scope != scope:
                 flush()
+                write_index()
                 current_scope = scope
                 scope_part = 0
+                reset_terms()
             current_rows.append(row)
             if len(current_rows) >= shard_size:
                 flush()
         flush()
+        write_index()
     return {
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,
         "record_unit": "sentence",
         "shards": shards,
+        "indexes": indexes,
     }
 
 

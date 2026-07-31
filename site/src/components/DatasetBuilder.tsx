@@ -3,6 +3,7 @@ import {useMemo, useRef, useState} from "react";
 import {
   estimateScope,
   loadPreviewRecords,
+  matchingIndexes,
   matchingShards,
   searchRecords,
   type SearchMode,
@@ -61,6 +62,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
     () => matchingShards(data.search, languageId, corpusId),
     [corpusId, data.search, languageId],
   );
+  const indexes = useMemo(
+    () => matchingIndexes(data.search, languageId, corpusId),
+    [corpusId, data.search, languageId],
+  );
   const estimate = useMemo(() => estimateScope(shards), [shards]);
   const selectedCorpora = corpusId
     ? data.corpora.filter((corpus) => corpus.id === corpusId)
@@ -78,7 +83,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
           "A filtered browser export would scan more than 512 MiB. Narrow the corpus or use a prepared package.",
         );
       }
-      return (await searchRecords(shards, query.trim(), mode, signal, maxRows)).records;
+      return (
+        await searchRecords(shards, query.trim(), mode, signal, maxRows, indexes)
+      ).records;
     }
     return loadPreviewRecords(shards, signal, maxRows);
   }
@@ -92,7 +99,16 @@ export function DatasetBuilder({data}: {data: AppData}) {
     setError("");
     try {
       const records = query.trim()
-        ? (await searchRecords(shards, query.trim(), mode, next.signal, 12)).records
+        ? (
+            await searchRecords(
+              shards,
+              query.trim(),
+              mode,
+              next.signal,
+              12,
+              indexes,
+            )
+          ).records
         : await loadPreviewRecords(shards, next.signal, 12);
       setPreview(records);
     } catch (cause) {

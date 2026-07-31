@@ -171,15 +171,71 @@ kakarayan_search_manifest <- function(client) {
 #' Read one allowlisted static search shard
 #' @inheritParams kakarayan_meta
 #' @param path Path from the search manifest.
+#' @param sha256 Compressed SHA-256 from the search manifest.
+#' @param uncompressed_sha256 Content SHA-256 from the search manifest.
 #' @export
-kakarayan_search_shard <- function(client, path) {
-  valid <- grepl("^search/shards/[A-Za-z0-9_./-]+[.]json$", path) &&
+kakarayan_search_shard <- function(client, path, sha256, uncompressed_sha256) {
+  valid <- grepl("^search/shards/[A-Za-z0-9_./-]+[.]json[.]gz$", path) &&
     !any(strsplit(path, "/", fixed = TRUE)[[1L]] == "..")
   if (client$mode != "static" || !valid) {
     .kak_error("invalid_shard", "The search shard path is invalid", 400L)
   }
   .kak_ensure_release(client)
-  .kak_request(client, paste0("/data/", path))
+  handle <- curl::new_handle(
+    timeout = client$timeout,
+    useragent = "kakarayan-r/0.1"
+  )
+  response <- tryCatch(
+    curl::curl_fetch_memory(
+      paste0(client$base_url, "/data/", path),
+      handle = handle
+    ),
+    error = function(error) {
+      .kak_error("network_error", conditionMessage(error))
+    }
+  )
+  if (response$status_code >= 400L) {
+    .kak_error(
+      "search_data_failed",
+      paste("Search data returned HTTP", response$status_code),
+      response$status_code
+    )
+  }
+  received <- response$content
+  is_gzip <- length(received) >= 2L &&
+    identical(as.integer(received[1:2]), c(31L, 139L))
+  if (is_gzip) {
+    actual <- digest::digest(received, algo = "sha256", serialize = FALSE)
+    if (!identical(tolower(sha256), actual)) {
+      .kak_error(
+        "checksum_mismatch",
+        "Compressed search checksum verification failed",
+        409L
+      )
+    }
+    content <- tryCatch(
+      memDecompress(received, type = "gzip"),
+      error = function(error) {
+        .kak_error("invalid_compression", "Search data is not valid gzip", 409L)
+      }
+    )
+  } else {
+    content <- received
+  }
+  actual_content <- digest::digest(content, algo = "sha256", serialize = FALSE)
+  if (!identical(tolower(uncompressed_sha256), actual_content)) {
+    .kak_error(
+      "checksum_mismatch",
+      "Search content checksum verification failed",
+      409L
+    )
+  }
+  tryCatch(
+    jsonlite::fromJSON(rawToChar(content), simplifyVector = FALSE),
+    error = function(error) {
+      .kak_error("invalid_json", "Search data contains invalid JSON", 409L)
+    }
+  )
 }
 
 #' Query dictionary candidates
