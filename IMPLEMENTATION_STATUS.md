@@ -58,6 +58,12 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   fallback and no paid compute will be purchased.
 - Production Pages and Space deployment stay disabled for pull requests and feature
   branches.
+- The current public source contains 22 corpus catalog entries. All 22 fail closed with
+  `review_required` redistribution status until maintainers supply an evidence-backed
+  rights overlay. The invented `TestCorpus` fixture alone has an explicit reviewed CC0
+  override so CI can exercise real browser exports.
+- Pages repository/environment configuration and any optional Hugging Face Space creation
+  remain maintainer actions. These do not affect the static build or pull request.
 
 ## Progress
 
@@ -161,13 +167,100 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   about 319 MiB on disk, 642 files, 6 minutes 30 seconds, and 2.63 GiB peak memory.
 - [x] Keep the largest full Pages data file below 24 MiB and the complete built application
   shell at 41.6 MiB, within the 50 MiB per-file and 900 MiB total publication budgets.
-- [ ] Complete deterministic full-data publisher and release validation.
-- [ ] Complete full-corpus, browser, accessibility, security, and reproducibility validation.
+- [x] Complete two clean full release-only builds from identical pinned inputs and prove
+  that every one of the 120 generated files has an identical SHA-256 digest.
+- [x] Verify both full releases, each with 118 declared artifacts, and complete
+  cross-representation reconciliation across SQLite, CSV, TSV, flat and hierarchical
+  JSONL, Parquet, XLSX, canonical XML, browser shards, duration totals, and counts.
+- [x] Complete full-corpus search, performance, responsive, keyboard, bilingual,
+  accessibility, model-adapter, local-storage, offline, security, client, and
+  reproducibility validation.
+- [x] Add reviewed screenshots for the English desktop home and search experiences and the
+  Traditional Chinese mobile learner experience.
 - [ ] Open one draft pull request and leave it unmerged.
+
+## Final full-data evidence
+
+All measurements below use the clean public checkout at FormosanBank commit
+`40fd519cd82295bd7824e207990d277b871ad47f`. The checkout stayed clean, and no private
+repositories or corpus sources were used.
+
+- Release ID: `fb-20260730-40fd519c`
+- Producing Kakarayan commit recorded in the immutable artifacts:
+  `59414782154862234e2761ddbea3a5fbf5977454`
+- Full corpus counts: 14,599 texts, 487,354 sentences, 317,367 words, 261,823
+  morphemes, 2,133,105 forms, 2,044,323 phonology tiers, 1,476,322 translations,
+  529,586 audio references, and 8,214,390 searchable tokens
+- Public model catalogue: 20 models and 4 optional services
+- Release build A: 120 files, 118 artifacts, 5,697,313,348 declared artifact bytes,
+  22 minutes 27 seconds, about 9.94 GB peak RSS, zero publisher warnings
+- Release build B: 120 files, 118 artifacts, 22 minutes 1 second, about 9.95 GB peak
+  RSS, zero publisher warnings
+- Determinism: complete relative-path and SHA-256 trees match exactly
+- Full Pages data: 642 files, 640 manifest artifacts, 332,256,121 declared artifact
+  bytes, 6 minutes 24 seconds, about 2.88 GB peak RSS, zero publisher warnings
+- Final assembled site: 661 files, 375,896,044 bytes, largest file 39,362,651 bytes
+- Final reconciliation: 693.25 seconds, about 2.59 GB peak RSS, all representations
+  matched. Explicit hierarchical exclusions are sentence-empty texts and text-owned tiers
+  that cannot be represented under a sentence node.
+- Browser budget sample against the full Glosbe Amis scope: 193,100 initial route bytes,
+  106,337 JavaScript bytes before lazy DuckDB, 77,758 catalogue bytes, 109 ms cold exact
+  search, 114 ms warm exact search, and 35,100,000 bytes of used JavaScript heap
+
+## Final validation evidence
+
+- Python formatting and Ruff: pass across 79 files and the complete repository
+- Mypy: pass across 78 source files
+- Publisher tests: 23 pass
+- API and Python client tests: 11 pass
+- Frontend unit and component tests: 42 pass across 8 files
+- Full fixture browser matrix: 43 pass and 13 intentional project-specific skips across
+  desktop Chromium, mobile Chromium, Firefox, and WebKit
+- Full-data desktop Chromium: 14 pass, including measured budgets, offline local study,
+  migration/backup/restore, microphone denial, deletion, keyboard, and accessibility
+- Actual DuckDB-Wasm Parquet signatures: pass in Chromium, Firefox, and WebKit using the
+  rights-approved invented fixture
+- Model adapters: success, cold start, cancellation, timeout, malformed output, provider
+  outage, ASR mapping, and input bounds all pass without contacting an optional live model
+- JavaScript client: build and 4 tests pass
+- Python client: sdist and wheel build; live fixture smoke passes
+- R client: package build/install and live fixture smoke pass. `R CMD check --as-cran`
+  reports its expected pre-publication license/time/Pandoc notes and warns that no examples,
+  tests, or vignettes are bundled.
+- Shared live API smoke: JavaScript, Python, and R each return the same one-item exact
+  dictionary result for `lima` from `fb-20240102-d2b32874`
+- Site npm audit: zero known vulnerabilities
+- Python `pip-audit`: zero known vulnerabilities
+- Python and Node dependency license metadata inventoried. The old transitive
+  `json-bignum` package declares MIT through its legacy `licenses` field and bundled
+  license file rather than the modern singular metadata field.
+- GitHub workflow security audit: no findings after disabling checkout credential
+  persistence; six explicitly suppressed informational audits remain in the existing
+  workflow policy.
+- Tracked secret-pattern scan: pass
+- Local complete pytest: 52 pass and 64 database-test setup errors because the local
+  Docker daemon and PostgreSQL on port 5433 are unavailable. CI provisions pinned
+  PostgreSQL and is the authoritative database/container gate.
+
+Screenshots:
+
+- [`docs/screenshots/home-desktop-en.png`](docs/screenshots/home-desktop-en.png)
+- [`docs/screenshots/search-desktop-en.png`](docs/screenshots/search-desktop-en.png)
+- [`docs/screenshots/learn-mobile-zh.png`](docs/screenshots/learn-mobile-zh.png)
+
+## Remaining external approvals
+
+- Gabriel Gras and FormosanBank maintainers must select and add Kakarayan's software
+  license before a production deployment can run.
+- Maintainers must review the evidence and add corpus-level rights decisions before real
+  corpus bytes can be redistributed through Pages or a data release.
+- A maintainer must enable/configure GitHub Pages and its protected environment.
+- A maintainer may create a public no-cost Hugging Face Docker Space and configure its
+  narrowly scoped token if the optional live API is wanted at launch.
+- The local Docker daemon is unavailable. GitHub CI supplies PostgreSQL and Docker for the
+  remaining environment-dependent checks.
 
 ## Next slice
 
-Implement full-representation reconciliation, then run two clean deterministic full-data
-builds from the pinned public source. Rebuild the full Pages projection, run performance,
-cross-browser, accessibility, client, and dependency checks, and open the single draft pull
-request without merging it.
+Review the complete branch diff, open the one draft pull request, monitor every check, and
+fix any branch-owned failure until CI is green. Do not merge or deploy.
