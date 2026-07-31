@@ -1,0 +1,17 @@
+Package: kakarayan
+Type: Package
+Title: Client for Kakarayan Public APIs
+Version: 0.1.0
+Authors@R: c(
+    person("Hunter", "Scheppat", email = "scheppat@bc.edu", role = c("aut", "cre")),
+    person("FormosanBank", role = "cph")
+    )
+Description: Thin client for versioned static catalogues and bounded live
+    FormosanBank corpus queries exposed by Kakarayan.
+License: file LICENSE
+Encoding: UTF-8
+Imports:
+    curl,
+    digest,
+    jsonlite
+RoxygenNote: 7.3.2

@@ -10,7 +10,9 @@ dependencies = [
     "lxml>=5.0",
     "django-environ>=0.11",
     "django-htmx>=1.27.0",
+    "fastapi>=0.116,<1",
     "jsonschema>=4.23",
+    "uvicorn[standard]>=0.35,<1",
 ]
 
 [dependency-groups]
@@ -21,6 +23,7 @@ dev = [
     "ruff>=0.9,<0.15",
     "mypy>=1.13",
     "django-stubs[compatible-mypy]>=5.1",
+    "httpx>=0.28,<1",
     "pre-commit>=4.0",
 ]
 

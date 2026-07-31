@@ -86,13 +86,21 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   generated contracts.
 - [x] Verify the frontend with lint, strict TypeScript, six unit tests, a production build,
   a zero-vulnerability npm audit, desktop interaction, mobile rendering, and browser logs.
+- [x] Implement the optional read-only FastAPI service with checksummed release acquisition,
+  immutable SQLite startup, health/readiness, structured errors, exact CORS, bounded
+  queries, opaque cursors, catalogue and record reads, dictionary, concordance, and
+  frequencies.
+- [x] Implement thin JavaScript, Python/CLI, and R clients with release pinning, timeouts,
+  pagination, structured errors, static search-shard access, and checksum verification.
+- [x] Exercise all three clients against the same running fixture API; package-build Python,
+  compile/test JavaScript, and pass `R CMD check`.
 - [ ] Implement deterministic full-data publisher and release artifacts.
-- [ ] Implement the static API, optional live API, and clients.
 - [ ] Implement guarded CI, Pages, release, and Space workflows.
 - [ ] Complete full-corpus, browser, accessibility, security, and reproducibility validation.
 - [ ] Open one draft pull request and leave it unmerged.
 
 ## Next slice
 
-Commit and push the static application checkpoint. Then implement the read-only FastAPI
-service and its JavaScript, Python, and R clients against the generated SQLite release.
+Commit and push the API/client checkpoint. Then complete prepared download formats,
+selection recipes, full-corpus publication, and size/performance evidence before wiring
+guarded CI and deployment workflows.

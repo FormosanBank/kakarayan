@@ -184,6 +184,27 @@ def _validate_sqlite(connection: sqlite3.Connection) -> None:
         raise BuildError(f"SQLite integrity check failed: {result}")
 
 
+def _add_publication_metadata(
+    connection: sqlite3.Connection,
+    documents: Mapping[str, object],
+) -> None:
+    """Embed non-circular release metadata used by the optional live API."""
+    connection.execute(
+        "CREATE TABLE publication_metadata "
+        "(key TEXT PRIMARY KEY NOT NULL, value_json TEXT NOT NULL)"
+    )
+    connection.executemany(
+        "INSERT INTO publication_metadata (key, value_json) VALUES (?, ?)",
+        [
+            (
+                key,
+                json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            )
+            for key, value in sorted(documents.items())
+        ],
+    )
+
+
 def _record_counts(connection: sqlite3.Connection) -> dict[str, int]:
     return {
         table: int(connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
@@ -510,6 +531,27 @@ def build_release(
             output,
             release_id=release_id,
         )
+        _add_publication_metadata(
+            connection,
+            {
+                "meta": {
+                    "schema_version": SCHEMA_VERSION,
+                    "release_id": release_id,
+                    "generated_at": generated_at,
+                    "source": {
+                        "repository": source.repository,
+                        "commit": source.commit,
+                    },
+                },
+                "languages": catalog["languages"],
+                "corpora": catalog["corpora"],
+                "rights": rights,
+                "models": models,
+                "orthography": orthography,
+            },
+        )
+        connection.commit()
+        _validate_sqlite(connection)
     finally:
         connection.close()
 
