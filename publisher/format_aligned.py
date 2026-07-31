@@ -197,7 +197,12 @@ def _eaf(cues: list[dict[str, Any]], media: str) -> bytes:
     return etree.tostring(root, encoding="UTF-8", xml_declaration=True, pretty_print=True)
 
 
-def write_aligned_package(database: Path, path: Path, release_id: str) -> dict[str, int]:
+def write_aligned_package(
+    database: Path,
+    path: Path,
+    release_id: str,
+    rights: dict[str, object],
+) -> dict[str, int]:
     query = """
         SELECT sv.text_id, sv.sentence_id, sv.corpus_id, sv.language_id, sv.source_path,
                COALESCE(sv.standard_form, sv.original_form, '') AS source_form,
@@ -280,6 +285,12 @@ def write_aligned_package(database: Path, path: Path, release_id: str) -> dict[s
                 "timings. Media is referenced, never copied. Canonical XML remains the "
                 "authoritative representation.\n"
             ).encode(),
+        )
+    )
+    entries.append(
+        (
+            "rights.json",
+            (json.dumps(rights, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(),
         )
     )
     write_zip(path, entries)

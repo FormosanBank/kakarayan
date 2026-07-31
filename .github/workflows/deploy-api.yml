@@ -79,13 +79,13 @@ jobs:
           mkdir -p build/release-check
           gh release download "$TAG" \
             --pattern release-manifest.json \
-            --pattern formosanbank.sqlite \
+            --pattern formosanbank.sqlite.gz \
             --dir build/release-check
           expected="$(
-            jq -r '.artifacts[] | select(.path == "formosanbank.sqlite") | .sha256' \
+            jq -r '.artifacts[] | select(.path == "formosanbank.sqlite.gz") | .sha256' \
               build/release-check/release-manifest.json
           )"
-          echo "$expected  build/release-check/formosanbank.sqlite" | sha256sum --check
+          echo "$expected  build/release-check/formosanbank.sqlite.gz" | sha256sum --check
 
       - name: Assemble and build the pinned Space
         run: |

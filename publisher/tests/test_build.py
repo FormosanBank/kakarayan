@@ -13,6 +13,8 @@ import pytest
 from openpyxl import load_workbook
 
 from publisher.build import BuildError, build_release
+from publisher.cldf_export import write_cldf_package
+from publisher.verify_release import verify_release
 
 
 def _tree_checksums(root: Path) -> dict[str, str]:
@@ -70,6 +72,7 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         read_only=True,
     )
     assert "README" in workbook.sheetnames
+    assert "RIGHTS" in workbook.sheetnames
     workbook.close()
     canonical = next((first.output / "prepared" / "canonical").glob("*.zip"))
     with zipfile.ZipFile(canonical) as archive:
@@ -79,12 +82,21 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     with zipfile.ZipFile(first.output / "prepared" / "time-aligned.zip") as archive:
         assert any(name.endswith(".eaf") for name in archive.namelist())
         assert any(name.endswith(".TextGrid") for name in archive.namelist())
+        assert "README.txt" in archive.namelist()
+        assert "rights.json" in archive.namelist()
     with zipfile.ZipFile(first.output / "prepared" / "formosanbank-cldf.zip") as archive:
         assert "Generic-metadata.json" in archive.namelist()
+        assert "README.txt" in archive.namelist()
+        assert "rights.json" in archive.namelist()
     jsonl_packages = list((first.output / "prepared" / "jsonl").glob("*.zip"))
     assert len(jsonl_packages) == 1
     with zipfile.ZipFile(jsonl_packages[0]) as archive:
-        assert archive.namelist() == ["part-0000.jsonl"]
+        assert archive.namelist() == [
+            "README.txt",
+            "data-dictionary.json",
+            "part-0000.jsonl",
+            "rights.json",
+        ]
 
     with closing(sqlite3.connect(first.output / "formosanbank.sqlite")) as database:
         assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)
@@ -108,3 +120,65 @@ def test_output_directory_must_be_empty(public_repo: Path, tmp_path: Path) -> No
 def test_source_commit_must_match(public_repo: Path, tmp_path: Path) -> None:
     with pytest.raises(BuildError, match="expected"):
         build_release(public_repo, tmp_path / "output", expected_commit="0" * 40)
+
+
+def test_database_can_be_packaged_for_github_releases(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    release = build_release(
+        public_repo,
+        tmp_path / "release",
+        compress_database=True,
+        release_only=True,
+    )
+    assert not (release.output / "formosanbank.sqlite").exists()
+    compressed = release.output / "formosanbank.sqlite.gz"
+    assert compressed.read_bytes()[:2] == b"\x1f\x8b"
+    manifest = verify_release(release.output, max_artifact_bytes=2 * 1024**3)
+    artifact = next(
+        item for item in manifest["artifacts"] if item["path"] == "formosanbank.sqlite.gz"
+    )
+    assert artifact["compression"] == "gzip"
+    assert artifact["content_media_type"] == "application/vnd.sqlite3"
+    assert artifact["asset_name"] == "formosanbank.sqlite.gz"
+    assert artifact["download_url"].endswith(f"/data-{release.release_id}/formosanbank.sqlite.gz")
+    assert not (release.output / "api").exists()
+    assert not (release.output / "search").exists()
+    assert not (release.output / "tables").exists()
+    asset_names = [item["asset_name"] for item in manifest["artifacts"]]
+    assert len(asset_names) == len(set(asset_names))
+
+
+def test_cldf_streams_and_validates_large_source_fields(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    release = build_release(
+        public_repo,
+        tmp_path / "release",
+        include_prepared=False,
+    )
+    database = release.output / "formosanbank.sqlite"
+    large_translation = "large field " * 15_000
+    with closing(sqlite3.connect(database)) as connection:
+        connection.execute(
+            """
+            UPDATE translations
+            SET text = ?
+            WHERE rowid = (SELECT MIN(rowid) FROM translations)
+            """,
+            (large_translation,),
+        )
+        connection.commit()
+    rights = json.loads((release.output / "rights.json").read_text(encoding="utf-8"))
+    counts = write_cldf_package(
+        database,
+        tmp_path / "large-cldf.zip",
+        release_id=release.release_id,
+        source_commit=release.source.commit,
+        rights=rights,
+    )
+    assert counts["examples"] == 2
+    with zipfile.ZipFile(tmp_path / "large-cldf.zip") as archive:
+        assert large_translation.encode() in archive.read("examples.csv")

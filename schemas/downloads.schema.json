@@ -31,7 +31,17 @@
           "rights_ids": {"type": "array", "items": {"type": "string"}},
           "publishable": {"type": "boolean"},
           "blocked_reasons": {"type": "array", "items": {"type": "string"}},
-          "download_url": {"type": "string", "format": "uri"}
+          "download_url": {"type": "string", "format": "uri"},
+          "compression": {"enum": ["gzip"]},
+          "content_media_type": {"type": "string"},
+          "content_bytes": {"type": "integer", "minimum": 1},
+          "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "dependentRequired": {
+          "compression": ["content_media_type", "content_bytes", "content_sha256"],
+          "content_media_type": ["compression", "content_bytes", "content_sha256"],
+          "content_bytes": ["compression", "content_media_type", "content_sha256"],
+          "content_sha256": ["compression", "content_media_type", "content_bytes"]
         },
         "additionalProperties": false
       }

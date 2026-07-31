@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import zipfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -17,7 +18,7 @@ def _info(name: str) -> zipfile.ZipInfo:
     return info
 
 
-def write_zip(path: Path, entries: Iterable[tuple[str, bytes]]) -> None:
+def write_zip(path: Path, entries: Iterable[tuple[str, bytes | Path]]) -> None:
     """Write sorted bytes with fixed metadata and atomic replacement."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(f"{path.suffix}.tmp")
@@ -29,11 +30,16 @@ def write_zip(path: Path, entries: Iterable[tuple[str, bytes]]) -> None:
         strict_timestamps=True,
     ) as archive:
         for name, data in sorted(entries, key=lambda item: item[0]):
-            archive.writestr(_info(name), data)
+            with archive.open(_info(name), "w") as destination:
+                if isinstance(data, Path):
+                    with data.open("rb") as source:
+                        shutil.copyfileobj(source, destination, length=1024 * 1024)
+                else:
+                    destination.write(data)
     temporary.replace(path)
 
 
-def directory_entries(root: Path) -> Iterable[tuple[str, bytes]]:
+def directory_entries(root: Path) -> Iterable[tuple[str, Path]]:
     for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
         if path.is_file():
-            yield path.relative_to(root).as_posix(), path.read_bytes()
+            yield path.relative_to(root).as_posix(), path

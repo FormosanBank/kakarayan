@@ -172,8 +172,7 @@ class CorpusStore:
                 morphemes = [
                     dict(row)
                     for row in connection.execute(
-                        "SELECT * FROM morphemes WHERE parent_id = ? "
-                        "ORDER BY position LIMIT 1001",
+                        "SELECT * FROM morphemes WHERE parent_id = ? ORDER BY position LIMIT 1001",
                         (word["id"],),
                     )
                 ]
@@ -371,7 +370,7 @@ class CorpusStore:
             FROM tokens tok
             JOIN sentences s ON s.id = tok.sentence_id
             JOIN texts t ON t.id = s.parent_id
-            WHERE {' AND '.join(clauses)}
+            WHERE {" AND ".join(clauses)}
             GROUP BY tok.normalized
             HAVING COUNT(*) >= ?
             ORDER BY {order}

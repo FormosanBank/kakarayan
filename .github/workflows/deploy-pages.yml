@@ -23,7 +23,9 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: read
+      pages: read
     env:
+      GH_TOKEN: ${{ github.token }}
       SOURCE_REF: ${{ inputs.source_ref || 'main' }}
     steps:
       - name: Check out Kakarayan
@@ -91,9 +93,31 @@ jobs:
           uv run python -m publisher.verify_release \
             --release build/pages-release \
             --require-publishable-scope site-query-data
+
+      - name: Acquire the matching published download manifest
+        shell: bash
+        run: |
+          RELEASE_ID="$(
+            jq -r .release_id build/pages-release/release-manifest.json
+          )"
+          TAG="data-$RELEASE_ID"
+          gh release view "$TAG" --json isDraft,isPrerelease > build/data-release.json
+          if [[ "$(jq -r .isDraft build/data-release.json)" != "false" ]] \
+            || [[ "$(jq -r .isPrerelease build/data-release.json)" != "false" ]]; then
+            echo "The matching data release must be published and non-prerelease."
+            exit 1
+          fi
+          mkdir -p build/published-release
+          gh release download "$TAG" \
+            --pattern release-manifest.json \
+            --dir build/published-release
+
+      - name: Assemble static API, search, and prepared-download catalogue
+        run: |
           uv run python -m publisher.assemble_site \
             --release build/pages-release \
-            --public site/public
+            --public site/public \
+            --download-manifest build/published-release/release-manifest.json
 
       - name: Test and build the production site
         run: |

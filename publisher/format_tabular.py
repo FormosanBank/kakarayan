@@ -10,6 +10,7 @@ import tempfile
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from itertools import chain
 from pathlib import Path
 from typing import Any
 
@@ -187,6 +188,7 @@ def write_hierarchical_jsonl(
     release_id: str,
     *,
     rows_per_part: int = 20_000,
+    package_metadata: list[tuple[str, Path]] | None = None,
 ) -> dict[str, object]:
     output.mkdir(parents=True, exist_ok=True)
     partitions: list[dict[str, object]] = []
@@ -211,7 +213,10 @@ def write_hierarchical_jsonl(
                 return
             language_id, corpus_id = scope
             zip_path = output / f"{language_id}--{corpus_id}.zip"
-            write_zip(zip_path, directory_entries(temporary))
+            write_zip(
+                zip_path,
+                chain(directory_entries(temporary), package_metadata or []),
+            )
             partitions.append(
                 {
                     "path": f"jsonl/{zip_path.name}",
@@ -348,7 +353,13 @@ def write_audio_manifest(database: Path, output: Path) -> None:
             writer.writerow([r"\N" if value is None else value for value in row])
 
 
-def write_xlsx(database: Path, path: Path, release_id: str, source_commit: str) -> None:
+def write_xlsx(
+    database: Path,
+    path: Path,
+    release_id: str,
+    source_commit: str,
+    rights: dict[str, object],
+) -> None:
     raw = path.with_suffix(".raw.xlsx")
     workbook = Workbook(write_only=True)
     workbook.properties.created = datetime(1980, 1, 1, tzinfo=UTC)
@@ -362,8 +373,27 @@ def write_xlsx(database: Path, path: Path, release_id: str, source_commit: str) 
         ("null representation", "blank cell"),
         ("formula safety", "text beginning = + - @ tab or CR is prefixed with apostrophe"),
         ("canonical representation", "Use the pinned FormosanBank XML for archival work."),
+        ("rights", "See the RIGHTS sheet. Public visibility does not imply uniform reuse."),
     ):
         readme.append(row)
+    rights_sheet = workbook.create_sheet("RIGHTS")
+    rights_columns = (
+        "id",
+        "corpus",
+        "review_status",
+        "redistribution",
+        "commercial_use",
+        "derivatives",
+        "notice",
+    )
+    rights_sheet.append(rights_columns)
+    rights_entries = rights.get("entries")
+    if not isinstance(rights_entries, list):
+        raise ValueError("Rights metadata has no entries")
+    for entry in rights_entries:
+        if not isinstance(entry, dict):
+            continue
+        rights_sheet.append([_safe_spreadsheet(entry.get(column)) for column in rights_columns])
     with open_release(database) as connection:
         for table, columns in TABLE_COLUMNS.items():
             cursor = connection.execute(

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
+import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 from pycldf import Generic
@@ -34,9 +37,9 @@ def _language_rows(connection: sqlite3.Connection) -> list[dict[str, object]]:
 
 def _examples(
     connection: sqlite3.Connection,
-) -> tuple[list[dict[str, object]], int]:
-    result = []
-    excluded = 0
+    stats: dict[str, int],
+) -> Iterator[dict[str, object]]:
+    """Stream examples so a full release does not reside in Python memory."""
     for row in connection.execute(
         """
         SELECT sentence_id, language_id, source_path, source_xml_id,
@@ -62,22 +65,32 @@ def _examples(
         ]
         primary_text = row["primary_text"] or " ".join(words)
         if not primary_text:
-            excluded += 1
+            stats["excluded"] += 1
             continue
-        result.append(
-            {
-                "ID": row["sentence_id"],
-                "Language_ID": row["language_id"],
-                "Primary_Text": primary_text,
-                "Analyzed_Word": words or None,
-                "Translated_Text": " | ".join(translations) or None,
-                "Comment": (
-                    f"FormosanBank source {row['source_path']}"
-                    + (f"#{row['source_xml_id']}" if row["source_xml_id"] else "")
-                ),
-            }
-        )
-    return result, excluded
+        stats["examples"] += 1
+        yield {
+            "ID": row["sentence_id"],
+            "Language_ID": row["language_id"],
+            "Primary_Text": primary_text,
+            "Analyzed_Word": words or None,
+            "Translated_Text": " | ".join(translations) or None,
+            "Comment": (
+                f"FormosanBank source {row['source_path']}"
+                + (f"#{row['source_xml_id']}" if row["source_xml_id"] else "")
+            ),
+        }
+
+
+def _validate(dataset: Generic, metadata_path: Path) -> None:
+    """Validate source fields larger than Python's conservative CSV default."""
+    previous_limit = csv.field_size_limit()
+    try:
+        csv.field_size_limit(sys.maxsize)
+        loaded = Generic.from_metadata(metadata_path)
+        if not loaded.validate():
+            raise ValueError("Generated CLDF package did not validate")
+    finally:
+        csv.field_size_limit(previous_limit)
 
 
 def write_cldf_package(
@@ -86,6 +99,7 @@ def write_cldf_package(
     *,
     release_id: str,
     source_commit: str,
+    rights: dict[str, object],
 ) -> dict[str, int]:
     with tempfile.TemporaryDirectory(prefix="kakarayan-cldf-") as temporary_name:
         directory = Path(temporary_name)
@@ -107,14 +121,12 @@ def write_cldf_package(
         )
         with open_release(database) as connection:
             languages = _language_rows(connection)
-            examples, excluded_examples = _examples(connection)
-        metadata_path = dataset.write(
-            LanguageTable=languages,
-            ExampleTable=examples,
-        )
-        loaded = Generic.from_metadata(metadata_path)
-        if not loaded.validate():
-            raise ValueError("Generated CLDF package did not validate")
+            stats = {"examples": 0, "excluded": 0}
+            metadata_path = dataset.write(
+                LanguageTable=languages,
+                ExampleTable=_examples(connection, stats),
+            )
+        _validate(dataset, metadata_path)
         (directory / "README.txt").write_text(
             "Kakarayan CLDF Generic projection\n\n"
             f"Release: {release_id}\n"
@@ -123,12 +135,17 @@ def write_cldf_package(
             "wordlist or grammar dataset. Source paths are retained in Comment. Use "
             "canonical XML for archival and lossless work.\n"
             f"Sentences excluded because no source text could be represented: "
-            f"{excluded_examples}\n",
+            f"{stats['excluded']}\n",
             encoding="utf-8",
+        )
+        (directory / "rights.json").write_text(
+            json.dumps(rights, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+            newline="\n",
         )
         write_zip(path, directory_entries(directory))
     return {
         "languages": len(languages),
-        "examples": len(examples),
-        "excluded_without_source_text": excluded_examples,
+        "examples": stats["examples"],
+        "excluded_without_source_text": stats["excluded"],
     }

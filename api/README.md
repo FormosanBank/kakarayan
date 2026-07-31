@@ -11,9 +11,10 @@ Set exactly one manifest source:
 - `KAKARAYAN_RELEASE_MANIFEST_URL`: pinned HTTPS URL for `release-manifest.json`.
 - `KAKARAYAN_RELEASE_MANIFEST_PATH`: local manifest path for development and tests.
 
-The service locates `formosanbank.sqlite` in that manifest, downloads it beside the remote
-manifest when needed, verifies its size and SHA-256, runs `PRAGMA integrity_check`, checks
-the schema version, opens it immutable and read-only, and only then passes `/readyz`.
+The service locates `formosanbank.sqlite` or the release-safe
+`formosanbank.sqlite.gz` in that manifest. It verifies both asset and decompressed content
+checksums, expands the database when needed, runs `PRAGMA integrity_check`, checks the
+schema version, opens it immutable and read-only, and only then passes `/readyz`.
 
 Optional settings:
 
@@ -24,8 +25,12 @@ Optional settings:
 Run locally from the repository root:
 
 ```bash
-KAKARAYAN_RELEASE_MANIFEST_PATH=build/fixture-release/release-manifest.json \
-KAKARAYAN_DB_PATH=build/fixture-release/formosanbank.sqlite \
+uv run python -m publisher.fixture_cli \
+  --output build/api-fixture-release \
+  --include-prepared
+
+KAKARAYAN_RELEASE_MANIFEST_PATH=build/api-fixture-release/release-manifest.json \
+KAKARAYAN_DB_PATH=build/api-fixture-release/formosanbank.sqlite \
 uv run uvicorn api.app:app --port 8000 --no-access-log
 ```
 

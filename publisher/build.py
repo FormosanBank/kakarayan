@@ -507,8 +507,12 @@ def _artifact(
     scope: str,
     rights_ids: list[str],
     rights_entries: Mapping[str, Mapping[str, object]],
+    content: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
-    data = path.read_bytes()
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
     blocked_reasons = []
     for rights_id in rights_ids:
         entry = rights_entries[rights_id]
@@ -516,7 +520,7 @@ def _artifact(
             blocked_reasons.append(f"{rights_id}: rights review required")
         elif entry["redistribution"] != "allowed":
             blocked_reasons.append(f"{rights_id}: redistribution is {entry['redistribution']}")
-    return {
+    artifact = {
         "path": path.relative_to(root).as_posix(),
         "media_type": {
             ".json": "application/json",
@@ -529,17 +533,48 @@ def _artifact(
             ".zip": "application/zip",
             ".txt": "text/plain",
             ".sql": "application/sql",
+            ".gz": "application/gzip",
         }.get(path.suffix, "application/octet-stream"),
-        "bytes": len(data),
-        "sha256": hashlib.sha256(data).hexdigest(),
+        "bytes": path.stat().st_size,
+        "sha256": digest.hexdigest(),
         "scope": scope,
         "rights_ids": rights_ids,
         "publishable": not blocked_reasons,
         "blocked_reasons": blocked_reasons,
     }
+    if content:
+        artifact.update(content)
+    return artifact
 
 
-def _validate(document: dict[str, object], schema_path: Path) -> None:
+def _compress_database(path: Path) -> tuple[Path, dict[str, object]]:
+    destination = path.with_suffix(f"{path.suffix}.gz")
+    temporary = destination.with_suffix(f"{destination.suffix}.tmp")
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as source, temporary.open("wb") as raw_output:
+        with gzip.GzipFile(
+            filename="",
+            mode="wb",
+            compresslevel=6,
+            fileobj=raw_output,
+            mtime=0,
+        ) as output:
+            while chunk := source.read(1024 * 1024):
+                digest.update(chunk)
+                size += len(chunk)
+                output.write(chunk)
+    temporary.replace(destination)
+    path.unlink()
+    return destination, {
+        "compression": "gzip",
+        "content_media_type": "application/vnd.sqlite3",
+        "content_bytes": size,
+        "content_sha256": digest.hexdigest(),
+    }
+
+
+def validate_document(document: dict[str, object], schema_path: Path) -> None:
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
     registry = Registry()
     for candidate in schema_path.parent.glob("*.schema.json"):
@@ -562,10 +597,16 @@ def build_release(
     model_catalog: dict[str, object] | None = None,
     include_prepared: bool = True,
     site_only: bool = False,
+    compress_database: bool = False,
+    release_only: bool = False,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
     if site_only and include_prepared:
         raise BuildError("A site-only build cannot include prepared download formats")
+    if site_only and compress_database:
+        raise BuildError("A site-only build has no database to compress")
+    if release_only and (site_only or not include_prepared or not compress_database):
+        raise BuildError("A release-only build requires prepared formats and a compressed database")
     repo = repo.resolve()
     source = inspect_source(repo, expected_commit)
     output = output.resolve()
@@ -678,11 +719,11 @@ def build_release(
     _write_json(output / "models.json", models)
     _write_json(output / "orthography.json", orthography)
 
-    _validate(catalog, schema_dir / "catalog.schema.json")
-    _validate(rights, schema_dir / "rights.schema.json")
-    _validate(models, schema_dir / "model-catalog.schema.json")
-    _validate(orthography, schema_dir / "orthography.schema.json")
-    _validate(search_manifest, schema_dir / "search-manifest.schema.json")
+    validate_document(catalog, schema_dir / "catalog.schema.json")
+    validate_document(rights, schema_dir / "rights.schema.json")
+    validate_document(models, schema_dir / "model-catalog.schema.json")
+    validate_document(orthography, schema_dir / "orthography.schema.json")
+    validate_document(search_manifest, schema_dir / "search-manifest.schema.json")
 
     if include_prepared:
         prepared_rights, prepared_summary = build_prepared_formats(
@@ -700,10 +741,19 @@ def build_release(
             "aligned": {},
             "canonical_packages": 0,
         }
+    artifact_content: dict[str, dict[str, object]] = {}
     if site_only:
         shutil.rmtree(tables_dir)
         sqlite_path.unlink()
         (output / "search" / "sentences.jsonl").unlink()
+    elif compress_database:
+        compressed_database, content = _compress_database(sqlite_path)
+        artifact_content[compressed_database.relative_to(output).as_posix()] = content
+    if release_only:
+        if tables_dir.exists():
+            shutil.rmtree(tables_dir)
+        shutil.rmtree(output / "api")
+        shutil.rmtree(output / "search")
     rights_rows = cast(list[dict[str, object]], rights["entries"])
     rights_ids = [str(entry["id"]) for entry in rights_rows]
     rights_by_id: dict[str, Mapping[str, object]] = {
@@ -735,21 +785,41 @@ def build_release(
                 scope=scope,
                 rights_ids=artifact_rights,
                 rights_entries=rights_by_id,
+                content=artifact_content.get(relative),
             )
         )
+    if release_only:
+        asset_names: set[str] = set()
+        for artifact in artifacts:
+            asset_name = Path(str(artifact["path"])).name
+            if asset_name in asset_names:
+                raise BuildError(f"GitHub Release asset name is not unique: {asset_name}")
+            asset_names.add(asset_name)
+            artifact["asset_name"] = asset_name
+            artifact["download_url"] = (
+                "https://github.com/FormosanBank/kakarayan/releases/download/"
+                f"data-{release_id}/{asset_name}"
+            )
     prepared_artifacts = [
         {
-            **artifact,
+            **{key: value for key, value in artifact.items() if key != "asset_name"},
             "download_url": (
-                "https://github.com/FormosanBank/kakarayan/releases/download/"
+                str(artifact["download_url"])
+                if "download_url" in artifact
+                else "https://github.com/FormosanBank/kakarayan/releases/download/"
                 f"data-{release_id}/{Path(str(artifact['path'])).name}"
             ),
         }
         for artifact in artifacts
-        if str(artifact["path"]).startswith("prepared/")
-        and (
-            str(artifact["path"]).endswith((".zip", ".xlsx"))
-            or "/parquet/" in str(artifact["path"])
+        if (
+            str(artifact["path"]) == "formosanbank.sqlite.gz"
+            or (
+                str(artifact["path"]).startswith("prepared/")
+                and (
+                    str(artifact["path"]).endswith((".zip", ".xlsx"))
+                    or "/parquet/" in str(artifact["path"])
+                )
+            )
         )
     ]
     downloads: dict[str, object] = {
@@ -769,18 +839,19 @@ def build_release(
             }
         ],
     }
-    _write_json(api / "downloads.json", downloads)
-    _write_json(api / "releases.json", releases)
-    for path in (api / "downloads.json", api / "releases.json"):
-        artifacts.append(
-            _artifact(
-                path,
-                output,
-                scope="site-query-data",
-                rights_ids=rights_ids,
-                rights_entries=rights_by_id,
+    if not release_only:
+        _write_json(api / "downloads.json", downloads)
+        _write_json(api / "releases.json", releases)
+        for path in (api / "downloads.json", api / "releases.json"):
+            artifacts.append(
+                _artifact(
+                    path,
+                    output,
+                    scope="site-query-data",
+                    rights_ids=rights_ids,
+                    rights_entries=rights_by_id,
+                )
             )
-        )
     artifacts.sort(key=lambda artifact: str(artifact["path"]))
     manifest = {
         "schema_version": SCHEMA_VERSION,
@@ -792,8 +863,8 @@ def build_release(
         "artifacts": artifacts,
     }
     _write_json(output / "release-manifest.json", manifest)
-    _validate(downloads, schema_dir / "downloads.schema.json")
-    _validate(manifest, schema_dir / "release-manifest.schema.json")
+    validate_document(downloads, schema_dir / "downloads.schema.json")
+    validate_document(manifest, schema_dir / "release-manifest.schema.json")
     checksum_lines = [f"{artifact['sha256']}  {artifact['path']}" for artifact in artifacts]
     checksum_lines.append(
         f"{hashlib.sha256((output / 'release-manifest.json').read_bytes()).hexdigest()}"

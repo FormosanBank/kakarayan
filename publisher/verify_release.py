@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import json
 import sqlite3
+import tempfile
 from contextlib import closing
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -69,6 +70,28 @@ def _verify_database(path: Path) -> None:
         raise VerificationError(f"Cannot verify SQLite release: {error}") from error
 
 
+def _verify_compressed_database(path: Path, artifact: dict[str, Any]) -> None:
+    digest = hashlib.sha256()
+    size = 0
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="kakarayan-verify-", suffix=".sqlite") as output:
+            temporary_path = Path(output.name)
+            with gzip.open(path, "rb") as source:
+                while chunk := source.read(1024 * 1024):
+                    size += len(chunk)
+                    digest.update(chunk)
+                    output.write(chunk)
+            output.flush()
+            if size != artifact.get("content_bytes"):
+                raise VerificationError("Expanded SQLite size does not match the manifest")
+            if digest.hexdigest() != artifact.get("content_sha256"):
+                raise VerificationError("Expanded SQLite checksum does not match the manifest")
+            _verify_database(temporary_path)
+    except OSError as error:
+        raise VerificationError(f"Cannot expand the SQLite release: {error}") from error
+
+
 def _verify_search(root: Path) -> None:
     manifest_path = root / "api" / "v1" / "search" / "manifest.json"
     if not manifest_path.is_file():
@@ -91,7 +114,12 @@ def _verify_search(root: Path) -> None:
             raise VerificationError(f"Search record count mismatch: {shard['path']}")
 
 
-def verify_release(root: Path, *, required_scopes: set[str] | None = None) -> dict[str, Any]:
+def verify_release(
+    root: Path,
+    *,
+    required_scopes: set[str] | None = None,
+    max_artifact_bytes: int | None = None,
+) -> dict[str, Any]:
     root = root.resolve()
     manifest_path = root / "release-manifest.json"
     checksum_path = root / "SHA256SUMS"
@@ -110,6 +138,21 @@ def verify_release(root: Path, *, required_scopes: set[str] | None = None) -> di
     by_path = {artifact["path"]: artifact for artifact in artifacts}
     if len(by_path) != len(artifacts):
         raise VerificationError("Release manifest has duplicate artifact paths")
+    release_assets = [artifact for artifact in artifacts if "asset_name" in artifact]
+    if release_assets:
+        if len(release_assets) != len(artifacts):
+            raise VerificationError("Release asset mappings must cover every artifact")
+        asset_names = [artifact["asset_name"] for artifact in release_assets]
+        if len(set(asset_names)) != len(asset_names):
+            raise VerificationError("Release manifest has duplicate GitHub asset names")
+        release_id = manifest["release_id"]
+        prefix = f"https://github.com/FormosanBank/kakarayan/releases/download/data-{release_id}/"
+        for artifact in release_assets:
+            if (
+                PurePosixPath(artifact["path"]).name != artifact["asset_name"]
+                or artifact.get("download_url") != f"{prefix}{artifact['asset_name']}"
+            ):
+                raise VerificationError(f"Unsafe GitHub Release mapping for {artifact['path']}")
 
     expected_files = set(by_path) | {"release-manifest.json", "SHA256SUMS"}
     actual_files = {path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()}
@@ -130,6 +173,10 @@ def verify_release(root: Path, *, required_scopes: set[str] | None = None) -> di
         path = _path(root, relative)
         if path.stat().st_size != artifact["bytes"] or _sha256(path) != artifact["sha256"]:
             raise VerificationError(f"Artifact integrity mismatch: {relative}")
+        if max_artifact_bytes is not None and artifact["bytes"] >= max_artifact_bytes:
+            raise VerificationError(
+                f"Artifact is too large for publication: {relative} ({artifact['bytes']} bytes)"
+            )
 
     required_scopes = required_scopes or set()
     blocked = [
@@ -144,8 +191,19 @@ def verify_release(root: Path, *, required_scopes: set[str] | None = None) -> di
         )
         raise VerificationError(f"Rights review blocks publication: {details}")
 
-    _verify_database(root / "formosanbank.sqlite")
-    _verify_search(root)
+    database = by_path.get("formosanbank.sqlite")
+    compressed_database = by_path.get("formosanbank.sqlite.gz")
+    if database and compressed_database:
+        raise VerificationError("Release contains both compressed and uncompressed SQLite")
+    if compressed_database:
+        _verify_compressed_database(
+            root / "formosanbank.sqlite.gz",
+            compressed_database,
+        )
+    elif database:
+        _verify_database(root / "formosanbank.sqlite")
+    if any(artifact["scope"] == "site-query-data" for artifact in artifacts):
+        _verify_search(root)
     return manifest
 
 
@@ -158,10 +216,16 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         choices=["site-query-data", "release-core", "prepared-download"],
     )
+    parser.add_argument(
+        "--max-artifact-mib",
+        type=int,
+        help="Fail when an artifact is at least this many MiB",
+    )
     args = parser.parse_args(argv)
     manifest = verify_release(
         args.release,
         required_scopes=set(args.require_publishable_scope),
+        max_artifact_bytes=(args.max_artifact_mib * 1024 * 1024 if args.max_artifact_mib else None),
     )
     print(
         json.dumps(

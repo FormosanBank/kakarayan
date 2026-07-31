@@ -67,6 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Accept", "If-None-Match", "X-Kakarayan-Client"],
         max_age=86400,
     )
+
     @app.exception_handler(ApiError)
     async def handle_api_error(request: Request, error: ApiError) -> JSONResponse:
         return await api_error_handler(request, error)
@@ -91,9 +92,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = await call_next(request)
         store = getattr(request.app.state, "store", None)
         if isinstance(store, CorpusStore):
-            response.headers["X-Kakarayan-Release"] = str(
-                store.metadata("meta")["release_id"]
-            )
+            response.headers["X-Kakarayan-Release"] = str(store.metadata("meta")["release_id"])
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         return response

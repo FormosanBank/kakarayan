@@ -34,8 +34,7 @@ class Settings:
             cors_origins=_origins(
                 os.environ.get(
                     "KAKARAYAN_CORS_ORIGINS",
-                    "https://formosanbank.github.io,http://localhost:5173,"
-                    "http://127.0.0.1:5173",
+                    "https://formosanbank.github.io,http://localhost:5173,http://127.0.0.1:5173",
                 )
             ),
         )

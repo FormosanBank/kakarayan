@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import shutil
+from itertools import chain
 from pathlib import Path
 from typing import Any, cast
 
@@ -33,6 +34,14 @@ def _slug(value: str) -> str:
     return f"{base}-{hashlib.sha256(value.encode()).hexdigest()[:8]}"
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _canonical_packages(
     repo: Path,
     output: Path,
@@ -58,7 +67,7 @@ def _canonical_packages(
             {
                 "path": path.relative_to(repo).as_posix(),
                 "bytes": path.stat().st_size,
-                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "sha256": _sha256(path),
             }
             for path in files
         ]
@@ -71,10 +80,10 @@ def _canonical_packages(
             "The attached rights.json and central FormosanBank terms remain controlling. "
             "Do not infer rights from public repository visibility.\n"
         ).encode()
-        package_entries = [
+        package_entries: list[tuple[str, bytes | Path]] = [
             (
                 path.relative_to(repo).as_posix(),
-                path.read_bytes(),
+                path,
             )
             for path in files
         ]
@@ -111,33 +120,43 @@ def _sqlite_schema(database: Path) -> str:
         return "\n\n".join(f"-- {row['type']} {row['name']}\n{row['sql']};" for row in rows) + "\n"
 
 
-def _package_core_tables(output: Path) -> None:
+def _package_core_tables(output: Path, metadata: list[tuple[str, Path]]) -> None:
     prepared = output / "prepared"
     tables = output / "tables"
     write_zip(
         prepared / "csv-tables.zip",
-        ((path.name, path.read_bytes()) for path in sorted(tables.glob("*.csv"))),
+        chain(
+            ((path.name, path) for path in sorted(tables.glob("*.csv"))),
+            metadata,
+        ),
     )
     write_zip(
         prepared / "flat-jsonl-tables.zip",
-        ((path.name, path.read_bytes()) for path in sorted(tables.glob("*.jsonl"))),
+        chain(
+            ((path.name, path) for path in sorted(tables.glob("*.jsonl"))),
+            metadata,
+        ),
     )
     shutil.rmtree(tables)
 
 
-def _package_directory(root: Path, destination: Path) -> None:
-    write_zip(destination, directory_entries(root))
+def _package_directory(
+    root: Path,
+    destination: Path,
+    metadata: list[tuple[str, Path]],
+) -> None:
+    write_zip(destination, chain(directory_entries(root), metadata))
     shutil.rmtree(root)
 
 
 def _package_metadata(prepared: Path) -> None:
-    entries: list[tuple[str, bytes]] = []
+    entries: list[tuple[str, Path]] = []
     for name, source in _metadata_files(prepared):
         if not source.is_file():
             raise FileNotFoundError(f"Prepared metadata is missing: {name}")
-        entries.append((name, source.read_bytes()))
+        entries.append((name, source))
     write_zip(prepared / "metadata-and-audio.zip", entries)
-    for name, _data in entries:
+    for name, _source in entries:
         (prepared / name).unlink()
 
 
@@ -150,6 +169,7 @@ def _metadata_files(prepared: Path) -> list[tuple[str, Path]]:
         "audio-manifest.tsv",
         "format-exclusions.json",
         "jsonl-manifest.json",
+        "rights.json",
     )
     return [(name, prepared / name) for name in names]
 
@@ -169,46 +189,9 @@ def build_prepared_formats(
     text = prepared / "text"
     prepared.mkdir(parents=True, exist_ok=True)
 
-    _package_core_tables(output)
-    write_tsv(database, tsv)
-    _package_directory(tsv, prepared / "tsv-tables.zip")
-    arrow_schemas = write_parquet(database, parquet, release_id)
-    _package_directory(parquet, prepared / "parquet-tables.zip")
-    jsonl_manifest = write_hierarchical_jsonl(
-        database,
-        prepared / "jsonl",
-        release_id,
-    )
-    (prepared / "jsonl-manifest.json").write_bytes(_bytes(jsonl_manifest))
-    write_plain_text(database, text)
-    _package_directory(text, prepared / "text-exports.zip")
-    write_audio_manifest(database, prepared / "audio-manifest.tsv")
-    write_xlsx(
-        database,
-        prepared / "formosanbank.xlsx",
-        release_id,
-        source_commit,
-    )
-    cldf_counts = write_cldf_package(
-        database,
-        prepared / "formosanbank-cldf.zip",
-        release_id=release_id,
-        source_commit=source_commit,
-    )
-    aligned_counts = write_aligned_package(
-        database,
-        prepared / "time-aligned.zip",
-        release_id,
-    )
-
     dictionary = data_dictionary()
     (prepared / "data-dictionary.json").write_bytes(_bytes(dictionary))
-    (prepared / "arrow-schema.json").write_bytes(_bytes(arrow_schemas))
-    (prepared / "sqlite-schema.sql").write_text(
-        _sqlite_schema(database),
-        encoding="utf-8",
-        newline="\n",
-    )
+    (prepared / "rights.json").write_bytes(_bytes(rights))
     (prepared / "README.txt").write_text(
         "Kakarayan prepared FormosanBank release\n\n"
         f"Release: {release_id}\n"
@@ -218,6 +201,54 @@ def build_prepared_formats(
         "Parquet uses Zstandard compression and 50,000-row groups. CLDF is a conservative "
         "Generic ExampleTable projection. Time-aligned files contain references, not audio. "
         "Consult rights.json and each corpus notice before reuse.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    package_metadata = [
+        ("README.txt", prepared / "README.txt"),
+        ("data-dictionary.json", prepared / "data-dictionary.json"),
+        ("rights.json", prepared / "rights.json"),
+    ]
+
+    _package_core_tables(output, package_metadata)
+    write_tsv(database, tsv)
+    _package_directory(tsv, prepared / "tsv-tables.zip", package_metadata)
+    arrow_schemas = write_parquet(database, parquet, release_id)
+    _package_directory(parquet, prepared / "parquet-tables.zip", package_metadata)
+    jsonl_manifest = write_hierarchical_jsonl(
+        database,
+        prepared / "jsonl",
+        release_id,
+        package_metadata=package_metadata,
+    )
+    (prepared / "jsonl-manifest.json").write_bytes(_bytes(jsonl_manifest))
+    write_plain_text(database, text)
+    _package_directory(text, prepared / "text-exports.zip", package_metadata)
+    write_audio_manifest(database, prepared / "audio-manifest.tsv")
+    write_xlsx(
+        database,
+        prepared / "formosanbank.xlsx",
+        release_id,
+        source_commit,
+        rights,
+    )
+    cldf_counts = write_cldf_package(
+        database,
+        prepared / "formosanbank-cldf.zip",
+        release_id=release_id,
+        source_commit=source_commit,
+        rights=rights,
+    )
+    aligned_counts = write_aligned_package(
+        database,
+        prepared / "time-aligned.zip",
+        release_id,
+        rights,
+    )
+
+    (prepared / "arrow-schema.json").write_bytes(_bytes(arrow_schemas))
+    (prepared / "sqlite-schema.sql").write_text(
+        _sqlite_schema(database),
         encoding="utf-8",
         newline="\n",
     )

@@ -32,6 +32,16 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Keep only static API and compressed search data for GitHub Pages",
     )
+    result.add_argument(
+        "--compress-database",
+        action="store_true",
+        help="Package SQLite as deterministic gzip for a GitHub data release",
+    )
+    result.add_argument(
+        "--release-only",
+        action="store_true",
+        help="Keep only flat-name-safe GitHub Release assets and their manifest",
+    )
     return result
 
 
@@ -45,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
         model_catalog=models,
         include_prepared=not args.no_prepared and not args.site_only,
         site_only=args.site_only,
+        compress_database=args.compress_database,
+        release_only=args.release_only,
     )
     print(
         json.dumps(
