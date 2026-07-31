@@ -70,7 +70,7 @@ export function Explore({data}: {data: AppData}) {
                     <dd>{(language.counts.tokens ?? 0).toLocaleString()}</dd>
                   </div>
                 </dl>
-                <Link to={`/search?language=${language.id}`}>Search this language →</Link>
+                <Link to={`/languages/${language.id}`}>Language details →</Link>
               </article>
             ))}
         </div>
@@ -108,7 +108,7 @@ export function Explore({data}: {data: AppData}) {
                   </dl>
                   <div className="corpus-actions">
                     <StatusBadge value={policy?.redistribution ?? "review_required"} />
-                    <Link to={`/search?corpus=${corpus.id}`}>Search →</Link>
+                    <Link to={`/corpora/${corpus.id}`}>Corpus details →</Link>
                     <a
                       href={`https://github.com/FormosanBank/FormosanBank/tree/${data.meta.source.commit}/${corpus.source_path}`}
                     >

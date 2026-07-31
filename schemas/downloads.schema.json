@@ -20,7 +20,11 @@
           "rights_ids",
           "publishable",
           "blocked_reasons",
-          "download_url"
+          "download_url",
+          "format",
+          "language_ids",
+          "corpus_ids",
+          "tiers"
         ],
         "properties": {
           "path": {"type": "string", "pattern": "^[^/]"},
@@ -32,6 +36,10 @@
           "publishable": {"type": "boolean"},
           "blocked_reasons": {"type": "array", "items": {"type": "string"}},
           "download_url": {"type": "string", "format": "uri"},
+          "format": {"type": "string"},
+          "language_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "corpus_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "tiers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
           "compression": {"enum": ["gzip"]},
           "content_media_type": {"type": "string"},
           "content_bytes": {"type": "integer", "minimum": 1},

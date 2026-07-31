@@ -46,8 +46,39 @@
   gap: 0.25rem;
 }
 
+.download-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  padding: 1rem;
+  margin-bottom: 2rem;
+  border: 1px solid var(--line);
+  border-top: 0;
+  background: var(--paper);
+}
+
 .artifact-list {
   border-top: 1px solid var(--line-dark);
+}
+
+.artifact-list details {
+  margin-top: 0.7rem;
+}
+
+.artifact-list summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.artifact-list pre {
+  max-width: min(720px, 60vw);
+  padding: 0.8rem;
+  overflow-x: auto;
+  color: var(--paper);
+  background: var(--ink-dark);
+  font-size: 0.68rem;
+  white-space: pre;
 }
 
 .artifact-list > article {
@@ -278,6 +309,80 @@
   font-size: 0.7rem;
 }
 
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: -2rem 0 3rem;
+}
+
+.detail-section {
+  padding: 2.5rem 0;
+  border-top: 1px solid var(--line-dark);
+}
+
+.detail-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1px;
+  margin: 1.5rem 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+}
+
+.detail-counts div {
+  padding: 1rem;
+  background: var(--paper-light);
+}
+
+.detail-counts dt,
+.detail-metadata dt {
+  color: var(--ink-soft);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.detail-counts dd {
+  margin: 0.3rem 0 0;
+  font-family: var(--mono);
+  font-size: 1.2rem;
+}
+
+.detail-list {
+  border-top: 1px solid var(--line);
+}
+
+.detail-list article {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(320px, 2fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.detail-list .detail-counts {
+  margin: 0;
+}
+
+.detail-metadata {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.detail-metadata div {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  background: var(--paper-light);
+}
+
+.detail-metadata dd {
+  margin: 0.4rem 0 0;
+  overflow-wrap: anywhere;
+}
+
 .model-grid > article > p:not(.model-direction) {
   color: var(--ink-soft);
   font-size: 0.8rem;
@@ -335,4 +440,3 @@
 .release-note a {
   color: white;
 }
-

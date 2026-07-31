@@ -4,6 +4,7 @@ import {Layout} from "./components/Layout";
 import {useAppData} from "./data";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
+import {CorpusDetail, LanguageDetail} from "./pages/CatalogueDetail";
 import {Developers} from "./pages/Developers";
 import {Downloads} from "./pages/Downloads";
 import {Explore} from "./pages/Explore";
@@ -91,6 +92,16 @@ function RoutedApp({data}: {data: NonNullable<ReturnType<typeof useAppData>["dat
 function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
   const path = useRoutePath();
   const page = (() => {
+    if (path.startsWith("/languages/")) {
+      const id = decodeURIComponent(path.slice("/languages/".length));
+      const language = data.languages.find((item) => item.id === id);
+      return language ? <LanguageDetail data={data} language={language} /> : <NotFound />;
+    }
+    if (path.startsWith("/corpora/")) {
+      const id = decodeURIComponent(path.slice("/corpora/".length));
+      const corpus = data.corpora.find((item) => item.id === id);
+      return corpus ? <CorpusDetail data={data} corpus={corpus} /> : <NotFound />;
+    }
     switch (path) {
       case "/":
         return <Home data={data} />;

@@ -69,8 +69,13 @@
   }
 
   .builder__grid,
-  .form-grid {
+  .form-grid,
+  .download-filters {
     grid-template-columns: 1fr;
+  }
+
+  .artifact-list pre {
+    max-width: calc(100vw - 4rem);
   }
 
   .field-checks {
@@ -148,6 +153,7 @@
   }
 
   .corpus-list > article,
+  .detail-list article,
   .artifact-list > article,
   .endpoint-list article,
   .service-register > article {
@@ -156,6 +162,10 @@
 
   .corpus-actions {
     justify-items: start;
+  }
+
+  .detail-metadata {
+    grid-template-columns: 1fr;
   }
 
   .search-tool,

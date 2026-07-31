@@ -1,6 +1,7 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState, type ChangeEvent} from "react";
 
 import {transcribe, type ServiceStage} from "../modelServices";
+import {wordError} from "../recorderMetrics";
 import type {ModelCatalog} from "../types";
 
 const ASR_LANGUAGES = [
@@ -31,12 +32,18 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
   const [recording, setRecording] = useState(false);
   const [audio, setAudio] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState("");
+  const [audioName, setAudioName] = useState("kakarayan-recording.webm");
   const [language, setLanguage] = useState("Amis");
   const [consent, setConsent] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [reference, setReference] = useState("");
   const [status, setStatus] = useState("");
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
   const service = catalog.services.find((item) => item.space === "FormosanBank/formosan_asr");
+  const comparison = useMemo(
+    () => (reference.trim() && transcript ? wordError(reference, transcript) : null),
+    [reference, transcript],
+  );
 
   useEffect(
     () => () => {
@@ -46,6 +53,33 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
     },
     [],
   );
+
+  function setLocalAudio(blob: Blob, name: string) {
+    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    const url = URL.createObjectURL(blob);
+    audioUrlRef.current = url;
+    setAudio(blob);
+    setAudioUrl(url);
+    setAudioName(name);
+    setTranscript("");
+    setStatus("");
+    setStage("idle");
+  }
+
+  function loadAudioFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      setStatus("Audio must be 25 MiB or smaller.");
+      return;
+    }
+    if (file.type && !file.type.startsWith("audio/")) {
+      setStatus("Choose a browser-readable audio file.");
+      return;
+    }
+    setLocalAudio(file, file.name);
+  }
 
   async function startRecording() {
     setStatus("");
@@ -61,11 +95,7 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
       };
       next.onstop = () => {
         const blob = new Blob(chunks.current, {type: next.mimeType || "audio/webm"});
-        if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-        const url = URL.createObjectURL(blob);
-        audioUrlRef.current = url;
-        setAudio(blob);
-        setAudioUrl(url);
+        setLocalAudio(blob, "kakarayan-recording.webm");
         media.getTracks().forEach((track) => track.stop());
         stream.current = null;
         setRecording(false);
@@ -121,6 +151,26 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
     }
   }
 
+  function downloadTranscript() {
+    const url = URL.createObjectURL(
+      new Blob([`${transcript}\n`], {type: "text/plain;charset=utf-8"}),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "kakarayan-asr-hypothesis.txt";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function copyTranscript() {
+    try {
+      await navigator.clipboard.writeText(transcript);
+      setStatus("Automatic transcript copied.");
+    } catch {
+      setStatus("Clipboard access was unavailable. Select the transcript text to copy it.");
+    }
+  }
+
   const running = !["idle", "complete", "cancelled", "error"].includes(stage);
   return (
     <section className="model-tool" aria-labelledby="recording-heading">
@@ -146,10 +196,16 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
           </button>
         )}
         {recording && <span className="recording-indicator">Recording…</span>}
+        {!recording && (
+          <label className="button button--quiet file-button">
+            Choose audio file
+            <input type="file" accept="audio/*" onChange={loadAudioFile} />
+          </label>
+        )}
         {audioUrl && (
           <>
             <audio src={audioUrl} controls />
-            <a className="button button--quiet" href={audioUrl} download="kakarayan-recording.webm">
+            <a className="button button--quiet" href={audioUrl} download={audioName}>
               Download
             </a>
             <button className="button button--quiet" onClick={removeRecording}>
@@ -171,6 +227,16 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
                 <option key={value}>{value}</option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            Optional human reference transcript
+            <textarea
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              rows={3}
+              maxLength={4_000}
+              placeholder="Paste a trusted transcript to compare with the model hypothesis"
+            />
           </label>
           <label className="consent">
             <input
@@ -204,6 +270,29 @@ export function Recorder({catalog}: {catalog: ModelCatalog}) {
         <div className="machine-output">
           <span>Automatic transcript</span>
           <p>{transcript}</p>
+          <div className="button-row">
+            <button
+              className="button button--quiet"
+              onClick={copyTranscript}
+            >
+              Copy hypothesis
+            </button>
+            <button className="button button--quiet" onClick={downloadTranscript}>
+              Download text
+            </button>
+          </div>
+          {comparison && (
+            <div className="asr-comparison">
+              <p>
+                <strong>{(comparison.rate * 100).toFixed(1)}%</strong> word error rate
+              </p>
+              <small>
+                {comparison.edits} edits over {comparison.referenceWords} reference words;{" "}
+                {comparison.hypothesisWords} hypothesis words. This compares text strings
+                only and is not a pronunciation score.
+              </small>
+            </div>
+          )}
         </div>
       )}
     </section>

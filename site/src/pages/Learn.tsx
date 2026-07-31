@@ -49,7 +49,9 @@ export function Learn({data}: {data: AppData}) {
       </div>
       <div className="studio-panel" id={`studio-${tab}`} role="tabpanel">
         {tab === "lookup" && <SearchTool data={data} learner />}
-        {tab === "deck" && <StudyDeck />}
+        {tab === "deck" && (
+          <StudyDeck languages={data.languages} currentRelease={data.meta.release_id} />
+        )}
         {tab === "practice" && <Recorder catalog={data.models} />}
         {tab === "translation" && <TranslationTool catalog={data.models} />}
         {tab === "orthography" && (

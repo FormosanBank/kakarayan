@@ -135,6 +135,13 @@ linguistic packages. The project budget is 900 MiB total and 50 MiB per file.
 GitHub Releases receive approved bulk packages and the SQLite snapshot. The generated
 download catalogue points to immutable `data-<release-id>` assets.
 
+The indexed full-corpus rehearsal for public FormosanBank commit
+`40fd519cd82295bd7824e207990d277b871ad47f` produced about 319 MiB of Pages data across
+642 files. Its largest compressed shard was about 23.2 MiB and its largest vocabulary index
+was about 17.6 MiB. The build finished in 6 minutes 30 seconds with 2.63 GiB peak memory.
+These measurements are evidence for the current data shape, not permanent limits or
+performance guarantees.
+
 ## Optional live API
 
 The FastAPI service reads one immutable SQLite snapshot. Startup requires a local or HTTPS

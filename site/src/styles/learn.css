@@ -220,6 +220,19 @@
   background: var(--paper-light);
 }
 
+.manual-card {
+  padding: 1rem;
+  margin: 1.5rem 0;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.manual-card summary {
+  padding: 0.4rem 0 1rem;
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .file-button {
   position: relative;
   overflow: hidden;
@@ -317,5 +330,4 @@
   display: grid;
   gap: 0.2rem;
 }
-
 

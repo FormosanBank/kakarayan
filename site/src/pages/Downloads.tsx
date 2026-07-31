@@ -2,6 +2,7 @@ import {useEffect, useMemo, useState} from "react";
 
 import {PageIntro, StatusBadge} from "../components/Layout";
 import {useI18n} from "../i18n";
+import {useSearchParams} from "../routing";
 import type {AppData} from "../types";
 
 interface Artifact {
@@ -14,6 +15,10 @@ interface Artifact {
   publishable: boolean;
   blocked_reasons: string[];
   download_url: string;
+  format: string;
+  language_ids: string[];
+  corpus_ids: string[];
+  tiers: string[];
 }
 
 interface DownloadsCatalog {
@@ -34,9 +39,13 @@ function size(bytes: number): string {
 
 export function Downloads({data}: {data: AppData}) {
   const {t} = useI18n();
+  const [params] = useSearchParams();
   const [manifest, setManifest] = useState<DownloadsCatalog | null>(null);
   const [error, setError] = useState("");
-  const [format, setFormat] = useState("all");
+  const [format, setFormat] = useState(params.get("format") ?? "all");
+  const [languageId, setLanguageId] = useState(params.get("language") ?? "all");
+  const [corpusId, setCorpusId] = useState(params.get("corpus") ?? "all");
+  const [tier, setTier] = useState(params.get("tier") ?? "all");
   useEffect(() => {
     const controller = new AbortController();
     fetch(`${import.meta.env.BASE_URL}api/v1/downloads.json`, {
@@ -56,9 +65,31 @@ export function Downloads({data}: {data: AppData}) {
   const artifacts = useMemo(
     () =>
       (manifest?.artifacts ?? []).filter((artifact) => {
-        return format === "all" || artifact.path.endsWith(format);
+        return (
+          (format === "all" || artifact.format === format) &&
+          (languageId === "all" || artifact.language_ids.includes(languageId)) &&
+          (corpusId === "all" || artifact.corpus_ids.includes(corpusId)) &&
+          (tier === "all" || artifact.tiers.includes(tier))
+        );
       }),
-    [format, manifest?.artifacts],
+    [corpusId, format, languageId, manifest?.artifacts, tier],
+  );
+  const tiers = useMemo(
+    () =>
+      [
+        ...new Set((manifest?.artifacts ?? []).flatMap((artifact) => artifact.tiers)),
+      ].sort(),
+    [manifest?.artifacts],
+  );
+  const formats = useMemo(
+    () =>
+      [
+        ...new Set((manifest?.artifacts ?? []).map((artifact) => artifact.format)),
+      ].sort(),
+    [manifest?.artifacts],
+  );
+  const corpora = data.corpora.filter(
+    (corpus) => languageId === "all" || corpus.languages.includes(languageId),
   );
   const hasUnreviewedRights = data.rights.entries.some(
     (entry) => entry.review_status === "review_required",
@@ -95,14 +126,52 @@ export function Downloads({data}: {data: AppData}) {
           <span>{manifest?.release_id ?? data.meta.release_id}</span>
           <code>{data.meta.source.commit.slice(0, 12)}</code>
         </div>
-        <label className="field field--compact">
+      </div>
+      <div className="download-filters">
+        <label className="field">
+          Language
+          <select
+            value={languageId}
+            onChange={(event) => {
+              setLanguageId(event.target.value);
+              setCorpusId("all");
+            }}
+          >
+            <option value="all">All languages</option>
+            {data.languages.map((language) => (
+              <option key={language.id} value={language.id}>
+                {language.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Corpus
+          <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
+            <option value="all">All corpora</option>
+            {corpora.map((corpus) => (
+              <option key={corpus.id} value={corpus.id}>
+                {corpus.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          Tier
+          <select value={tier} onChange={(event) => setTier(event.target.value)}>
+            <option value="all">All tiers</option>
+            {tiers.map((value) => (
+              <option key={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
           Format
           <select value={format} onChange={(event) => setFormat(event.target.value)}>
             <option value="all">All prepared formats</option>
-            <option value=".zip">ZIP packages</option>
-            <option value=".gz">SQLite gzip</option>
-            <option value=".parquet">Parquet</option>
-            <option value=".xlsx">XLSX</option>
+            {formats.map((value) => (
+              <option key={value}>{value}</option>
+            ))}
           </select>
         </label>
       </div>
@@ -118,8 +187,17 @@ export function Downloads({data}: {data: AppData}) {
             <div className="file-mark">{artifact.path.split(".").pop()?.toUpperCase()}</div>
             <div>
               <h2>{artifact.path}</h2>
-              <p>{artifact.scope}</p>
+              <p>
+                {artifact.format} · {artifact.tiers.join(", ")}
+              </p>
               <code title={artifact.sha256}>sha256 {artifact.sha256.slice(0, 20)}…</code>
+              <details>
+                <summary>Command line and checksum</summary>
+                <pre>
+                  {`curl -L --fail --output '${artifact.path.split("/").pop()}' '${artifact.download_url}'\n` +
+                    `printf '%s  %s\\n' '${artifact.sha256}' '${artifact.path.split("/").pop()}' | sha256sum --check -`}
+                </pre>
+              </details>
             </div>
             <div>
               <strong>{size(artifact.bytes)}</strong>
@@ -143,6 +221,12 @@ export function Downloads({data}: {data: AppData}) {
           </article>
         ))}
       </div>
+      {!error && manifest && artifacts.length === 0 && (
+        <div className="empty-state">
+          No prepared package matches every selected facet. Clear a filter or build a
+          bounded browser selection in Research.
+        </div>
+      )}
       <section className="format-guide">
         <h2>Format guide</h2>
         <div>

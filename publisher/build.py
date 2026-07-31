@@ -802,6 +802,75 @@ def _artifact(
     return artifact
 
 
+def _artifact_facets(
+    relative: str,
+    rights_ids: list[str],
+    catalog: Mapping[str, object],
+) -> dict[str, object]:
+    corpora = [
+        cast(dict[str, object], corpus)
+        for corpus in cast(list[object], catalog["corpora"])
+        if corpus["rights_id"] in rights_ids
+    ]
+    corpus_ids = sorted(str(corpus["id"]) for corpus in corpora)
+    language_ids = sorted(
+        {
+            str(language_id)
+            for corpus in corpora
+            for language_id in cast(list[object], corpus["languages"])
+        }
+    )
+    name = Path(relative).name
+    if relative == "formosanbank.sqlite.gz":
+        export_format = "sqlite"
+    elif "/canonical/" in relative:
+        export_format = "xml"
+    elif "cldf" in name:
+        export_format = "cldf"
+    elif "time-aligned" in name:
+        export_format = "aligned"
+    elif "parquet" in name:
+        export_format = "parquet"
+    elif name.endswith(".xlsx"):
+        export_format = "xlsx"
+    elif "tsv" in name:
+        export_format = "tsv"
+    elif "csv" in name:
+        export_format = "csv"
+    elif "jsonl" in name:
+        export_format = "jsonl"
+    elif "text" in name:
+        export_format = "text"
+    else:
+        export_format = "metadata"
+    if export_format in {"sqlite", "xml", "csv", "tsv", "jsonl", "parquet", "xlsx"}:
+        tiers = [
+            "text",
+            "sentence",
+            "word",
+            "morpheme",
+            "form",
+            "phonology",
+            "translation",
+            "audio",
+            "token",
+        ]
+    elif export_format == "cldf":
+        tiers = ["language", "sentence", "form", "translation"]
+    elif export_format == "aligned":
+        tiers = ["sentence", "form", "translation", "audio"]
+    elif export_format == "text":
+        tiers = ["sentence", "form", "translation", "token"]
+    else:
+        tiers = ["metadata", "audio"]
+    return {
+        "format": export_format,
+        "language_ids": language_ids,
+        "corpus_ids": corpus_ids,
+        "tiers": tiers,
+    }
+
+
 def _compress_database(path: Path) -> tuple[Path, dict[str, object]]:
     destination = path.with_suffix(f"{path.suffix}.gz")
     temporary = destination.with_suffix(f"{destination.suffix}.tmp")
@@ -1038,16 +1107,17 @@ def build_release(
             if relative.startswith(("api/", "search/"))
             else "release-core"
         )
-        artifacts.append(
-            _artifact(
-                path,
-                output,
-                scope=scope,
-                rights_ids=artifact_rights,
-                rights_entries=rights_by_id,
-                content=artifact_content.get(relative),
-            )
+        artifact = _artifact(
+            path,
+            output,
+            scope=scope,
+            rights_ids=artifact_rights,
+            rights_entries=rights_by_id,
+            content=artifact_content.get(relative),
         )
+        if scope in {"prepared-download", "release-core"}:
+            artifact.update(_artifact_facets(relative, artifact_rights, catalog))
+        artifacts.append(artifact)
     if release_only:
         asset_names: set[str] = set()
         for artifact in artifacts:

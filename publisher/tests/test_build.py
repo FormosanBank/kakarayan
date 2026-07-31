@@ -83,6 +83,10 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert any(item["path"].endswith("csv-tables.zip") for item in downloads["artifacts"])
     assert all(not item["publishable"] for item in downloads["artifacts"])
     assert all(item["blocked_reasons"] for item in downloads["artifacts"])
+    assert all(item["format"] for item in downloads["artifacts"])
+    assert all(item["language_ids"] == ["lang_amis"] for item in downloads["artifacts"])
+    assert all(item["corpus_ids"] == ["corpus_testcorpus"] for item in downloads["artifacts"])
+    assert all(item["tiers"] for item in downloads["artifacts"])
 
     with zipfile.ZipFile(first.output / "prepared" / "parquet-tables.zip") as archive:
         assert pq.read_table(pa.BufferReader(archive.read("tokens.parquet"))).num_rows == 4

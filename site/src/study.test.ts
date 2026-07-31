@@ -1,4 +1,4 @@
-import {cardsAsAnkiTsv, scheduleCard, type StudyCard} from "./study";
+import {cardsAsAnkiTsv, makeManualCard, scheduleCard, type StudyCard} from "./study";
 
 const card: StudyCard = {
   id: "card-1",
@@ -37,5 +37,20 @@ describe("local study scheduling", () => {
   it("protects tabular exports from formulas", () => {
     expect(cardsAsAnkiTsv([{...card, front: "=1+1"}])).toContain("'=1+1");
   });
-});
 
+  it("normalizes manual card tags and keeps personal cards source-free", () => {
+    const manual = makeManualCard(
+      {
+        front: "  waco ",
+        back: "dog",
+        languageId: "lang_amis",
+        deck: "Vocabulary",
+        tags: ["noun", " noun ", ""],
+      },
+      now,
+    );
+    expect(manual.front).toBe("waco");
+    expect(manual.tags).toEqual(["noun"]);
+    expect(manual.source).toBeNull();
+  });
+});

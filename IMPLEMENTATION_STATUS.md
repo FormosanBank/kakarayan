@@ -125,16 +125,30 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   shard postings so common search modes fetch only candidate sentence records.
 - [x] Verify compressed and decoded search index/shard bytes in the browser and JavaScript,
   Python, and R clients.
+- [x] Add stable language and corpus detail routes with coverage, capabilities, pinned
+  source links, and corpus-specific rights evidence.
+- [x] Add language, corpus, tier, and format facets to prepared download artifacts and
+  expose reproducible command-line and checksum instructions.
+- [x] Add local audio-file practice, reference and ASR hypothesis comparison, and transcript
+  copy/download while clearly labeling word error as a text comparison, not pronunciation
+  grading.
+- [x] Add manual local study cards, decks, tags, inventory filtering, and stale source
+  release warnings.
 - [x] Complete one full release-only benchmark against pinned public FormosanBank commit
   `40fd519cd82295bd7824e207990d277b871ad47f`: 487,354 sentences, 8,214,390 tokens,
   no publisher warnings, 5.4 GiB output, 9.1 GiB peak memory, and 20 minutes 28 seconds.
+- [x] Complete and verify an indexed full Pages data build for the same pinned source:
+  487,354 sentences, 8,214,390 tokens, 640 manifest artifacts, no publisher warnings,
+  about 319 MiB on disk, 642 files, 6 minutes 30 seconds, and 2.63 GiB peak memory.
+- [x] Keep the largest full Pages data file below 24 MiB and the complete built application
+  shell at 41.6 MiB, within the 50 MiB per-file and 900 MiB total publication budgets.
 - [ ] Complete deterministic full-data publisher and release validation.
 - [ ] Complete full-corpus, browser, accessibility, security, and reproducibility validation.
 - [ ] Open one draft pull request and leave it unmerged.
 
 ## Next slice
 
-Commit the research workbench checkpoint. Add purpose-built search indexes so common
-queries do not scan all scoped sentence records, then repeat the full data and Pages builds
-from clean output. Reconcile representations, finish remaining information and learner
-flows, and complete production browser validation before opening the draft pull request.
+Commit the catalogue and learner checkpoint. Finish search-result context, record-unit
+dataset projections, diagnostics, document metadata, and complete interface translation.
+Then run clean deterministic full-data builds, representation reconciliation, all client and
+browser checks, and dependency audits before opening the one draft pull request.

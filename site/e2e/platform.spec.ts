@@ -21,6 +21,24 @@ test("all primary routes load a consistent release", async ({page}) => {
   }
 });
 
+test("language and corpus catalogue entries have stable detail routes", async ({page}) => {
+  await page.goto("#/languages/lang_amis");
+  await expect(page.getByRole("heading", {level: 1, name: "Amis"})).toBeVisible();
+  await expect(page.getByText("ISO 639-3 ami")).toBeVisible();
+  await expect(page.getByRole("link", {name: "Search this language"})).toHaveAttribute(
+    "href",
+    /#\/search\?language=lang_amis/,
+  );
+
+  await page.goto("#/corpora/corpus_testcorpus");
+  await expect(page.getByRole("heading", {level: 1, name: "TestCorpus"})).toBeVisible();
+  await expect(page.getByRole("link", {name: "Pinned public source"})).toHaveAttribute(
+    "href",
+    /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\/TestCorpus/,
+  );
+  await expect(page.getByText(/Public repository visibility is not a blanket license/)).toBeVisible();
+});
+
 test("local corpus search reads a compressed shard", async ({page}) => {
   const searchAssets: string[] = [];
   page.on("response", (response) => {

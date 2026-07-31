@@ -143,6 +143,38 @@ export function cardFromRecord(record: SearchRecord, releaseId: string): StudyCa
   };
 }
 
+export function makeManualCard(
+  value: {
+    front: string;
+    back: string;
+    languageId: string;
+    deck: string;
+    tags: string[];
+  },
+  now = new Date(),
+): StudyCard {
+  const front = value.front.trim();
+  const back = value.back.trim();
+  if (!front || !back) throw new Error("A manual card needs both a front and an answer");
+  const timestamp = now.toISOString();
+  return {
+    id: crypto.randomUUID(),
+    deck: value.deck.trim() || "Personal",
+    front,
+    back,
+    languageId: value.languageId,
+    tags: [...new Set(value.tags.map((tag) => tag.trim()).filter(Boolean))].sort(),
+    source: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    dueAt: timestamp,
+    intervalDays: 0,
+    ease: 2.5,
+    repetitions: 0,
+    lapses: 0,
+  };
+}
+
 export async function listCards(): Promise<StudyCard[]> {
   const database = await openDatabase();
   try {
@@ -227,4 +259,3 @@ export function cardsAsAnkiTsv(cards: StudyCard[]): string {
     ),
   ].join("\n");
 }
-
