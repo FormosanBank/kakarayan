@@ -16,6 +16,7 @@ dependencies = [
     "fastapi>=0.116,<1",
     "jsonschema>=4.23",
     "uvicorn[standard]>=0.35,<1",
+    "regex>=2026.1.15,<2027",
 ]
 
 [dependency-groups]

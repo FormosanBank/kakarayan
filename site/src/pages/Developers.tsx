@@ -9,6 +9,7 @@ const endpoints = [
   ["rights.json", "Central and per-corpus rights policy"],
   ["models.json", "Public MT/ASR models and service registry"],
   ["orthography.json", "Reviewed conversion-table projections"],
+  ["content.json", "Reviewed learning-content registry"],
   ["search/manifest.json", "Immutable browser search shards"],
 ];
 

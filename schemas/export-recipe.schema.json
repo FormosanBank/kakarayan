@@ -25,8 +25,20 @@
         "max_rows"
       ],
       "properties": {
-        "query": {"type": "string", "minLength": 1, "maxLength": 256},
-        "match": {"enum": ["exact", "prefix", "contains", "translation"]},
+        "query": {"type": "string", "maxLength": 256},
+        "match": {
+          "enum": [
+            "source",
+            "exact",
+            "prefix",
+            "contains",
+            "translation",
+            "phonology",
+            "gloss",
+            "fuzzy",
+            "regex"
+          ]
+        },
         "language_ids": {
           "type": "array",
           "items": {"type": "string", "maxLength": 128},
@@ -63,15 +75,27 @@
           "dialect",
           "source_path",
           "tokens",
-          "audio"
+          "audio",
+          "phonology",
+          "glosses"
         ]
       },
       "minItems": 1,
-      "maxItems": 10,
+      "maxItems": 12,
       "uniqueItems": true
     },
     "format": {
-      "enum": ["csv", "tsv", "json", "jsonl", "plain", "interlinear", "audio", "recipe"]
+      "enum": [
+        "csv",
+        "tsv",
+        "json",
+        "jsonl",
+        "parquet",
+        "plain",
+        "interlinear",
+        "audio",
+        "recipe"
+      ]
     },
     "spreadsheet_safe": {"type": "boolean"}
   },

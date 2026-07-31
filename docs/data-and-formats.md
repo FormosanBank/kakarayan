@@ -93,6 +93,23 @@ Relational formats are best for R, Python, databases, joins, and corpus statisti
 Every multi-file relational package carries its package note, data dictionary, and rights
 catalogue.
 
+## Browser selections
+
+The research workbench can export at most 10,000 sentence records. It supports CSV, TSV,
+JSON, JSON Lines, Parquet, plain text, interlinear text, audio-reference TSV, and a
+non-executable recipe. The user chooses fields before preview and export. Formula-like
+values are protected in delimited files.
+
+Parquet is produced locally through lazy, single-threaded DuckDB-Wasm. Its first use
+downloads the large WebAssembly chunk, while other formats do not. The builder reports
+compressed transfer, decoded input, row limits, and rights status before enabling a data
+download. A recipe remains available when redistribution review blocks the data itself.
+
+Summary tables provide source and normalized frequency, translation frequency, corpus and
+dialect distribution, one- through five-token n-grams, bounded collocates, and deterministic
+seeded sample IDs. The current browser summary cap is 50,000 sentences. Tables are
+descriptive, use the release tokenization, and are exportable as CSV or JSON.
+
 ### Hierarchical JSON Lines
 
 `prepared/jsonl/` contains per-language and corpus ZIP packages. Each member is capped at

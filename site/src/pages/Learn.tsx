@@ -9,7 +9,7 @@ import {StudyDeck} from "../components/StudyDeck";
 import {useI18n} from "../i18n";
 import type {AppData} from "../types";
 
-type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography";
+type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
 export function Learn({data}: {data: AppData}) {
   const {t} = useI18n();
@@ -20,6 +20,7 @@ export function Learn({data}: {data: AppData}) {
     ["practice", t("learn.practice"), "Record locally, transcribe optionally"],
     ["translation", t("learn.translate"), "Send text only with consent"],
     ["orthography", t("learn.orthography"), "Apply reviewed conversion tables"],
+    ["lessons", "Reviewed notes", "Only authored and reviewed material"],
   ];
   return (
     <div className="page-wrap page-wrap--wide learner-page">
@@ -57,6 +58,42 @@ export function Learn({data}: {data: AppData}) {
             sourceCommit={data.meta.source.commit}
           />
         )}
+        {tab === "lessons" &&
+          (data.content.entries.length ? (
+            <div className="reviewed-content">
+              {data.content.entries.map((entry) => (
+                <article key={entry.id}>
+                  <p className="eyebrow">
+                    {entry.kind} · reviewed {entry.reviewed_at}
+                  </p>
+                  <h2>{entry.title}</h2>
+                  <p>{entry.summary}</p>
+                  <div className="reviewed-content__body">{entry.body_markdown}</div>
+                  <h3>Sources and review</h3>
+                  <ul>
+                    {entry.citations.map((citation) => (
+                      <li key={citation}>{citation}</li>
+                    ))}
+                  </ul>
+                  <small>
+                    By {entry.author}; reviewed by {entry.reviewer}; rights{" "}
+                    {entry.rights.license_expression ?? "documented in cited evidence"}
+                  </small>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <h2>No reviewed lessons are published yet.</h2>
+              <p>
+                Use the cited corpus evidence explorer while community-authored material is
+                reviewed. Kakarayan does not generate grammar lessons from corpus patterns.
+              </p>
+              <a href="https://github.com/FormosanBank/kakarayan/blob/main/content/README.md">
+                Read the contribution requirements
+              </a>
+            </div>
+          ))}
       </div>
       <aside className="learning-boundary">
         <p className="eyebrow">What Kakarayan is claiming</p>

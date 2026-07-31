@@ -231,6 +231,17 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
           sv.original_form
         FROM tokens tok
         JOIN sentence_view sv ON sv.sentence_id = tok.sentence_id;
+
+        CREATE VIEW tier_scope_view AS
+        SELECT 'sentence' AS owner_type, s.id AS owner_id, s.id AS sentence_id
+        FROM sentences s
+        UNION ALL
+        SELECT 'word' AS owner_type, w.id AS owner_id, w.parent_id AS sentence_id
+        FROM words w
+        UNION ALL
+        SELECT 'morpheme' AS owner_type, m.id AS owner_id, w.parent_id AS sentence_id
+        FROM morphemes m
+        JOIN words w ON w.id = m.parent_id;
         """
     )
 
@@ -368,50 +379,198 @@ def _build_catalog(
     }
 
 
-def _search_record(connection: sqlite3.Connection, row: tuple[object, ...]) -> dict[str, object]:
-    translations = [
-        {"text": item[0], "xml_lang": item[1], "kind": item[2], "version": item[3]}
-        for item in connection.execute(
-            "SELECT text, xml_lang, kind, version FROM translations "
-            "WHERE owner_type = 'sentence' AND owner_id = ? ORDER BY position",
-            (row[0],),
-        )
-    ]
-    tokens = [
-        {"surface": item[0], "normalized": item[1], "position": item[2]}
-        for item in connection.execute(
-            "SELECT surface, normalized, position FROM tokens "
-            "WHERE sentence_id = ? ORDER BY position",
-            (row[0],),
-        )
-    ]
-    audio = [
-        {
-            "file": item[0],
-            "url": item[1],
-            "start": item[2],
-            "end": item[3],
-            "source": item[4],
+def _search_records(
+    connection: sqlite3.Connection,
+    rows: list[tuple[object, ...]],
+) -> list[dict[str, object]]:
+    """Project one bounded shard in bulk instead of issuing queries per sentence."""
+    if not rows:
+        return []
+    records: dict[str, dict[str, object]] = {}
+    for row in rows:
+        sentence_id = str(row[0])
+        records[sentence_id] = {
+            "id": sentence_id,
+            "corpus_id": row[1],
+            "language_id": row[2],
+            "dialect": row[3],
+            "source_path": row[4],
+            "xml_id": row[5],
+            "standard": row[6],
+            "original": row[7],
+            "translations": [],
+            "tokens": [],
+            "forms": [],
+            "phonology": [],
+            "tier_translations": [],
+            "audio": [],
+            "words": [],
         }
-        for item in connection.execute(
-            "SELECT file, url, start, end, source FROM audio "
-            "WHERE owner_type = 'sentence' AND owner_id = ? ORDER BY position",
-            (row[0],),
+    sentence_ids = list(records)
+    placeholders = ",".join("?" for _ in sentence_ids)
+
+    def tier_rows(table: str, columns: tuple[str, ...]) -> None:
+        cursor = connection.execute(
+            f"""
+            SELECT scope.sentence_id, {", ".join(f"tier.{column}" for column in columns)}
+            FROM {table} tier
+            JOIN tier_scope_view scope
+              ON scope.owner_type = tier.owner_type AND scope.owner_id = tier.owner_id
+            WHERE scope.sentence_id IN ({placeholders})
+            ORDER BY scope.sentence_id,
+                     CASE tier.owner_type
+                       WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2
+                     END,
+                     tier.owner_id, tier.position, tier.id
+            """,
+            sentence_ids,
         )
-    ]
-    return {
-        "id": row[0],
-        "corpus_id": row[1],
-        "language_id": row[2],
-        "dialect": row[3],
-        "source_path": row[4],
-        "xml_id": row[5],
-        "standard": row[6],
-        "original": row[7],
-        "translations": translations,
-        "tokens": tokens,
-        "audio": audio,
-    }
+        for item in cursor:
+            sentence_id = str(item[0])
+            value = dict(zip(columns, item[1:], strict=True))
+            cast(list[dict[str, object]], records[sentence_id][table]).append(value)
+
+    tier_rows(
+        "forms",
+        ("owner_type", "owner_id", "position", "text", "unclear", "kind", "notes", "normalized"),
+    )
+    tier_rows(
+        "phonology",
+        ("owner_type", "owner_id", "position", "text", "unclear", "kind"),
+    )
+    translation_columns = (
+        "owner_type",
+        "owner_id",
+        "position",
+        "text",
+        "unclear",
+        "xml_lang",
+        "kind",
+        "version",
+        "notes",
+        "normalized",
+    )
+    cursor = connection.execute(
+        f"""
+        SELECT scope.sentence_id,
+               {", ".join(f"tier.{column}" for column in translation_columns)}
+        FROM translations tier
+        JOIN tier_scope_view scope
+          ON scope.owner_type = tier.owner_type AND scope.owner_id = tier.owner_id
+        WHERE scope.sentence_id IN ({placeholders})
+        ORDER BY scope.sentence_id,
+                 CASE tier.owner_type WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2 END,
+                 tier.owner_id, tier.position, tier.id
+        """,
+        sentence_ids,
+    )
+    for item in cursor:
+        sentence_id = str(item[0])
+        value = dict(zip(translation_columns, item[1:], strict=True))
+        cast(list[dict[str, object]], records[sentence_id]["tier_translations"]).append(value)
+        if value["owner_type"] == "sentence":
+            cast(list[dict[str, object]], records[sentence_id]["translations"]).append(
+                {
+                    "text": value["text"],
+                    "xml_lang": value["xml_lang"],
+                    "kind": value["kind"],
+                    "version": value["version"],
+                }
+            )
+
+    audio_columns = (
+        "owner_type",
+        "owner_id",
+        "position",
+        "file",
+        "url",
+        "start",
+        "end",
+        "source",
+        "duration",
+        "availability_status",
+    )
+    cursor = connection.execute(
+        f"""
+        SELECT scope.sentence_id, {", ".join(f"tier.{column}" for column in audio_columns)}
+        FROM audio tier
+        JOIN tier_scope_view scope
+          ON scope.owner_type = tier.owner_type AND scope.owner_id = tier.owner_id
+        WHERE scope.sentence_id IN ({placeholders})
+        ORDER BY scope.sentence_id,
+                 CASE tier.owner_type WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2 END,
+                 tier.owner_id, tier.position, tier.id
+        """,
+        sentence_ids,
+    )
+    for item in cursor:
+        sentence_id = str(item[0])
+        value = dict(zip(audio_columns, item[1:], strict=True))
+        cast(list[dict[str, object]], records[sentence_id]["audio"]).append(value)
+
+    cursor = connection.execute(
+        f"""
+        SELECT sentence_id, surface, normalized, position, word_id
+        FROM tokens
+        WHERE sentence_id IN ({placeholders})
+        ORDER BY sentence_id, position, id
+        """,
+        sentence_ids,
+    )
+    for sentence_id, surface, normalized, position, word_id in cursor:
+        cast(list[dict[str, object]], records[str(sentence_id)]["tokens"]).append(
+            {
+                "surface": surface,
+                "normalized": normalized,
+                "position": position,
+                "word_id": word_id,
+            }
+        )
+
+    words_by_id: dict[str, dict[str, object]] = {}
+    cursor = connection.execute(
+        f"""
+        SELECT parent_id, id, xml_id, position, class, sclass
+        FROM words
+        WHERE parent_id IN ({placeholders})
+        ORDER BY parent_id, position, id
+        """,
+        sentence_ids,
+    )
+    for sentence_id, word_id, xml_id, position, word_class, sclass in cursor:
+        word = {
+            "id": word_id,
+            "xml_id": xml_id,
+            "position": position,
+            "class": word_class,
+            "sclass": sclass,
+            "morphemes": [],
+        }
+        words_by_id[str(word_id)] = word
+        cast(list[dict[str, object]], records[str(sentence_id)]["words"]).append(word)
+    if words_by_id:
+        word_ids = list(words_by_id)
+        word_placeholders = ",".join("?" for _ in word_ids)
+        cursor = connection.execute(
+            f"""
+            SELECT parent_id, id, xml_id, position, class, sclass
+            FROM morphemes
+            WHERE parent_id IN ({word_placeholders})
+            ORDER BY parent_id, position, id
+            """,
+            word_ids,
+        )
+        for word_id, morpheme_id, xml_id, position, morpheme_class, sclass in cursor:
+            cast(list[dict[str, object]], words_by_id[str(word_id)]["morphemes"]).append(
+                {
+                    "id": morpheme_id,
+                    "xml_id": xml_id,
+                    "position": position,
+                    "class": morpheme_class,
+                    "sclass": sclass,
+                }
+            )
+    return [records[str(row[0])] for row in rows]
 
 
 def _write_search_data(
@@ -448,14 +607,25 @@ def _write_search_data(
     """
     shards: list[dict[str, object]] = []
     current_scope: tuple[str, str] | None = None
-    current_records: list[dict[str, object]] = []
+    current_rows: list[tuple[object, ...]] = []
     scope_part = 0
 
     def flush() -> None:
-        nonlocal current_records, scope_part
-        if not current_records or current_scope is None:
+        nonlocal current_rows, scope_part
+        if not current_rows or current_scope is None:
             return
         corpus_id, language_id = current_scope
+        current_records = _search_records(connection, current_rows)
+        for value in current_records:
+            stream.write(
+                json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
+            )
         relative = Path("search") / "shards" / language_id / corpus_id / f"{scope_part:04d}.json.gz"
         path = output / relative
         uncompressed = _json_bytes(current_records)
@@ -474,7 +644,7 @@ def _write_search_data(
                 "uncompressed_sha256": hashlib.sha256(uncompressed).hexdigest(),
             }
         )
-        current_records = []
+        current_rows = []
         scope_part += 1
 
     with (search_dir / "sentences.jsonl").open("w", encoding="utf-8", newline="\n") as stream:
@@ -484,14 +654,10 @@ def _write_search_data(
                 flush()
                 current_scope = scope
                 scope_part = 0
-            value = _search_record(connection, row)
-            stream.write(
-                json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
-            )
-            current_records.append(value)
-            if len(current_records) >= shard_size:
+            current_rows.append(row)
+            if len(current_rows) >= shard_size:
                 flush()
-    flush()
+        flush()
     return {
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,
@@ -626,6 +792,8 @@ def build_release(
     }
     models = {**models, "generated_at": generated_at}
     orthography = build_orthography_catalog(repo, source.commit)
+    content_path = Path(__file__).resolve().parents[1] / "content" / "manifest.json"
+    content = cast(dict[str, object], json.loads(content_path.read_text(encoding="utf-8")))
 
     tables_dir = output / "tables"
     tables_dir.mkdir()
@@ -691,6 +859,7 @@ def build_release(
                 "rights": rights,
                 "models": models,
                 "orthography": orthography,
+                "content": content,
             },
         )
         connection.commit()
@@ -713,6 +882,7 @@ def build_release(
     _write_json(api / "rights.json", rights)
     _write_json(api / "models.json", models)
     _write_json(api / "orthography.json", orthography)
+    _write_json(api / "content.json", content)
     _write_json(api / "search" / "manifest.json", search_manifest)
     _write_json(output / "catalog.json", catalog)
     _write_json(output / "rights.json", rights)
@@ -723,6 +893,7 @@ def build_release(
     validate_document(rights, schema_dir / "rights.schema.json")
     validate_document(models, schema_dir / "model-catalog.schema.json")
     validate_document(orthography, schema_dir / "orthography.schema.json")
+    validate_document(content, schema_dir / "content.schema.json")
     validate_document(search_manifest, schema_dir / "search-manifest.schema.json")
 
     if include_prepared:

@@ -128,9 +128,9 @@ jobs:
           npm --prefix site run build
           uv run python -m publisher.verify_site --site site/dist
 
-      - name: Install Chromium
+      - name: Install supported browsers
         working-directory: site
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Run production browser checks
         run: npm --prefix site run test:e2e

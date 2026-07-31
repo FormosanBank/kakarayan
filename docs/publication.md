@@ -28,7 +28,8 @@ It checks:
 - Publisher determinism and release verification with invented fixtures.
 - API container build.
 - Frontend lint, types, unit tests, npm audit, build, and site budgets.
-- Desktop and mobile Playwright routes, compressed search, and serious WCAG violations.
+- Chromium mobile plus Chromium, Firefox, and WebKit desktop Playwright routes, compressed
+  search, bounded RE2, Worker summaries, Parquet signatures, and serious WCAG violations.
 - JavaScript, Python, and R clients.
 - Pull request dependency changes.
 
@@ -52,7 +53,7 @@ The workflow:
 7. Requires the matching data release to be published and non-prerelease.
 8. Imports and validates that release's prepared-download manifest.
 9. Verifies the site release and assembles the Vite public tree.
-10. Runs unit, audit, build, size, desktop, mobile, and accessibility checks.
+10. Runs unit, audit, build, size, cross-browser, mobile, and accessibility checks.
 11. Uploads one Pages artifact.
 12. Deploys that exact saved artifact.
 

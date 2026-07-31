@@ -6,6 +6,7 @@ export type ExportFormat =
   | "tsv"
   | "json"
   | "jsonl"
+  | "parquet"
   | "plain"
   | "interlinear"
   | "audio"
@@ -33,6 +34,7 @@ export interface ExportContext {
   mode: SearchMode;
   languageId: string;
   corpusId: string;
+  fields?: string[];
 }
 
 interface RenderedExport {
@@ -41,7 +43,7 @@ interface RenderedExport {
   mediaType: string;
 }
 
-const COLUMNS = [
+export const COLUMNS = [
   "id",
   "standard",
   "original",
@@ -65,17 +67,25 @@ function delimitedCell(value: string, delimiter: string, spreadsheetSafe: boolea
   return safe;
 }
 
-function row(record: SearchRecord): string[] {
-  return [
-    record.id,
-    record.standard,
-    record.original,
-    record.translations.map((item) => `${item.xml_lang}:${item.text}`).join(" | "),
-    record.language_id,
-    record.corpus_id,
-    record.dialect,
-    record.source_path,
-  ];
+function fieldValue(record: SearchRecord, field: string): string {
+  if (field === "translations") {
+    return record.translations.map((item) => `${item.xml_lang}:${item.text}`).join(" | ");
+  }
+  if (field === "tokens") return record.tokens.map((item) => item.surface).join(" ");
+  if (field === "phonology") return record.phonology.map((item) => item.text).join(" | ");
+  if (field === "glosses") {
+    return record.tier_translations
+      .filter((item) => item.owner_type !== "sentence")
+      .map((item) => item.text)
+      .join(" | ");
+  }
+  if (field === "audio") return JSON.stringify(record.audio);
+  const value = record[field as keyof SearchRecord];
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+export function exportRow(record: SearchRecord, columns: string[] = COLUMNS): string[] {
+  return columns.map((column) => fieldValue(record, column));
 }
 
 export function makeRecipe(
@@ -94,7 +104,7 @@ export function makeRecipe(
       record_ids: records.map((record) => record.id),
       max_rows: records.length,
     },
-    fields: COLUMNS,
+    fields: context.fields ?? COLUMNS,
     format,
     spreadsheet_safe: true,
   };
@@ -105,6 +115,9 @@ export function renderExport(
   context: ExportContext,
   format: ExportFormat,
 ): RenderedExport {
+  if (format === "parquet") {
+    throw new Error("Parquet is generated through the lazy DuckDB-Wasm export path");
+  }
   if (format === "recipe") {
     return {
       contents: `${JSON.stringify(makeRecipe(records, context, "jsonl"), null, 2)}\n`,
@@ -188,8 +201,9 @@ export function renderExport(
       mediaType: "text/tab-separated-values;charset=utf-8",
     };
   }
+  const columns = context.fields ?? COLUMNS;
   const delimiter = format === "tsv" ? "\t" : ",";
-  const lines = [COLUMNS, ...records.map(row)].map((values) =>
+  const lines = [columns, ...records.map((record) => exportRow(record, columns))].map((values) =>
     values.map((value) => delimitedCell(value, delimiter, true)).join(delimiter),
   );
   return {
@@ -202,11 +216,35 @@ export function renderExport(
   };
 }
 
-export function downloadExport(
+export async function downloadExport(
   records: SearchRecord[],
   context: ExportContext,
   format: ExportFormat,
-): void {
+  signal?: AbortSignal,
+): Promise<void> {
+  if (format === "parquet") {
+    if (records.length > 10_000) {
+      throw new Error("Browser Parquet export is limited to 10,000 records");
+    }
+    const {parquetFromRows} = await import("./duckdbExport");
+    const columns = context.fields ?? COLUMNS;
+    const rows = records.map((record) => {
+      const values = exportRow(record, columns);
+      return Object.fromEntries(
+        columns.map((column, index) => [column, values[index] ?? ""]),
+      );
+    });
+    const contents = await parquetFromRows(rows, signal);
+    const url = URL.createObjectURL(
+      new Blob([contents as BlobPart], {type: "application/vnd.apache.parquet"}),
+    );
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `kakarayan-${context.releaseId}.parquet`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
   const rendered = renderExport(records, context, format);
   const url = URL.createObjectURL(
     new Blob([rendered.contents], {type: rendered.mediaType}),

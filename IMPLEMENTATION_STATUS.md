@@ -84,7 +84,7 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   cold-start states, and source-preserving failure behavior.
 - [x] Implement the model catalogue and static developer documentation against versioned
   generated contracts.
-- [x] Verify the frontend with lint, strict TypeScript, nine unit tests, a production build,
+- [x] Verify the frontend with lint, strict TypeScript, ten unit tests, a production build,
   a zero-vulnerability npm audit, desktop interaction, mobile rendering, and browser logs.
 - [x] Implement the optional read-only FastAPI service with checksummed release acquisition,
   immutable SQLite startup, health/readiness, structured errors, exact CORS, bounded
@@ -110,13 +110,27 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Implement guarded CI, Pages, draft data-release, and optional Space workflows with
   pinned actions, least-purpose jobs, immutable source refs, rights gates, and no pull
   request deployments.
+- [x] Implement source-exact, normalized, prefix, contains, translation, phonology, gloss,
+  bounded fuzzy, and non-backtracking RE2 browser search across preserved linguistic tiers.
+- [x] Implement a bounded browser dataset builder with field selection, deterministic
+  preview, preflight estimates, cancellation, fail-closed rights, nine formats, and
+  locally executable recipes.
+- [x] Implement Worker-based source, normalized, translation, distribution, n-gram,
+  collocate, type/token, and seeded-sample summaries with safe table export.
+- [x] Implement lazy single-threaded DuckDB-Wasm Parquet output and verify real Parquet
+  signatures in Chromium, Firefox, and WebKit without a backend.
+- [x] Add a validated reviewed-content registry and visibly fail closed while no reviewed
+  lessons have been contributed.
+- [x] Complete one full release-only benchmark against pinned public FormosanBank commit
+  `40fd519cd82295bd7824e207990d277b871ad47f`: 487,354 sentences, 8,214,390 tokens,
+  no publisher warnings, 5.4 GiB output, 9.1 GiB peak memory, and 20 minutes 28 seconds.
 - [ ] Complete deterministic full-data publisher and release validation.
 - [ ] Complete full-corpus, browser, accessibility, security, and reproducibility validation.
 - [ ] Open one draft pull request and leave it unmerged.
 
 ## Next slice
 
-Commit and push the guarded automation checkpoint. Run the optimized publisher from a clean
-output directory against the pinned public FormosanBank commit. Verify every artifact,
-measure final and peak storage, assemble the real Pages tree, and rerun production browser
-checks before completing documentation and opening the draft pull request.
+Commit the research workbench checkpoint. Add purpose-built search indexes so common
+queries do not scan all scoped sentence records, then repeat the full data and Pages builds
+from clean output. Reconcile representations, finish remaining information and learner
+flows, and complete production browser validation before opening the draft pull request.

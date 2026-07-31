@@ -6,7 +6,17 @@ import {Link, useSearchParams} from "../routing";
 import {cardFromRecord, saveCard} from "../study";
 import type {AppData, SearchRecord} from "../types";
 
-const VALID_MODES: SearchMode[] = ["exact", "prefix", "contains", "translation"];
+const VALID_MODES: SearchMode[] = [
+  "source",
+  "exact",
+  "prefix",
+  "contains",
+  "translation",
+  "phonology",
+  "gloss",
+  "fuzzy",
+  "regex",
+];
 
 export function SearchTool({
   data,
@@ -33,6 +43,7 @@ export function SearchTool({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
+  const [exporting, setExporting] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
   const relevantCorpora = useMemo(
@@ -156,6 +167,13 @@ export function SearchTool({
             </label>
           ))}
         </fieldset>
+        {(mode === "regex" || mode === "fuzzy") && (
+          <p className="tool-note">
+            {mode === "regex"
+              ? "RE2 provides linear-time Unicode matching. Backreferences and look-around are not supported."
+              : "Fuzzy lookup uses Unicode edit distance 1 for short queries and 2 otherwise."}
+          </p>
+        )}
         <button className="button button--primary" disabled={busy || !languageId || !query.trim()}>
           {busy ? "Searching…" : t("search.submit")}
         </button>
@@ -194,6 +212,7 @@ export function SearchTool({
                   <option value="tsv">TSV</option>
                   <option value="json">JSON</option>
                   <option value="jsonl">JSON Lines</option>
+                  <option value="parquet">Parquet (DuckDB-Wasm)</option>
                   <option value="plain">Plain text</option>
                   <option value="interlinear">Interlinear text</option>
                   <option value="audio">Audio references</option>
@@ -202,21 +221,30 @@ export function SearchTool({
               </label>
               <button
                 className="button button--quiet"
-                onClick={() =>
-                  downloadExport(
-                    records,
-                    {
-                      releaseId: data.meta.release_id,
-                      query: query.trim(),
-                      mode,
-                      languageId,
-                      corpusId,
-                    },
-                    exportFormat,
-                  )
-                }
+                disabled={exporting}
+                onClick={async () => {
+                  setExporting(true);
+                  setError("");
+                  try {
+                    await downloadExport(
+                      records,
+                      {
+                        releaseId: data.meta.release_id,
+                        query: query.trim(),
+                        mode,
+                        languageId,
+                        corpusId,
+                      },
+                      exportFormat,
+                    );
+                  } catch (cause) {
+                    setError(cause instanceof Error ? cause.message : String(cause));
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
               >
-                Download
+                {exporting ? "Preparing…" : "Download"}
               </button>
             </div>
           )}
@@ -247,6 +275,36 @@ export function SearchTool({
                   <dd lang={record.language_id}>{record.standard}</dd>
                 </div>
               </dl>
+            )}
+            {(record.phonology.length > 0 ||
+              record.tier_translations.some((item) => item.owner_type !== "sentence")) && (
+              <details className="tier-details">
+                <summary>Word, morpheme, and phonology tiers</summary>
+                {record.phonology.map((item) => (
+                  <p key={`${item.owner_type}-${item.owner_id}-${item.position}`}>
+                    <strong>PHON · {item.owner_type}</strong> {item.text}
+                  </p>
+                ))}
+                {record.tier_translations
+                  .filter((item) => item.owner_type !== "sentence")
+                  .map((item) => (
+                    <p key={`${item.owner_type}-${item.owner_id}-${item.position}`}>
+                      <strong>
+                        {item.kind || "TRANSL"} · {item.owner_type}
+                      </strong>{" "}
+                      {item.text}
+                    </p>
+                  ))}
+                {record.words.map((word) => (
+                  <p key={word.id}>
+                    <strong>W {word.position + 1}</strong>
+                    {word.class && ` · class ${word.class}`}
+                    {word.sclass && ` · sclass ${word.sclass}`}
+                    {word.morphemes.length > 0 &&
+                      ` · ${word.morphemes.length} morpheme${word.morphemes.length === 1 ? "" : "s"}`}
+                  </p>
+                ))}
+              </details>
             )}
             <div className="translations">
               {record.translations.map((translation, index) => (

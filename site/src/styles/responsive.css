@@ -58,6 +58,38 @@
 }
 
 @media (max-width: 720px) {
+  .builder,
+  .summaries {
+    padding: 1rem;
+  }
+
+  .builder__steps {
+    grid-template-columns: repeat(2, 1fr);
+    margin: -1rem -1rem 1.5rem;
+  }
+
+  .builder__grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .field-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-export {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .summary-export span {
+    width: 100%;
+  }
+
   .topbar {
     padding: 0.6rem 1rem 0;
   }

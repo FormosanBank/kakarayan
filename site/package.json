@@ -14,8 +14,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "1.32.0",
     "@gradio/client": "^2.4.0",
     "fflate": "0.8.2",
+    "re2js": "2.8.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },

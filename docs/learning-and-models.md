@@ -109,9 +109,11 @@ mentions private training lineage, Kakarayan displays that disclosure.
 
 ## Human-reviewed learning content
 
-The current release supplies corpus-based learning tools and orthography tables. A future
-lesson, grammar explanation, correction rule, or vocabulary set should not be added as
-anonymous prose.
+The current release supplies corpus-based learning tools, orthography tables, and the
+validated `content/manifest.json` publication boundary. The manifest intentionally contains
+no lesson entries yet. The site says so and links to the contribution requirements instead
+of inventing a course. A lesson, grammar explanation, correction rule, or vocabulary set
+must not be added as anonymous prose.
 
 Reviewed material should record:
 

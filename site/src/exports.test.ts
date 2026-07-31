@@ -11,8 +11,25 @@ const record: SearchRecord = {
   standard: "=fictional",
   original: "fictional",
   translations: [{text: "invented", xml_lang: "eng", kind: "", version: ""}],
-  tokens: [{surface: "fictional", normalized: "fictional", position: 0}],
-  audio: [{file: "fixture.wav", url: "", source: "", start: 1, end: 2}],
+  tokens: [{surface: "fictional", normalized: "fictional", position: 0, word_id: "w1"}],
+  forms: [],
+  phonology: [],
+  tier_translations: [],
+  words: [],
+  audio: [
+    {
+      owner_type: "sentence",
+      owner_id: "sentence_fixture",
+      position: 0,
+      file: "fixture.wav",
+      url: "",
+      source: "",
+      start: 1,
+      end: 2,
+      duration: 1,
+      availability_status: "referenced",
+    },
+  ],
 };
 
 const context = {

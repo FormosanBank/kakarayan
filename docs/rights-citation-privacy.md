@@ -150,6 +150,11 @@ cannot promise deletion of data already received by a third party.
 The static site has no authentication or privileged backend. Its content security policy
 limits sources required by the application and optional model calls.
 
+Browser regular-expression search uses a bounded RE2 implementation rather than the native
+backtracking expression engine. Pattern length, record scope, and result count are capped.
+DuckDB-Wasm runs in a local Worker only for bounded export and receives no network URL from
+the user.
+
 The live API:
 
 - Downloads only from a configured HTTPS release manifest.

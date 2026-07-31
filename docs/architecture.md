@@ -70,6 +70,17 @@ a language and optional corpus. Shards are capped at 1,000 records and are gzip-
 Both compressed and uncompressed SHA-256 values are recorded because web hosts differ in
 whether they transparently decode `.gz` responses.
 
+Common exact, prefix, translation, phonology, and gloss searches use these scoped shards.
+Fuzzy work is bounded by a documented Unicode edit distance and record cap. User patterns
+compile through RE2JS, a non-backtracking engine, only after language and corpus scope
+limits are checked. The browser never evaluates a pattern as JavaScript.
+
+The dataset builder preflights shard transfer and decoded size before reading data. It caps
+rows, refuses unsafe scopes, and preserves deterministic source order. Linguistic summaries
+run in a dedicated Worker and cap the record count. DuckDB-Wasm is a separate lazy chunk
+used only for bounded Parquet export, so the initial route does not load its 39 MiB
+single-threaded module. None of these paths requires cross-origin isolation or a backend.
+
 The service worker is additive. Network access remains authoritative, successful responses
 are cached, and the shell may be used offline after a prior visit. Failure to register the
 service worker does not prevent normal use.
@@ -152,3 +163,6 @@ CI runs the legacy suite with PostgreSQL 16 to prevent regressions.
 8. Local learning state stays local unless a user explicitly downloads a backup.
 9. Model calls go directly from the browser to the named provider after consent.
 10. Pull requests can validate but cannot deploy.
+11. Descriptive summaries never become claims about speakers or grammaticality.
+12. Reviewed learning content fails closed when authorship, review, citation, or rights
+    metadata is absent.

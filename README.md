@@ -14,17 +14,20 @@ rebuildable projection of one exact public FormosanBank commit.
 
 ## What is included
 
-- Local sentence and concordance search across original forms, FormosanBank standard forms,
-  tokens, and translations.
+- Local sentence and concordance search across original and FormosanBank standard forms,
+  tokens, phonology, translations, and morpheme glosses. Source-exact, normalized, prefix,
+  contains, fuzzy, and bounded RE2 modes run without a server.
 - Corpus and language catalogues that keep Seediq and Truku as separate display identities.
-- CSV, TSV, JSON, JSON Lines, plain text, interlinear, audio-reference, and reproducible
+- A bounded dataset builder, deterministic linguistic summaries in a Worker, and CSV, TSV,
+  JSON, JSON Lines, Parquet, plain text, interlinear, audio-reference, and reproducible
   recipe exports for browser selections.
 - Prepared research packages in canonical XML, relational CSV/TSV/JSONL, hierarchical
   JSONL, Parquet, XLSX, CLDF Generic, plain/interlinear text, EAF, TextGrid, WebVTT, and SRT
   where the source supports a defensible mapping.
 - An Amis-first learner studio with cited examples, private local cards, deterministic
   spaced repetition, backup/restore, Anki TSV, local recording, and reviewed orthography
-  conversion tables.
+  conversion tables. A reviewed-content registry stays visibly empty until named authors
+  and reviewers supply cited material.
 - Optional direct-browser FormosanBank MT and ASR calls with explicit consent and visible
   third-party boundaries.
 - A versioned static JSON API, optional read-only live API, and JavaScript, Python, and R
@@ -39,9 +42,10 @@ not required by the public static site.
 ## Repository map
 
 ```text
-site/                 React, TypeScript, Vite, PWA, unit tests, and Playwright checks
+site/                 React, TypeScript, Vite, PWA, Workers, unit tests, and Playwright checks
 publisher/            deterministic XML projection, packages, manifests, and verification
 schemas/              versioned JSON Schema contracts
+content/              reviewed learning-content registry and contribution boundary
 api/                  optional bounded read-only FastAPI service and Docker Space source
 clients/              JavaScript, Python/CLI, and R clients
 tests/fixtures/       invented public-repository fixture with no private corpus material

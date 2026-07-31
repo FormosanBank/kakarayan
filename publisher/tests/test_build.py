@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import sqlite3
@@ -52,11 +53,22 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         search_manifest["shards"][0]["uncompressed_bytes"] > search_manifest["shards"][0]["bytes"]
     )
     assert len(search_manifest["shards"][0]["uncompressed_sha256"]) == 64
+    search_records = json.loads(
+        gzip.decompress(first.output.joinpath(search_manifest["shards"][0]["path"]).read_bytes())
+    )
+    first_sentence = search_records[0]
+    assert first_sentence["phonology"][0]["text"] == "lima watso"
+    assert first_sentence["tier_translations"][1]["kind"] == "gloss"
+    assert first_sentence["tier_translations"][1]["owner_type"] == "morpheme"
+    assert first_sentence["words"][0]["class"] == "noun"
+    assert first_sentence["words"][0]["morphemes"][0]["class"] == "root"
     orthography = json.loads(
         (first.output / "api" / "v1" / "orthography.json").read_text(encoding="utf-8")
     )
     assert orthography["tables"][0]["language"] == "Amis"
     assert orthography["tables"][0]["rules"][1]["outputs"]["Xiuguluan"] == "o"
+    content = json.loads((first.output / "api" / "v1" / "content.json").read_text(encoding="utf-8"))
+    assert content == {"schema_version": "1.0.0", "entries": []}
     downloads = json.loads(
         (first.output / "api" / "v1" / "downloads.json").read_text(encoding="utf-8")
     )

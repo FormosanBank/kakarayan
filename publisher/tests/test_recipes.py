@@ -54,6 +54,26 @@ def test_recipe_resolves_and_exports(public_repo: Path, tmp_path: Path) -> None:
     assert "sentence.wav" not in output.read_text(encoding="utf-8-sig")
     assert output.read_text(encoding="utf-8-sig").endswith("\n")
 
+    parquet_recipe = _recipe(release.release_id, "parquet")
+    parquet_output = tmp_path / "selection.parquet"
+    write_recipe_export(records, parquet_recipe, parquet_output)
+    assert parquet_output.read_bytes()[:4] == b"PAR1"
+
+
+def test_recipe_runs_against_release_only_hierarchical_packages(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    release = build_release(
+        public_repo,
+        tmp_path / "release",
+        compress_database=True,
+        release_only=True,
+    )
+    records = resolve_recipe(release.output, _recipe(release.release_id))
+    assert [record["xml_id"] for record in records] == ["s-one"]
+    assert records[0]["translations"][0]["text"] == "A fictional translated line."
+
 
 def test_recipe_rejects_unknown_fields(tmp_path: Path) -> None:
     document = _recipe("fb-20240102-deadbeef")

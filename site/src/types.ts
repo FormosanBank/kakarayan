@@ -124,6 +124,53 @@ export interface Token {
   surface: string;
   normalized: string;
   position: number;
+  word_id: string;
+}
+
+export interface SearchForm {
+  owner_type: "sentence" | "word" | "morpheme";
+  owner_id: string;
+  position: number;
+  text: string;
+  unclear: number;
+  kind: string;
+  notes: string;
+  normalized: string;
+}
+
+export interface SearchPhonology {
+  owner_type: "sentence" | "word" | "morpheme";
+  owner_id: string;
+  position: number;
+  text: string;
+  unclear: number;
+  kind: string;
+}
+
+export interface TierTranslation extends Translation {
+  owner_type: "sentence" | "word" | "morpheme";
+  owner_id: string;
+  position: number;
+  unclear: number;
+  notes: string;
+  normalized: string;
+}
+
+export interface SearchMorpheme {
+  id: string;
+  xml_id: string;
+  position: number;
+  class: string;
+  sclass: string;
+}
+
+export interface SearchWord {
+  id: string;
+  xml_id: string;
+  position: number;
+  class: string;
+  sclass: string;
+  morphemes: SearchMorpheme[];
 }
 
 export interface SearchRecord {
@@ -137,12 +184,21 @@ export interface SearchRecord {
   original: string;
   translations: Translation[];
   tokens: Token[];
+  forms: SearchForm[];
+  phonology: SearchPhonology[];
+  tier_translations: TierTranslation[];
+  words: SearchWord[];
   audio: Array<{
+    owner_type: "sentence" | "word" | "morpheme";
+    owner_id: string;
+    position: number;
     file: string;
     url: string;
     start: number | null;
     end: number | null;
     source: string;
+    duration: number | null;
+    availability_status: string;
   }>;
 }
 
@@ -166,6 +222,33 @@ export interface OrthographyCatalog {
   tables: OrthographyTable[];
 }
 
+export interface LearningContentEntry {
+  id: string;
+  kind: "grammar-note" | "lesson" | "paradigm" | "usage-note";
+  target_language_id: string;
+  dialects: string[];
+  interface_language: "en" | "zh-Hant";
+  title: string;
+  summary: string;
+  body_markdown: string;
+  author: string;
+  reviewer: string;
+  review_status: "reviewed";
+  reviewed_at: string;
+  citations: string[];
+  rights: {
+    status: "reviewed";
+    license_expression: string | null;
+    evidence: string[];
+  };
+  related_queries?: unknown[];
+}
+
+export interface LearningContentCatalog {
+  schema_version: string;
+  entries: LearningContentEntry[];
+}
+
 export interface AppData {
   meta: Meta;
   languages: Language[];
@@ -174,4 +257,5 @@ export interface AppData {
   models: ModelCatalog;
   search: SearchManifest;
   orthography: OrthographyCatalog;
+  content: LearningContentCatalog;
 }

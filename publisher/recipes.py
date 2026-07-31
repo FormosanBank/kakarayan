@@ -10,6 +10,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
+import pyarrow.parquet as pq
+import regex
 from jsonschema import Draft202012Validator
 
 from publisher.build import BuildError
@@ -26,21 +29,112 @@ def _normalize(value: str) -> str:
     return unicodedata.normalize("NFC", value).strip().casefold()
 
 
+def _edit_distance(left: str, right: str, maximum: int) -> int:
+    if abs(len(left) - len(right)) > maximum:
+        return maximum + 1
+    previous = list(range(len(right) + 1))
+    for row, left_character in enumerate(left, 1):
+        current = [row]
+        row_minimum = row
+        for column, right_character in enumerate(right, 1):
+            value = min(
+                current[column - 1] + 1,
+                previous[column] + 1,
+                previous[column - 1] + (left_character != right_character),
+            )
+            current.append(value)
+            row_minimum = min(row_minimum, value)
+        if row_minimum > maximum:
+            return maximum + 1
+        previous = current
+    return previous[-1]
+
+
 def _matches(record: dict[str, Any], query: str, match: str) -> bool:
     needle = _normalize(query)
     if match == "translation":
         return any(needle in _normalize(item["text"]) for item in record["translations"])
+    if match == "phonology":
+        return any(needle in _normalize(item["text"]) for item in record["phonology"])
+    if match == "gloss":
+        return any(
+            item["owner_type"] != "sentence" and needle in _normalize(item["text"])
+            for item in record["tier_translations"]
+        )
+    source_forms = [
+        record["standard"],
+        record["original"],
+        *(item["surface"] for item in record["tokens"]),
+        *(item["text"] for item in record["forms"]),
+    ]
+    if match == "source":
+        source = unicodedata.normalize("NFC", query).strip()
+        return any(unicodedata.normalize("NFC", value) == source for value in source_forms)
     forms = [
-        _normalize(record["standard"]),
-        _normalize(record["original"]),
+        *(_normalize(value) for value in source_forms),
         *(_normalize(item["normalized"]) for item in record["tokens"]),
     ]
     forms = [value for value in forms if value]
+    if match == "regex":
+        try:
+            pattern = regex.compile(unicodedata.normalize("NFC", query), regex.VERSION1)
+            values = [
+                *source_forms,
+                *(item["text"] for item in record["translations"]),
+                *(item["text"] for item in record["tier_translations"]),
+                *(item["text"] for item in record["phonology"]),
+            ]
+            return any(pattern.search(value, timeout=0.05) is not None for value in values)
+        except TimeoutError as error:
+            raise BuildError("Recipe regular expression exceeded its work limit") from error
+        except regex.error as error:
+            raise BuildError(f"Invalid recipe regular expression: {error}") from error
+    if match == "fuzzy":
+        maximum = 1 if len(needle) <= 4 else 2
+        return any(
+            len(value) <= 80 and _edit_distance(value, needle, maximum) <= maximum
+            for value in forms
+        )
     if match == "exact":
         return any(value == needle for value in forms)
     if match == "prefix":
         return any(value.startswith(needle) for value in forms)
     return any(needle in value for value in forms)
+
+
+def _recipe_record(record: dict[str, Any]) -> dict[str, Any]:
+    """Normalize hierarchical prepared records to the browser search contract."""
+    if "tiers" not in record:
+        return record
+    forms = list(record["tiers"]["forms"])
+    phonology = list(record["tiers"]["phonology"])
+    tier_translations = list(record["tiers"]["translations"])
+    audio = list(record["tiers"]["audio"])
+    words = record.get("words", [])
+    for word in words:
+        forms.extend(word["tiers"]["forms"])
+        phonology.extend(word["tiers"]["phonology"])
+        tier_translations.extend(word["tiers"]["translations"])
+        audio.extend(word["tiers"]["audio"])
+        for morpheme in word["morphemes"]:
+            forms.extend(morpheme["tiers"]["forms"])
+            phonology.extend(morpheme["tiers"]["phonology"])
+            tier_translations.extend(morpheme["tiers"]["translations"])
+            audio.extend(morpheme["tiers"]["audio"])
+    return {
+        **record,
+        "id": record["sentence_id"],
+        "xml_id": record["source_xml_id"],
+        "standard": record["standard_form"] or "",
+        "original": record["original_form"] or "",
+        "translations": [
+            item for item in record["tiers"]["translations"] if item["owner_type"] == "sentence"
+        ],
+        "forms": forms,
+        "phonology": phonology,
+        "tier_translations": tier_translations,
+        "audio": audio,
+    }
 
 
 def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]]:
@@ -53,7 +147,7 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
     corpora = set(selection["corpus_ids"])
     result = []
     for line in _record_lines(release):
-        record = json.loads(line)
+        record = _recipe_record(json.loads(line))
         if record["language_id"] not in languages:
             continue
         if corpora and record["corpus_id"] not in corpora:
@@ -139,6 +233,28 @@ def write_recipe_export(
             encoding="utf-8",
             newline="\n",
         )
+        return
+    if export_format == "parquet":
+        fields = recipe["fields"]
+        table = pa.Table.from_pylist(
+            [
+                {
+                    field: (
+                        _value(record, field)
+                        if isinstance(_value(record, field), (str, int, float, bool, type(None)))
+                        else json.dumps(
+                            _value(record, field),
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                    )
+                    for field in fields
+                }
+                for record in records
+            ]
+        )
+        pq.write_table(table, output, compression="zstd")
         return
     if export_format == "plain":
         output.write_text(

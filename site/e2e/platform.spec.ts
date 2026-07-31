@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import {expect, test} from "@playwright/test";
+import {readFile} from "node:fs/promises";
 
 const routes = [
   ["", /Listen closely/],
@@ -31,6 +32,87 @@ test("local corpus search reads a compressed shard", async ({page}) => {
     "href",
     /FormosanBank\/blob\/[0-9a-f]{40}\//,
   );
+});
+
+test("scoped RE2 search runs without weakening the content security policy", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("#/search");
+  await page.getByLabel("Language", {exact: true}).selectOption({label: "Amis"});
+  await page.getByRole("radio", {name: "Scoped RE2"}).check();
+  await page.getByLabel("Word or meaning").fill("li.a");
+  await page.getByRole("button", {name: "Search"}).click();
+  await expect(page.locator(".result-card").first()).toContainText("lima");
+  await expect(page.locator(".callout--error")).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test("dataset recipes and worker summaries are available without a backend", async ({
+  page,
+}) => {
+  await page.goto("#/search");
+  await page.getByRole("tab", {name: "Dataset builder"}).click();
+  await page
+    .getByRole("combobox", {name: "Language", exact: true})
+    .selectOption({label: "Amis"});
+  await page.getByRole("button", {name: "Preview"}).click();
+  await expect(
+    page.getByRole("heading", {name: "Preview in deterministic source order"}),
+  ).toBeVisible();
+  await page.getByLabel("Format").selectOption("recipe");
+  const recipeDownload = page.waitForEvent("download");
+  await page.getByRole("button", {name: "Download"}).click();
+  const recipe = await recipeDownload;
+  expect(recipe.suggestedFilename()).toMatch(/-recipe\.json$/);
+  const recipePath = await recipe.path();
+  expect(recipePath).not.toBeNull();
+  const document = JSON.parse(await readFile(recipePath as string, "utf8")) as {
+    release_id: string;
+    selection: {language_ids: string[]};
+  };
+  expect(document.release_id).toMatch(/^fb-20240102-/);
+  expect(document.selection.language_ids).toEqual(["lang_amis"]);
+
+  await page.getByRole("tab", {name: "Linguistic summaries"}).click();
+  await page
+    .getByRole("combobox", {name: "Language", exact: true})
+    .selectOption({label: "Amis"});
+  await page.getByRole("button", {name: "Compute summaries"}).click();
+  await expect(page.getByText("source-exact types")).toBeVisible();
+  await expect(page.getByRole("table")).toContainText("lima");
+});
+
+test("lazy DuckDB-Wasm export creates a real Parquet file", async ({page}, testInfo) => {
+  test.skip(testInfo.project.name.includes("mobile"), "Large export smoke test runs on desktop");
+  test.setTimeout(120_000);
+  await page.goto("#/search");
+  await page.getByLabel("Language", {exact: true}).selectOption({label: "Amis"});
+  await page.getByLabel("Word or meaning").fill("lima");
+  await page.getByRole("button", {name: "Search"}).click();
+  await expect(page.locator(".result-card").first()).toBeVisible();
+  await page.getByLabel("Export").selectOption("parquet");
+  const parquetDownload = page.waitForEvent("download");
+  await page.getByRole("button", {name: "Download"}).click();
+  const parquet = await parquetDownload;
+  expect(parquet.suggestedFilename()).toMatch(/\.parquet$/);
+  const parquetPath = await parquet.path();
+  expect(parquetPath).not.toBeNull();
+  const contents = await readFile(parquetPath as string);
+  expect(contents.subarray(0, 4).toString("ascii")).toBe("PAR1");
+  expect(contents.subarray(-4).toString("ascii")).toBe("PAR1");
+});
+
+test("learning content fails closed when no reviewed lesson is published", async ({
+  page,
+}) => {
+  await page.goto("#/learn");
+  await page.getByRole("tab", {name: /Reviewed notes/}).click();
+  await expect(
+    page.getByRole("heading", {name: "No reviewed lessons are published yet."}),
+  ).toBeVisible();
+  await expect(page.getByText(/does not generate grammar lessons/)).toBeVisible();
 });
 
 test("Traditional Chinese navigation updates content and document language", async ({page}) => {
