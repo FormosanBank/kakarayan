@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/release-manifest.schema.json",
+  "title": "Kakarayan release manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "release_id",
+    "generated_at",
+    "source",
+    "artifacts",
+    "counts"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "source": {"$ref": "catalog.schema.json#/$defs/source"},
+    "counts": {"$ref": "catalog.schema.json#/$defs/counts"},
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "media_type", "bytes", "sha256", "scope", "rights_ids"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^[^/]"},
+          "media_type": {"type": "string"},
+          "bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "scope": {"type": "string"},
+          "rights_ids": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

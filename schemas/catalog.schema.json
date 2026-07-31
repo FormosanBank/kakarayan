@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/catalog.schema.json",
+  "title": "Kakarayan catalogue",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "release_id",
+    "source",
+    "generated_at",
+    "languages",
+    "corpora",
+    "counts"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "source": {"$ref": "#/$defs/source"},
+    "languages": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/language"}
+    },
+    "corpora": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/corpus"}
+    },
+    "counts": {"$ref": "#/$defs/counts"}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": {"type": "string", "const": "FormosanBank/FormosanBank"},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}
+      },
+      "additionalProperties": false
+    },
+    "language": {
+      "type": "object",
+      "required": ["id", "name", "iso639_3", "names", "capabilities", "counts"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^lang_[a-z0-9_]+$"},
+        "name": {"type": "string", "minLength": 1},
+        "iso639_3": {"type": "string", "pattern": "^[a-z]{3}$"},
+        "names": {
+          "type": "object",
+          "required": ["en", "zh-Hant"],
+          "properties": {
+            "en": {"type": "string"},
+            "zh-Hant": {"type": "string"},
+            "autonym": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "enum": ["corpus", "dictionary", "examples", "audio", "mt", "asr", "orthography"]
+          },
+          "uniqueItems": true
+        },
+        "counts": {"$ref": "#/$defs/counts"}
+      },
+      "additionalProperties": false
+    },
+    "corpus": {
+      "type": "object",
+      "required": ["id", "name", "source_path", "languages", "rights_id", "counts"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^corpus_[a-z0-9_]+$"},
+        "name": {"type": "string", "minLength": 1},
+        "source_path": {"type": "string", "pattern": "^Corpora/"},
+        "languages": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "rights_id": {"type": "string", "pattern": "^rights_"},
+        "counts": {"$ref": "#/$defs/counts"}
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "texts": {"type": "integer", "minimum": 0},
+        "sentences": {"type": "integer", "minimum": 0},
+        "words": {"type": "integer", "minimum": 0},
+        "morphemes": {"type": "integer", "minimum": 0},
+        "forms": {"type": "integer", "minimum": 0},
+        "phonology": {"type": "integer", "minimum": 0},
+        "translations": {"type": "integer", "minimum": 0},
+        "audio": {"type": "integer", "minimum": 0},
+        "tokens": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  }
+}

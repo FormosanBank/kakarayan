@@ -17,3 +17,13 @@ db.sqlite3
 .DS_Store
 .idea/
 .vscode/
+
+# Generated platform artifacts
+/build/
+/site/dist/
+/site/node_modules/
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+/.coverage
+coverage.xml

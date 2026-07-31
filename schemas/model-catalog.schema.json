@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/model-catalog.schema.json",
+  "title": "Kakarayan public model catalogue",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "provider", "models", "services"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "provider": {"const": "Hugging Face"},
+    "models": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/model"}
+    },
+    "services": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/service"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "model": {
+      "type": "object",
+      "required": ["id", "repository", "task", "url", "license", "languages", "limitations"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^model_"},
+        "repository": {"type": "string", "pattern": "^FormosanBank/"},
+        "task": {"enum": ["translation", "automatic-speech-recognition"]},
+        "url": {"type": "string", "format": "uri"},
+        "license": {"type": "string"},
+        "languages": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "direction": {"type": ["string", "null"]},
+        "last_modified": {"type": ["string", "null"], "format": "date-time"},
+        "limitations": {"type": "string"},
+        "training_lineage": {"type": "string"},
+        "browser_service_id": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": ["id", "space", "url", "tasks", "status", "third_party_notice"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^service_"},
+        "space": {"type": "string", "pattern": "^FormosanBank/"},
+        "url": {"type": "string", "format": "uri"},
+        "api_url": {"type": ["string", "null"], "format": "uri"},
+        "tasks": {
+          "type": "array",
+          "items": {"enum": ["translation", "automatic-speech-recognition"]},
+          "minItems": 1
+        },
+        "status": {"enum": ["available", "sleeping", "unavailable", "unchecked"]},
+        "checked_at": {"type": ["string", "null"], "format": "date-time"},
+        "third_party_notice": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}

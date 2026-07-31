@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEXT
+  id="fixture"
+  xml:lang="ami"
+  dialect="Xiuguluan"
+  citation="Synthetic Kakarayan publisher fixture"
+  BibTeX_citation="@misc{fixture}"
+  copyright="Synthetic fixture"
+  source="tests/fixtures/formosanbank"
+>
+  <AUDIO file="untranscribed.wav" start="0" end="2.5"/>
+  <S id="s-one">
+    <TRANSL xml:lang="eng">A fictional translated line.</TRANSL>
+    <FORM kindOf="standard">lima waco</FORM>
+    <FORM kindOf="original">Lima waco <UNCLEAR/></FORM>
+    <PHON kindOf="standard">lima watso</PHON>
+    <AUDIO file="sentence.wav" start="1.25" end="3.75"/>
+    <W id="w-one" class="noun">
+      <FORM kindOf="standard">lima</FORM>
+      <M id="m-one" class="root">
+        <TRANSL xml:lang="eng" kindOf="gloss">FIVE</TRANSL>
+        <FORM kindOf="standard">lima</FORM>
+      </M>
+    </W>
+    <W id="w-two">
+      <FORM kindOf="original">waco</FORM>
+    </W>
+  </S>
+  <S id="s-two">
+    <FORM kindOf="original">toki rima</FORM>
+    <TRANSL xml:lang="zho">虛構測試句</TRANSL>
+  </S>
+</TEXT>

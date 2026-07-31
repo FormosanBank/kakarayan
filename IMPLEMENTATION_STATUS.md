@@ -66,8 +66,14 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Kept the goal prompt within the requested 150 to 300 lines.
 - [x] Renamed the feature branch to comply with repository branch naming rules.
 - [x] Ingested Kakarayan, FormosanBank, GitBook, rights, XML, and dialect guidance.
-- [ ] Commit and push the corrected planning checkpoint.
-- [ ] Implement schemas, rights/model registries, and fixture publisher.
+- [x] Commit and push the corrected planning checkpoint (`9a42c34`).
+- [x] Implement initial versioned catalogue, release, rights, and model schemas.
+- [x] Implement deterministic identifiers, safe mixed-content XML projection, canonical
+  token counting, Seediq/Truku resolution, and public-source verification.
+- [x] Implement deterministic CSV, JSONL, SQLite, static API, checksum, and manifest output.
+- [x] Implement fail-closed rights entries and official public Hugging Face metadata
+  collection.
+- [x] Add synthetic fixture publication and schema/integrity/determinism tests.
 - [ ] Implement deterministic full-data publisher and release artifacts.
 - [ ] Implement the static research and download application.
 - [ ] Implement the learner studio and offline local progress.
@@ -79,6 +85,6 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 
 ## Next slice
 
-Commit and push this planning checkpoint, then add the versioned schemas, reviewed registry
-shape, representative public XML fixture, deterministic identifiers, and the first publisher
-tests.
+Commit and push the publisher foundation. Then implement the static application shell,
+fixture-data assembly, bilingual navigation, research catalogue, dictionary, learner
+workflows, and model catalogue against these contracts.

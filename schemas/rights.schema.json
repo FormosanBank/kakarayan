@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/rights.schema.json",
+  "title": "Kakarayan rights catalogue",
+  "type": "object",
+  "required": ["schema_version", "central_terms", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "central_terms": {
+      "type": "object",
+      "required": ["use_summary", "commercial_ai", "attribution_required", "evidence"],
+      "properties": {
+        "use_summary": {"type": "string"},
+        "commercial_ai": {"enum": ["prohibited", "permission_required", "unknown"]},
+        "attribution_required": {"type": "boolean"},
+        "evidence": {"type": "array", "items": {"type": "string", "format": "uri"}}
+      },
+      "additionalProperties": false
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "corpus",
+          "redistribution",
+          "commercial_use",
+          "attribution",
+          "evidence",
+          "review_status"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^rights_"},
+          "corpus": {"type": "string", "minLength": 1},
+          "redistribution": {
+            "enum": ["allowed", "restricted", "metadata_only", "review_required"]
+          },
+          "commercial_use": {"enum": ["allowed", "prohibited", "unknown"]},
+          "attribution": {"type": "string", "minLength": 1},
+          "license_expression": {"type": ["string", "null"]},
+          "notes": {"type": "string"},
+          "evidence": {
+            "type": "array",
+            "items": {"type": "string", "format": "uri"},
+            "minItems": 1
+          },
+          "review_status": {"enum": ["reviewed", "review_required"]},
+          "reviewed_at": {"type": ["string", "null"], "format": "date"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
