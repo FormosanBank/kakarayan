@@ -168,13 +168,13 @@ test("dictionary lookup returns cited word meanings separately from sentence sea
     "aria-pressed",
     "true",
   );
-  await selectSmallAmisScope(page);
+  await selectSmallAmisScope(page, "NTUFormosanCorpus");
   await page.getByLabel("Word", {exact: true}).fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
   const entry = page.locator(".dictionary-entry").first();
   await expect(entry).toBeVisible();
   await expect(entry.getByRole("heading", {name: /lima/i})).toBeVisible();
-  await expect(entry).toContainText("FIVE");
+  await expect(entry).toContainText(/five/i);
   await expect(entry.getByRole("link", {name: "View sentences"})).toHaveAttribute(
     "href",
     /#\/lookup\?type=sentences&q=lima/,

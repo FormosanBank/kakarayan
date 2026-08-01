@@ -159,6 +159,7 @@ export function CandidateGroups({
   query,
   mode,
   targetLanguage,
+  corpusId,
   onSave,
 }: {
   data: AppData;
@@ -166,6 +167,7 @@ export function CandidateGroups({
   query: string;
   mode: SearchMode;
   targetLanguage: string;
+  corpusId: string;
   onSave: (record: SearchRecord, front: string, meanings: string[]) => void;
 }) {
   const {locale, number, tx} = useI18n();
@@ -201,7 +203,9 @@ export function CandidateGroups({
         );
         const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(candidate.label)}&language=${encodeURIComponent(
           firstRecord.language_id,
-        )}&target=${encodeURIComponent(targetLanguage)}&mode=exact`;
+        )}&target=${encodeURIComponent(targetLanguage)}&mode=exact${
+          corpusId ? `&corpus=${encodeURIComponent(corpusId)}` : ""
+        }`;
         return (
           <article key={candidate.key} className="dictionary-entry">
             <header>

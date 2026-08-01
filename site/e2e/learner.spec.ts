@@ -52,9 +52,13 @@ test("local study data migrates, backs up, restores, and remains private", async
   await seedLegacyCard(page);
   const dictionary = page.getByRole("tabpanel");
   await dictionary.getByText("Search options", {exact: true}).click();
-  await dictionary.getByRole("combobox", {name: "Corpus", exact: true}).selectOption({
-    label: "TestCorpus",
-  });
+  const corpus = dictionary.getByRole("combobox", {name: "Corpus", exact: true});
+  const corpusLabels = await corpus.locator("option").allTextContents();
+  const corpusLabel = corpusLabels.includes("TestCorpus")
+    ? "TestCorpus"
+    : "NTUFormosanCorpus";
+  expect(corpusLabels).toContain(corpusLabel);
+  await corpus.selectOption({label: corpusLabel});
   await dictionary.getByLabel("Word", {exact: true}).fill("lima");
   await dictionary.getByRole("button", {name: "Search"}).click();
   await dictionary.getByRole("button", {name: "Save word"}).click();

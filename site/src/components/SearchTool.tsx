@@ -177,8 +177,11 @@ export function SearchTool({
 
   useEffect(() => {
     if (!hasInitialQuery.current || initialStarted.current || !targetLanguage) return;
-    initialStarted.current = true;
-    void performSearch(learner ? 60 : 200, false);
+    const timer = window.setTimeout(() => {
+      initialStarted.current = true;
+      void performSearch(learner ? 60 : 200, false);
+    });
+    return () => window.clearTimeout(timer);
   }, [learner, performSearch, targetLanguage]);
 
   useEffect(() => {
@@ -397,6 +400,7 @@ export function SearchTool({
           query={query}
           mode={mode}
           targetLanguage={targetLanguage}
+          corpusId={corpusId}
           onSave={(record, front, meanings) => void addWord(record, front, meanings)}
         />
       ) : (

@@ -167,7 +167,17 @@ export function matchingIndexes(
 
 async function loadShard(shard: SearchShard, signal?: AbortSignal): Promise<SearchRecord[]> {
   const existing = shardCache.get(shard.path);
-  if (existing) return existing;
+  if (existing) {
+    try {
+      return await existing;
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError") || signal?.aborted) {
+        throw error;
+      }
+      if (shardCache.get(shard.path) === existing) shardCache.delete(shard.path);
+      return loadShard(shard, signal);
+    }
+  }
   const request = compressedJson<SearchRecord[]>(
     `${dataBase}${shard.path}`,
     shard.sha256,
@@ -178,7 +188,7 @@ async function loadShard(shard: SearchShard, signal?: AbortSignal): Promise<Sear
   try {
     return await request;
   } catch (error) {
-    shardCache.delete(shard.path);
+    if (shardCache.get(shard.path) === request) shardCache.delete(shard.path);
     throw error;
   }
 }
@@ -190,7 +200,17 @@ async function loadIndex(
   signal?: AbortSignal,
 ): Promise<SearchIndexDocument> {
   const existing = indexCache.get(index.path);
-  if (existing) return existing;
+  if (existing) {
+    try {
+      return await existing;
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError") || signal?.aborted) {
+        throw error;
+      }
+      if (indexCache.get(index.path) === existing) indexCache.delete(index.path);
+      return loadIndex(index, signal);
+    }
+  }
   const request = compressedJson<SearchIndexDocument>(
     `${dataBase}${index.path}`,
     index.sha256,
@@ -201,7 +221,7 @@ async function loadIndex(
   try {
     return await request;
   } catch (error) {
-    indexCache.delete(index.path);
+    if (indexCache.get(index.path) === request) indexCache.delete(index.path);
     throw error;
   }
 }
