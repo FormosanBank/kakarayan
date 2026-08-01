@@ -14,9 +14,9 @@ rebuildable projection of one exact public FormosanBank commit.
 
 ## What is included
 
-- Local sentence and concordance search across original and FormosanBank standard forms,
-  tokens, phonology, translations, and morpheme glosses. Source-exact, normalized, prefix,
-  contains, fuzzy, and bounded RE2 modes run without a server.
+- Separate word dictionary and sentence search across original and FormosanBank standard
+  forms, tokens, phonology, translations, and morpheme glosses. Users choose the source
+  Formosan language and any translation language present in that corpus scope.
 - Corpus and language catalogues that keep Seediq and Truku as separate display identities.
 - A bounded dataset builder, deterministic linguistic summaries in a Worker, and CSV, TSV,
   JSON, JSON Lines, Parquet, plain text, interlinear, audio-reference, and reproducible
@@ -24,16 +24,15 @@ rebuildable projection of one exact public FormosanBank commit.
 - Prepared research packages in canonical XML, relational CSV/TSV/JSONL, hierarchical
   JSONL, Parquet, XLSX, CLDF Generic, plain/interlinear text, EAF, TextGrid, WebVTT, and SRT
   where the source supports a defensible mapping.
-- An Amis-first learner studio with cited examples, private local cards, deterministic
-  spaced repetition, backup/restore, Anki TSV, local recording, and reviewed orthography
-  conversion tables. A reviewed-content registry stays visibly empty until named authors
-  and reviewers supply cited material.
+- Learner tools with cited words and sentences, private local cards, deterministic spaced
+  repetition, backup/restore, Anki TSV, local recording, and reviewed orthography tables.
+  Cards can be saved only from dictionary or sentence results.
 - Optional direct-browser FormosanBank MT and ASR calls with explicit consent and visible
   third-party boundaries.
 - A versioned static JSON API, optional read-only live API, and JavaScript, Python, and R
   clients.
-- Fail-closed rights decisions, source locators, checksums, release pinning, and deterministic
-  synthetic-fixture tests.
+- Public-repository noncommercial distribution policy, stricter corpus overrides, source
+  locators, checksums, release pinning, and deterministic synthetic-fixture tests.
 
 The earlier Django and PostgreSQL dictionary application remains in the repository. It is
 useful as an optional server-backed development surface and behavioral reference, but it is
@@ -130,9 +129,11 @@ uv run python -m publisher.cli \
 ```
 
 Publication workflows additionally require reviewed, machine-readable rights decisions.
-They stop before deployment when any relevant corpus remains `review_required`. Pages also
-requires the matching data release to be published, then imports its validated manifest so
-the download interface cannot link to a draft or a different corpus commit.
+Every corpus discovered in the canonical public FormosanBank checkout receives a reviewed
+noncommercial distribution entry. An explicit metadata override can impose a stricter
+source or community rule. Pages also requires the matching data release to be published,
+then imports its validated manifest so the download interface cannot link to a draft or a
+different corpus commit.
 
 ## Checks
 
@@ -188,10 +189,14 @@ CI supplies PostgreSQL and also builds the API container.
   publishes that draft automatically.
 - `deploy-api.yml` is manual, environment-gated, and accepts only a published immutable data
   release. It pins that release in the Docker Space source.
-- Kakarayan currently has no maintainer-approved root software license. Production
-  workflows intentionally stop until `LICENSE` or `LICENSE.md` is added by the maintainers.
+- Kakarayan original work is licensed under CC BY-NC 4.0. Corpus records retain the
+  displayed FormosanBank, source, citation, and community terms.
+- The browser MT and ASR tools use the catalogued public FormosanBank Hugging Face Spaces
+  directly. They need no repository secret or Kakarayan backend.
 
-No production deployment is part of this feature branch or its pull request.
+Repository administrators must enable Pages with GitHub Actions before the first deploy.
+See [publication operations](docs/publication.md) for the exact launch order and current
+settings status.
 
 ## Documentation
 
@@ -218,6 +223,6 @@ the [Kakarayan repository](https://github.com/FormosanBank/kakarayan/issues) and
 the release ID, corpus, source path, and record ID. Do not include private personal
 information in a public issue.
 
-Public repository visibility is not a blanket data license. Consult the displayed
-FormosanBank terms, corpus-specific evidence, package metadata, and source notices before
-reuse.
+Public FormosanBank corpus data is available for noncommercial use under the displayed
+central, corpus-specific, upstream-source, citation, and community terms. A stricter term
+controls for the affected material.

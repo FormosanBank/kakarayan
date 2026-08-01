@@ -42,7 +42,9 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - The largest observed XML subtree is `ePark/XML` at about 217 MiB.
 - The local checkout is on a corpus-maintenance branch, so publication must resolve and pin
   an explicit remote commit rather than treating the working tree as current `main`.
-- FormosanBank has mixed per-corpus rights. Public visibility is not a blanket license.
+- Kakarayan applies a reviewed CC BY-NC 4.0 publication profile to every corpus discovered
+  in the canonical public FormosanBank checkout. Explicit corpus metadata may impose a
+  stricter source or community term.
 - Original and standard orthography are different source concepts and must stay labeled.
 - Seediq and Truku share `trv`; display identity cannot be keyed by ISO code alone.
 - Public MT artifacts are too large for a practical browser-local first release.
@@ -50,20 +52,24 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 
 ## Governance and external actions
 
-- Kakarayan currently has no software license file. Gabriel Gras and FormosanBank maintainers
-  must approve a software license before public deployment. Implementation continues without
-  guessing a license.
+- Root `LICENSE.md` licenses Kakarayan's original software, documentation, interface text,
+  and project-produced assets under CC BY-NC 4.0. Corpus records and third-party material
+  retain their supplied terms.
 - A new public no-cost Hugging Face Space for the optional live corpus API may require an
   organization maintainer to create or authorize it. The static API remains the launch
   fallback and no paid compute will be purchased.
-- Production Pages and Space deployment stay disabled for pull requests and feature
-  branches.
-- The current public source contains 22 corpus catalog entries. All 22 fail closed with
-  `review_required` redistribution status until maintainers supply an evidence-backed
-  rights overlay. The invented `TestCorpus` fixture alone has an explicit reviewed CC0
-  override so CI can exercise real browser exports.
-- Pages repository/environment configuration and any optional Hugging Face Space creation
-  remain maintainer actions. These do not affect the static build or pull request.
+- Production Pages and data publication stay disabled for pull requests and feature
+  branches. The workflows run publication only from the default branch or an approved
+  manual dispatch.
+- The current public source contains 22 corpus catalog entries. A read-only policy audit
+  gives all 22 reviewed, redistribution-allowed, noncommercial entries. Explicit overrides
+  continue to fail closed when unreviewed or restricted.
+- `FormosanBank/formosan-mt` and `FormosanBank/formosan_asr` are configured as direct-browser
+  services. The official Hugging Face API reported both running with ready domains on
+  2026-08-01, with Gradio routes `/translate` and `/transcribe`.
+- The authenticated contributor has `push` and `triage`, but not `maintain` or `admin`.
+  GitHub returned `404 Not Found` for Pages creation and the dependency-graph SBOM endpoint.
+  Those two repository settings remain administrator actions.
 
 ## Progress
 
@@ -77,15 +83,16 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Implement deterministic identifiers, safe mixed-content XML projection, canonical
   token counting, Seediq/Truku resolution, and public-source verification.
 - [x] Implement deterministic CSV, JSONL, SQLite, static API, checksum, and manifest output.
-- [x] Implement fail-closed rights entries and official public Hugging Face metadata
-  collection.
+- [x] Implement the reviewed public-repository noncommercial rights profile, stricter
+  fail-closed overrides, and official public Hugging Face metadata collection.
 - [x] Add synthetic fixture publication and schema/integrity/determinism tests.
 - [x] Implement scalable language/corpus search shards, public orthography tables, release
   discovery, and deterministic site-data assembly.
 - [x] Implement the responsive bilingual application shell, catalogues, local corpus search,
   result export, source citations, and fail-closed download interface.
-- [x] Implement the Amis-first learner studio with local IndexedDB cards, deterministic SRS,
-  JSON backup/restore, Anki TSV export, pronunciation recording, and orthography conversion.
+- [x] Implement learner tools for every supported language, with cited lookup cards, local
+  IndexedDB storage, deterministic SRS, JSON backup/restore, Anki TSV export, pronunciation
+  recording, and orthography conversion.
 - [x] Implement optional direct-browser MT and ASR adapters with consent, cancellation,
   cold-start states, and source-preserving failure behavior.
 - [x] Implement the model catalogue and static developer documentation against versioned
@@ -138,15 +145,25 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Add local audio-file practice, reference and ASR hypothesis comparison, and transcript
   copy/download while clearly labeling word error as a text comparison, not pronunciation
   grading.
-- [x] Add manual local study cards, decks, tags, inventory filtering, and stale source
-  release warnings.
+- [x] Add decks, tags, inventory filtering, stale source release warnings, and saving cited
+  cards only from dictionary and sentence results.
 - [x] Complete browser text, sentence, word, morpheme, token, and audio-reference record
   projections and carry the record unit through validated, locally executable recipes.
 - [x] Add exact match counts, deterministic progressive result display, KWIC, interlinear
   tables, resolvable audio, stable record links, citation actions, and transparent automatic
   headword candidate groups.
 - [x] Complete local study directions, queue counts, CSV export, audio references, and
-  confirmed full reset; add ASR duration validation, model disclosure, and transcript cards.
+  confirmed full reset; add ASR duration validation, model disclosure, and transcript
+  copy/download without allowing machine output into the cited study deck.
+- [x] Separate word-for-word dictionary lookup from sentence search, including dedicated
+  routes, modes, result presentations, source citations, and target-language selectors.
+- [x] Derive exact translation-language availability for each selected Formosan language
+  and corpus scope, including lexical-only translations for dictionary results.
+- [x] Replace the original prose-heavy interface with a compact reference-desk design and
+  audit desktop and mobile layouts against the practical lookup structure seen at Klokah.
+- [x] Add root CC BY-NC 4.0 licensing across project and client package metadata.
+- [x] Configure public MT and ASR service routes from the generated model catalogue rather
+  than hard-coded frontend service names.
 - [x] Add corpus citation/source metadata, BibTeX and RIS download, dialect inventories,
   richer public model-card metadata, dynamic document metadata, a sitemap, useful
   no-script links, and privacy-bounded diagnostics.
@@ -214,8 +231,8 @@ repositories or corpus sources were used.
 - Mypy: pass across 78 source files
 - Publisher tests: 23 pass
 - API and Python client tests: 11 pass
-- Frontend unit and component tests: 42 pass across 8 files
-- Full fixture browser matrix: 43 pass and 13 intentional project-specific skips across
+- Frontend unit and component tests: 43 pass across 8 files
+- Full fixture browser matrix: 47 pass and 13 intentional project-specific skips across
   desktop Chromium, mobile Chromium, Firefox, and WebKit
 - Full-data desktop Chromium: 14 pass, including measured budgets, offline local study,
   migration/backup/restore, microphone denial, deletion, keyboard, and accessibility
@@ -251,11 +268,12 @@ Screenshots:
 
 ## Remaining external approvals
 
-- Gabriel Gras and FormosanBank maintainers must select and add Kakarayan's software
-  license before a production deployment can run.
-- Maintainers must review the evidence and add corpus-level rights decisions before real
-  corpus bytes can be redistributed through Pages or a data release.
-- A maintainer must enable/configure GitHub Pages and its protected environment.
+- A repository administrator must set Pages to GitHub Actions and configure its protected
+  environment. The contributor token cannot read or create the Pages configuration.
+- A repository administrator must enable the dependency graph. This is repository metadata
+  analysis and does not run a corpus build.
+- A maintainer must dispatch the real data workflow, inspect its immutable draft release,
+  and publish that release before the Pages workflow can deploy matching download assets.
 - A maintainer may create a public no-cost Hugging Face Docker Space and configure its
   narrowly scoped token if the optional live API is wanted at launch.
 - The local Docker daemon is unavailable. GitHub CI supplies PostgreSQL and Docker for the
@@ -263,5 +281,7 @@ Screenshots:
 
 ## Next slice
 
-Monitor every pull request check and fix any branch-owned failure until CI is green. Do
-not merge or deploy.
+Commit and push the completed platform changes, update the draft pull request, and fix every
+branch-owned CI failure. Then a repository administrator can merge the PR, enable Pages and
+the dependency graph, publish the first approved data release, and run the guarded Pages
+deployment in the order documented in [`docs/publication.md`](docs/publication.md).

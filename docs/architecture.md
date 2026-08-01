@@ -93,8 +93,9 @@ service worker does not prevent normal use.
 
 ## Browser storage
 
-IndexedDB stores saved study cards, review state, and local recordings. Preferences use
-browser-local state. Kakarayan has no synchronization account and no analytics endpoint.
+IndexedDB stores saved study cards and review state. Recordings remain in the active tab
+unless the user downloads them. Preferences use browser-local state. Kakarayan has no
+synchronization account and no analytics endpoint.
 
 Backups are explicit JSON downloads. Imports validate their version and contents. Anki TSV
 and tabular exports protect formula-like leading characters before opening in spreadsheet
@@ -168,8 +169,8 @@ CI runs the legacy suite with PostgreSQL 16 to prevent regressions.
 
 1. Canonical XML remains authoritative.
 2. Static access is the core contract; the live API is a convenience.
-3. Public visibility is not treated as redistribution permission.
-4. Unknown rights fail closed at publication, not at source discovery.
+3. The canonical public repository is the approved noncommercial publication source set.
+4. Explicit stricter corpus overrides fail closed when unreviewed or restricted.
 5. Original and standardized forms never overwrite each other.
 6. Display language identity is not keyed by ISO code alone.
 7. Browser exports are bounded selections; large formats are prepared offline.

@@ -96,7 +96,7 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   );
   expect(searchAssets.some((url) => url.includes("/indexes/"))).toBe(true);
   expect(searchAssets.some((url) => url.includes("/shards/"))).toBe(true);
-  await expect(page.locator(".results-heading")).toContainText(/\d[\d,]* sentences/);
+  await expect(page.locator(".results-heading")).toContainText(/\d[\d,]* sentences?/);
   await expect(page.locator(".kwic mark").first()).toContainText(/lima/i);
   await page.getByRole("link", {name: "Stable record link"}).first().click();
   await page.reload();

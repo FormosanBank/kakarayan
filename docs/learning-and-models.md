@@ -2,9 +2,8 @@
 
 ## Learning principles
 
-Kakarayan begins with Amis because the initial collaborator and learner feedback is
-Amis-centered. The architecture remains capability-aware so other Formosan languages can
-gain the same tools when public data, reviewed content, or models support them.
+Kakarayan defaults to Amis because the initial collaborator feedback is Amis-centered. The
+same lookup and study flows work for every language with compatible public corpus data.
 
 The learner interface separates three kinds of material:
 
@@ -15,10 +14,15 @@ The learner interface separates three kinds of material:
 The interface does not present an attestation as a universal grammar rule and does not
 present model output as a correction or community endorsement.
 
-## Dictionary and examples
+## Dictionary and sentence search
 
-Learner lookup defaults to Amis and searches the same immutable corpus shards as the
-research view. Results show:
+Dictionary lookup and sentence search are separate tools over the same immutable shards.
+The dictionary matches a word or morpheme and shows word-level glosses or single-word
+record translations. Sentence search returns records containing the selected word or
+matching another chosen tier. Both tools let the user choose a Formosan source language
+and an available translation language for that exact scope.
+
+Results show:
 
 - Standard and original forms separately.
 - Available translation language labels.
@@ -40,7 +44,7 @@ The deck supports:
 - Due-card review.
 - Recognition and production directions.
 - New, learning, review, and due queue counts.
-- User-created decks, tags, and manual prompts.
+- Cited words and sentences saved directly from lookup results.
 - JSON backup.
 - Validated JSON restore.
 - Anki-compatible TSV and ordinary CSV export.
@@ -53,13 +57,14 @@ There is no login, cloud synchronization, leaderboard, or hidden learner telemet
 
 The browser MediaRecorder API captures a learner's voice after explicit microphone
 permission. A recording or selected local audio file can be played, downloaded, deleted,
-or optionally sent for ASR. Type, size, and duration are checked before upload. The chosen
-registered model, license, provider, and limitation notice remain visible.
+or optionally sent for ASR. Type, size, and duration are checked before upload. The
+configured endpoint, available model card, license, provider, and limitation notice remain
+visible.
 
 An optional trusted reference can be compared with the automatic hypothesis using plain
 word edit counts. This is explicitly labeled as text comparison rather than pronunciation
-scoring. The hypothesis can be copied, downloaded, or saved as a machine-output-tagged
-local study card.
+scoring. The hypothesis can be copied or downloaded. It cannot be added to the study deck,
+which accepts cited dictionary and sentence records only.
 
 Recording availability depends on browser support and permission. A lack of recording or
 ASR capability does not disable corpus examples or the study deck.
@@ -112,8 +117,10 @@ organization when `--refresh-models` is used. The catalogue records:
 - Optional browser service ID.
 
 Known public Spaces are listed with task, URL, API URL, availability state, and a
-third-party notice. `unchecked` means the Space was publicly listed but was not treated as
-a guaranteed production service.
+third-party notice. Browser-callable services also record the Gradio API name and supported
+languages. `available` means the official Hub API reported a running Space with a ready
+domain at catalogue refresh time. `unchecked` is used by deterministic offline fixtures or
+when current runtime state was not fetched.
 
 Private training data is not accessed, copied, indexed, or packaged. If a public model card
 mentions private training lineage, Kakarayan displays that disclosure.

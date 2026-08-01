@@ -1,20 +1,46 @@
 # Publication operations
 
-## Required repository configuration
+## Repository configuration
 
-Before any production publication:
+The repository contains the CC BY-NC 4.0 license, reviewed public-repository corpus policy,
+Pages workflow, data-release workflow, and direct-browser MT and ASR service configuration.
+Repository administrators still control settings that a writer cannot change:
 
-1. Maintainers approve and add a root `LICENSE` or `LICENSE.md`.
-2. Corpus redistribution decisions are reviewed and encoded in the rights overlay.
-3. GitHub Pages is configured to deploy from GitHub Actions.
-4. The `github-pages` environment has the desired protection rules.
-5. The `data-release` environment requires a maintainer approval.
-6. For the optional API, create a public Hugging Face Docker Space.
-7. Add environment variable `HF_SPACE_REPO` as `organization/space-name`.
-8. Add environment secret `HF_TOKEN` with only the write scope required for that Space.
-9. Protect the `hugging-face-space` environment.
+1. In **Settings > Pages**, set the source to **GitHub Actions**.
+2. Give the `github-pages` environment the desired protection rules.
+3. Require maintainer approval for the `data-release` environment.
+4. In **Settings > Code security**, enable the dependency graph. This is repository
+   metadata analysis and does not run a corpus build.
 
-The feature branch and pull request do not perform these external actions.
+The existing public `FormosanBank/formosan-mt` and `FormosanBank/formosan_asr` Spaces need
+no Kakarayan secret. The optional corpus REST API is separate. If maintainers want it, they
+must create a public Hugging Face Docker Space, set `HF_SPACE_REPO`, add a narrowly scoped
+`HF_TOKEN`, and protect the `hugging-face-space` environment.
+
+### Current external state
+
+Checked on 2026-08-01:
+
+- The authenticated contributor has `push` and `triage`, but not `maintain` or `admin`.
+- GitHub returns `404 Not Found` for the Pages settings endpoint and Pages creation request.
+- GitHub returns `404 Not Found` for the dependency-graph SBOM endpoint.
+- No Kakarayan data release is published yet.
+- The official Hugging Face API reports the MT and ASR Spaces running with ready domains.
+  Their configured Gradio routes are `/translate` and `/transcribe`.
+
+The Pages and dependency-graph settings therefore require a repository administrator. The
+code, workflows, corpus policy, and model adapters are ready for those switches.
+
+### First launch order
+
+1. Merge the reviewed pull request to `main`.
+2. Enable the dependency graph and Pages source settings.
+3. Dispatch `publish-data.yml` with `dry_run: false` and the intended FormosanBank ref.
+4. Inspect the resulting draft release, its source commit, rights catalogue, checksums,
+   counts, and assets, then publish that exact draft.
+5. Dispatch `deploy-pages.yml` with the same FormosanBank ref. The workflow refuses a data
+   release from a different commit.
+6. Verify the public URL, downloads, lookup routes, static API, and model consent flows.
 
 ## Continuous integration
 
@@ -44,7 +70,7 @@ exact detached commit and records it in every output.
 
 The workflow:
 
-1. Checks the Kakarayan software-license prerequisite.
+1. Checks that the Kakarayan software license is present.
 2. Validates the source ref syntax.
 3. Fetches only the public FormosanBank repository.
 4. Builds the site-only publication profile.
@@ -70,7 +96,7 @@ job.
 
 A real run additionally:
 
-1. Checks the software license.
+1. Checks that the software license is present.
 2. Requires site, core, and prepared artifact rights to permit publication.
 3. Packs the exact validated output.
 4. Transfers it to a separately permissioned `data-release` environment.
@@ -90,7 +116,7 @@ checksums, rights, and source commit before publishing it in GitHub.
 If a run fails after draft creation, keep the draft for diagnosis or delete that exact
 draft through the GitHub interface. Do not reuse its tag for different bytes.
 
-## Optional API Space
+## Optional corpus API Space
 
 `deploy-api.yml` is manual and accepts a release ID. It:
 
@@ -103,7 +129,8 @@ draft through the GitHub interface. Do not reuse its tag for different bytes.
 7. Clones the configured Space, replaces its application files, commits, and pushes with
    lease protection.
 
-No Hugging Face secret is exposed to pull requests or ordinary CI.
+No Hugging Face secret is exposed to pull requests or ordinary CI. This workflow is not
+used by browser MT or ASR, which call the existing public FormosanBank Spaces directly.
 
 The API can sleep under a free hosting plan. The site must continue to present the static
 API and browser search as the reliable path.
@@ -177,7 +204,7 @@ release records are not.
 
 ## Routine update checklist
 
-1. Review upstream FormosanBank changes and rights evidence.
+1. Review upstream FormosanBank changes and any stricter corpus rights evidence.
 2. Run the data workflow in dry-run mode.
 3. Inspect counts, warnings, exclusions, sizes, and checksums.
 4. Compare major counts with the previous release and explain material changes.

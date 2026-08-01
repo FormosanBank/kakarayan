@@ -2,9 +2,10 @@
 
 ## Rights are data
 
-FormosanBank contains material from different sources with different terms. Public GitHub
-visibility does not establish a uniform right to repackage every corpus, XML file, audio
-reference, or media object.
+FormosanBank contains material from different sources with different terms. Kakarayan uses
+the public FormosanBank repository as the approved source set for noncommercial
+distribution, while preserving central, corpus, upstream-source, citation, and community
+terms.
 
 Kakarayan keeps a machine-readable rights entry per corpus. Each entry records:
 
@@ -24,8 +25,10 @@ Current status values are intentionally explicit:
 - `metadata_only`
 - `review_required`
 
-Unknown conclusions use `review_required`. The publisher does not infer legal conclusions
-from prose.
+Each corpus discovered in the canonical public checkout defaults to `allowed`,
+`noncommercial`, and `reviewed` for Kakarayan publication. A reviewed entry in
+`publisher/metadata/rights.json` may apply a stricter rule. Artifacts fail closed when such
+an override is unreviewed or does not allow redistribution.
 
 ## Evidence precedence
 
@@ -34,7 +37,7 @@ Reviewers should apply the most specific applicable evidence:
 1. Record or component notice.
 2. Corpus README, dataset card, license, or source notice.
 3. Central FormosanBank terms, AI-use addendum, and notices.
-4. `review_required` when the conclusion is still ambiguous.
+4. The project-level public-repository noncommercial profile.
 
 Stricter specific evidence is not weakened by a general repository notice.
 
@@ -56,19 +59,13 @@ Canonical packages include exact source XML, source paths, a source manifest, an
 applicable rights entry. Prepared multi-file formats include a package note and metadata.
 Audio exports contain references unless separate rights allow redistribution of media.
 
-## Software license prerequisite
+## Kakarayan license
 
-Kakarayan has no maintainer-approved root software license at the time of implementation.
-No license is guessed or assigned by this branch.
-
-Production workflows stop until maintainers:
-
-- Confirm permission to extend and redistribute the existing Kakarayan code.
-- Confirm any requirements for FormosanBank code or conventions used by the publisher.
-- Credit Gabriel Gras and other contributors as appropriate.
-- Add the approved root `LICENSE` or `LICENSE.md`.
-
-This blocker does not prevent private review, CI, fixture builds, or a data dry run.
+Kakarayan's original software, documentation, interface text, and project-produced assets
+use [CC BY-NC 4.0](../LICENSE.md) unless a file or directory says otherwise. Canonical
+FormosanBank records and third-party material retain their supplied terms. The Kakarayan
+license cannot grant rights FormosanBank does not hold, and a stricter source-specific term
+controls for the affected material.
 
 ## Citation
 
@@ -122,11 +119,11 @@ Stored locally:
 
 - Saved corpus cards.
 - Spaced-repetition state.
-- User-created recordings.
 - Interface preferences.
 
-Users can export a backup and delete browser storage through their browser. Clearing site
-data removes local study records and recordings unless the user downloaded a backup.
+Recordings remain in the active browser tab unless the user downloads them. Users can
+export a card backup and delete browser storage through their browser. Clearing site data
+removes local study records unless the user downloaded a backup.
 
 Microphone access begins only after a user action and browser permission. Recordings stay
 on the device until the user explicitly invokes an optional ASR action. The recording tool
