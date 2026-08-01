@@ -50,14 +50,17 @@ test("local study data migrates, backs up, restores, and remains private", async
   );
   await page.goto("#/learn");
   await seedLegacyCard(page);
+  const dictionary = page.getByRole("tabpanel");
+  await dictionary.getByText("Search options", {exact: true}).click();
+  await dictionary.getByRole("combobox", {name: "Corpus", exact: true}).selectOption({
+    label: "TestCorpus",
+  });
+  await dictionary.getByLabel("Word", {exact: true}).fill("lima");
+  await dictionary.getByRole("button", {name: "Search"}).click();
+  await dictionary.getByRole("button", {name: "Save word"}).click();
+  await expect(dictionary.getByText("lima saved.")).toBeVisible();
   await page.getByRole("tab", {name: /Study deck/}).click();
   await expect(page.getByRole("heading", {name: "legacy front"})).toBeVisible();
-
-  await page.getByText("Create a personal card", {exact: true}).click();
-  await page.getByLabel("Front", {exact: true}).fill("waco");
-  await page.getByLabel("Answer", {exact: true}).fill("dog");
-  await page.getByLabel("Tags", {exact: true}).fill("noun personal");
-  await page.getByRole("button", {name: "Save local card"}).click();
   await expect(page.locator(".deck-toolbar")).toContainText("2 cards");
 
   const backupDownload = page.waitForEvent("download");
@@ -83,7 +86,7 @@ test("local study data migrates, backs up, restores, and remains private", async
   await page.getByText(/All local cards/).click();
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", {name: "Delete all local cards"}).click();
-  await expect(page.getByText(/Save a corpus example/)).toBeVisible();
+  await expect(page.getByText(/Save a word or sentence/)).toBeVisible();
 
   await page.locator('input[type="file"][accept*="json"]').setInputFiles({
     name: "kakarayan-study.json",
@@ -143,14 +146,14 @@ test("the learner shell and local cards remain available offline", async ({
     await navigator.serviceWorker.ready;
   });
   await page.reload();
-  await expect(page.getByRole("heading", {name: "Amis learning studio"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Learn from corpus examples"})).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller)))
     .toBe(true);
 
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole("heading", {name: "Amis learning studio"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Learn from corpus examples"})).toBeVisible();
   expect(
     await page.evaluate(() =>
       fetch(`uncached-offline-probe-${Date.now()}`).then(

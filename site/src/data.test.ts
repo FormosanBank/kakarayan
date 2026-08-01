@@ -78,6 +78,20 @@ describe("transparent static search", () => {
     expect(recordMatches(record, "ugly", "translation")).toBe(false);
   });
 
+  it("keeps sentence targets separate while allowing lexical dictionary targets", () => {
+    const lexicalOnly: SearchRecord = {
+      ...record,
+      translations: [],
+      tier_translations: record.tier_translations.map((translation) => ({
+        ...translation,
+        xml_lang: "fra",
+      })),
+    };
+    expect(recordMatches(lexicalOnly, "fangcalay", "exact", "fra")).toBe(false);
+    expect(recordMatches(lexicalOnly, "fangcalay", "exact", "fra", "any")).toBe(true);
+    expect(recordMatches(lexicalOnly, "fangcalay", "exact", "eng", "any")).toBe(false);
+  });
+
   it("uses vocabulary postings to select only candidate record shards", () => {
     const index: SearchIndexDocument = {
       schema_version: "1.0.0",

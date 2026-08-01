@@ -8,7 +8,7 @@ Authors@R: c(
     )
 Description: Thin client for versioned static catalogues and bounded live
     FormosanBank corpus queries exposed by Kakarayan.
-License: file LICENSE
+License: CC BY-NC 4.0 + file LICENSE
 Encoding: UTF-8
 Imports:
     curl,

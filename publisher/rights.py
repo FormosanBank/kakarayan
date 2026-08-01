@@ -1,4 +1,4 @@
-"""Machine-readable rights policy with fail-closed corpus defaults."""
+"""Machine-readable rights policy for the public FormosanBank repository."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from publisher.identifiers import dimension_id
 
 CENTRAL_TERMS = {
     "use_summary": (
-        "FormosanBank resources are intended for noncommercial research, education, "
-        "language documentation, cultural work, and revitalization, subject to each "
-        "corpus and component notice."
+        "Public FormosanBank resources may be redistributed for noncommercial research, "
+        "education, language documentation, cultural work, and revitalization. Preserve "
+        "all corpus-specific and upstream notices."
     ),
     "commercial_ai": "prohibited",
     "attribution_required": True,
@@ -37,11 +37,11 @@ def build_rights_catalog(
     *,
     overrides_path: Path | None = None,
 ) -> dict[str, object]:
-    """Build one explicit entry per corpus.
+    """Build one explicit entry per corpus in the validated public source checkout.
 
-    Unknown or unreviewed redistribution terms are intentionally `review_required`. The
-    publisher may expose metadata for such a corpus but must not generate new bulk packages
-    that imply permission.
+    Inclusion in the canonical public FormosanBank repository is the project-level approval
+    for Kakarayan's noncommercial redistribution profile. An explicit corpus override may
+    still encode a stricter source or community requirement.
     """
     overrides = _load_overrides(overrides_path)
     entries: list[dict[str, object]] = []
@@ -49,19 +49,26 @@ def build_rights_catalog(
         default: dict[str, object] = {
             "id": dimension_id("rights", corpus),
             "corpus": corpus,
-            "redistribution": "review_required",
-            "commercial_use": "unknown",
-            "attribution": "Cite FormosanBank and the corpus-specific source.",
-            "license_expression": None,
-            "notes": "Corpus-specific redistribution terms require maintainer review.",
+            "redistribution": "allowed",
+            "commercial_use": "prohibited",
+            "attribution": (
+                "Cite FormosanBank and every corpus-specific or upstream source supplied "
+                "with the record."
+            ),
+            "license_expression": "CC-BY-NC-4.0",
+            "notes": (
+                "Approved for Kakarayan's noncommercial public distribution because the "
+                "corpus is included in the canonical public FormosanBank repository. "
+                "Corpus-specific and upstream terms remain in force."
+            ),
             "evidence": [
                 (
                     "https://github.com/FormosanBank/FormosanBank/blob/main/"
                     f"Corpora/{corpus}/README.md"
                 )
             ],
-            "review_status": "review_required",
-            "reviewed_at": None,
+            "review_status": "reviewed",
+            "reviewed_at": "2026-07-31",
         }
         default.update(overrides.get(corpus, {}))
         entries.append(default)

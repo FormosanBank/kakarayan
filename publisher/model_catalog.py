@@ -47,11 +47,45 @@ LANGUAGE_SLUGS = {
     "tsou": "tsu",
     "yami": "tao",
 }
-KNOWN_SPACES = {
-    "FormosanBank/formosan-mt": ["translation"],
-    "FormosanBank/formosan_asr": ["automatic-speech-recognition"],
-    "FormosanBank/Amis_ASR_transcription": ["automatic-speech-recognition"],
-    "FormosanBank/paiwan_transcription": ["automatic-speech-recognition"],
+FORMOSAN_LANGUAGE_NAMES = [
+    "Amis",
+    "Atayal",
+    "Bunun",
+    "Kanakanavu",
+    "Kavalan",
+    "Paiwan",
+    "Puyuma",
+    "Rukai",
+    "Saaroa",
+    "Saisiyat",
+    "Sakizaya",
+    "Seediq",
+    "Taroko",
+    "Thao",
+    "Tsou",
+    "Yami / Tao",
+]
+KNOWN_SPACES: dict[str, dict[str, object]] = {
+    "FormosanBank/formosan-mt": {
+        "tasks": ["translation"],
+        "api_name": "/translate",
+        "supported_languages": FORMOSAN_LANGUAGE_NAMES,
+    },
+    "FormosanBank/formosan_asr": {
+        "tasks": ["automatic-speech-recognition"],
+        "api_name": "/transcribe",
+        "supported_languages": FORMOSAN_LANGUAGE_NAMES,
+    },
+    "FormosanBank/Amis_ASR_transcription": {
+        "tasks": ["automatic-speech-recognition"],
+        "api_name": None,
+        "supported_languages": ["Amis"],
+    },
+    "FormosanBank/paiwan_transcription": {
+        "tasks": ["automatic-speech-recognition"],
+        "api_name": None,
+        "supported_languages": ["Paiwan"],
+    },
 }
 
 
@@ -158,6 +192,74 @@ def _model_row(item: dict[str, Any]) -> dict[str, object]:
     }
 
 
+def _service_status(item: dict[str, Any] | None) -> str:
+    if item is None:
+        return "unavailable"
+    if item.get("disabled"):
+        return "unavailable"
+    runtime = item.get("runtime") or {}
+    stage = str(runtime.get("stage") or "").upper()
+    domains = runtime.get("domains") or []
+    if stage == "RUNNING" and any(
+        str(domain.get("stage") or "").upper() == "READY"
+        for domain in domains
+        if isinstance(domain, dict)
+    ):
+        return "available"
+    if stage in {"SLEEPING", "BUILDING", "STARTING"}:
+        return "sleeping"
+    return "unchecked"
+
+
+def configured_services(
+    present_spaces: dict[str, dict[str, Any]] | None = None,
+    *,
+    checked_at: str | None = None,
+) -> list[dict[str, object]]:
+    """Return browser-callable service configuration with optional current Hub state."""
+    service_rows: list[dict[str, object]] = []
+    for repository, configuration in KNOWN_SPACES.items():
+        item = present_spaces.get(repository) if present_spaces is not None else None
+        present = item is not None
+        slug = repository.rsplit("/", 1)[-1]
+        reported_host = item.get("host") if item else None
+        api_url = (
+            str(reported_host)
+            if isinstance(reported_host, str) and reported_host.startswith("https://")
+            else f"https://{ORGANIZATION.lower()}-{slug.replace('_', '-')}.hf.space"
+        )
+        service_rows.append(
+            {
+                "id": dimension_id("service", slug.replace("_", "-")),
+                "space": repository,
+                "url": f"https://huggingface.co/spaces/{repository}",
+                "api_url": api_url,
+                "api_name": configuration["api_name"],
+                "tasks": configuration["tasks"],
+                "supported_languages": configuration["supported_languages"],
+                "status": _service_status(item) if present_spaces is not None else "unchecked",
+                "checked_at": checked_at if present else None,
+                "third_party_notice": (
+                    "This action sends the text or audio you select directly to a public "
+                    "Hugging Face Space operated by FormosanBank. Hugging Face may process "
+                    "infrastructure logs under its own terms."
+                ),
+            }
+        )
+    return service_rows
+
+
+def configured_model_catalog(generated_at: str) -> dict[str, object]:
+    """Return deterministic service configuration without making a network request."""
+    return {
+        "schema_version": "1.0.0",
+        "generated_at": generated_at,
+        "provider": "Hugging Face",
+        "models": [],
+        "services": configured_services(),
+    }
+
+
 def build_model_catalog(*, timeout: float = 15.0) -> dict[str, object]:
     """Collect current public organization metadata from the official Hub API."""
     models = _get_json(f"{HF_API}/models?author={ORGANIZATION}&limit=100&full=true", timeout)
@@ -168,30 +270,11 @@ def build_model_catalog(*, timeout: float = 15.0) -> dict[str, object]:
         if item.get("pipeline_tag") in {"translation", "automatic-speech-recognition"}
     ]
     present_spaces = {str(item["id"]): item for item in spaces}
-    service_rows = []
-    for repository, tasks in KNOWN_SPACES.items():
-        present = repository in present_spaces
-        slug = repository.rsplit("/", 1)[-1]
-        service_rows.append(
-            {
-                "id": dimension_id("service", slug.replace("_", "-")),
-                "space": repository,
-                "url": f"https://huggingface.co/spaces/{repository}",
-                "api_url": f"https://{ORGANIZATION.lower()}-{slug.replace('_', '-')}.hf.space",
-                "tasks": tasks,
-                "status": "unchecked" if present else "unavailable",
-                "checked_at": None,
-                "third_party_notice": (
-                    "This action sends the text or audio you select directly to a public "
-                    "Hugging Face Space operated by FormosanBank. Hugging Face may process "
-                    "infrastructure logs under its own terms."
-                ),
-            }
-        )
+    generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     return {
         "schema_version": "1.0.0",
-        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "generated_at": generated_at,
         "provider": "Hugging Face",
         "models": sorted(model_rows, key=lambda row: str(row["repository"])),
-        "services": service_rows,
+        "services": configured_services(present_spaces, checked_at=generated_at),
     }

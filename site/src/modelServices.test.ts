@@ -48,6 +48,14 @@ const request = {
   language: "Amis",
   dialect: "Coastal",
 };
+const translationService = {
+  space: "FormosanBank/formosan-mt",
+  endpoint: "/translate",
+};
+const asrService = {
+  space: "FormosanBank/formosan_asr",
+  endpoint: "/transcribe",
+};
 
 describe("public model adapters", () => {
   beforeEach(() => {
@@ -64,7 +72,7 @@ describe("public model adapters", () => {
     gradio.connect.mockResolvedValue(mock.client);
     const run = options();
 
-    await expect(translate(request, run.value)).resolves.toEqual({
+    await expect(translate(request, translationService, run.value)).resolves.toEqual({
       text: "lima",
       metadata: "model metadata",
     });
@@ -77,6 +85,10 @@ describe("public model adapters", () => {
     expect(mock.submit).toHaveBeenCalledWith(
       "/translate",
       expect.objectContaining({text: "five", formosan_language: "Amis"}),
+    );
+    expect(gradio.connect).toHaveBeenCalledWith(
+      translationService.space,
+      expect.any(Object),
     );
     expect(mock.close).toHaveBeenCalled();
   });
@@ -94,7 +106,7 @@ describe("public model adapters", () => {
     );
     const run = options();
 
-    await translate(request, run.value);
+    await translate(request, translationService, run.value);
     expect(run.stages).toContainEqual([
       "connecting",
       "The public Space is waking up. This can take a few minutes.",
@@ -115,7 +127,7 @@ describe("public model adapters", () => {
     gradio.connect.mockResolvedValue({close, submit});
     const controller = new AbortController();
     const run = options(controller);
-    const result = translate(request, run.value);
+    const result = translate(request, translationService, run.value);
     await vi.waitFor(() => expect(submit).toHaveBeenCalled());
     controller.abort();
 
@@ -137,7 +149,7 @@ describe("public model adapters", () => {
     gradio.connect.mockResolvedValue({close: vi.fn(), submit});
     const run = options(new AbortController(), 10);
 
-    await expect(translate(request, run.value)).rejects.toMatchObject({
+    await expect(translate(request, translationService, run.value)).rejects.toMatchObject({
       name: "TimeoutError",
     });
     expect(cancel).toHaveBeenCalled();
@@ -146,12 +158,12 @@ describe("public model adapters", () => {
   it("rejects malformed model output and provider outages", async () => {
     const mock = service([{type: "data", data: [{translation: "lima"}]}]);
     gradio.connect.mockResolvedValueOnce(mock.client);
-    await expect(translate(request, options().value)).rejects.toThrow(
+    await expect(translate(request, translationService, options().value)).rejects.toThrow(
       "malformed response",
     );
 
     gradio.connect.mockRejectedValueOnce(new Error("provider unavailable"));
-    await expect(translate(request, options().value)).rejects.toThrow(
+    await expect(translate(request, translationService, options().value)).rejects.toThrow(
       "provider unavailable",
     );
   });
@@ -161,7 +173,7 @@ describe("public model adapters", () => {
     gradio.connect.mockResolvedValue(mock.client);
     const audio = new Blob(["audio"], {type: "audio/webm"});
 
-    await expect(transcribe("Amis", audio, options().value)).resolves.toEqual({
+    await expect(transcribe("Amis", audio, asrService, options().value)).resolves.toEqual({
       text: "fangcalay",
       metadata: "asr metadata",
     });
@@ -172,7 +184,9 @@ describe("public model adapters", () => {
     );
 
     const oversized = new Blob([new Uint8Array(25 * 1024 * 1024 + 1)]);
-    await expect(transcribe("Amis", oversized, options().value)).rejects.toThrow(
+    await expect(
+      transcribe("Amis", oversized, asrService, options().value),
+    ).rejects.toThrow(
       "25 MiB or smaller",
     );
   });

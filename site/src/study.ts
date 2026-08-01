@@ -123,17 +123,21 @@ export function scheduleCard(card: StudyCard, grade: Grade, now: Date): StudyCar
   };
 }
 
-export function cardFromRecord(record: SearchRecord, releaseId: string): StudyCard {
+export function cardFromRecord(
+  record: SearchRecord,
+  releaseId: string,
+  targetLanguage = "",
+): StudyCard {
   const now = new Date().toISOString();
   const front = record.standard || record.original;
   const back =
     record.translations
-      .filter((item) => item.text)
+      .filter((item) => item.text && (!targetLanguage || item.xml_lang === targetLanguage))
       .map((item) => item.text)
-      .join(" · ") || record.original;
+      .join(" · ") || record.original || front;
   return {
     id: crypto.randomUUID(),
-    deck: "Amis",
+    deck: "Saved sentences",
     front,
     back,
     languageId: record.language_id,
@@ -157,38 +161,22 @@ export function cardFromRecord(record: SearchRecord, releaseId: string): StudyCa
   };
 }
 
-export function makeManualCard(
-  value: {
-    front: string;
-    back: string;
-    languageId: string;
-    deck: string;
-    tags: string[];
-    direction?: "recognition" | "production";
-  },
-  now = new Date(),
+export function cardFromDictionary(
+  record: SearchRecord,
+  releaseId: string,
+  front: string,
+  meanings: string[],
+  targetLanguage: string,
 ): StudyCard {
-  const front = value.front.trim();
-  const back = value.back.trim();
-  if (!front || !back) throw new Error("A manual card needs both a front and an answer");
-  const timestamp = now.toISOString();
+  const card = cardFromRecord(record, releaseId, targetLanguage);
+  const back = [...new Set(meanings.map((value) => value.trim()).filter(Boolean))].join(" · ");
+  if (!front.trim() || !back) throw new Error("A dictionary card needs a headword and meaning");
   return {
-    id: crypto.randomUUID(),
-    deck: value.deck.trim() || "Personal",
-    front,
+    ...card,
+    deck: "Saved words",
+    front: front.trim(),
     back,
-    languageId: value.languageId,
-    tags: [...new Set(value.tags.map((tag) => tag.trim()).filter(Boolean))].sort(),
-    direction: value.direction ?? "recognition",
-    audioReferences: [],
-    source: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    dueAt: timestamp,
-    intervalDays: 0,
-    ease: 2.5,
-    repetitions: 0,
-    lapses: 0,
+    tags: [...new Set([...card.tags, "dictionary", targetLanguage].filter(Boolean))].sort(),
   };
 }
 

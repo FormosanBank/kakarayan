@@ -1,6 +1,7 @@
 import {normalizeSearch, type SearchMode} from "../data";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
+import {translationLanguageName} from "../translationLanguages";
 import type {AppData, SearchRecord} from "../types";
 
 function playableUrl(record: SearchRecord, index: number): string {
@@ -114,6 +115,7 @@ export function SearchResultCard({
   record,
   query,
   mode,
+  targetLanguage,
   learner,
   onSave,
   onNotice,
@@ -122,16 +124,17 @@ export function SearchResultCard({
   record: SearchRecord;
   query: string;
   mode: SearchMode;
+  targetLanguage: string;
   learner: boolean;
   onSave: (record: SearchRecord) => void;
   onNotice: (notice: string) => void;
 }) {
-  const {number, t, tx} = useI18n();
+  const {locale, number, t, tx} = useI18n();
   const language = data.languages.find((item) => item.id === record.language_id);
   const corpus = data.corpora.find((item) => item.id === record.corpus_id);
-  const stablePath = `/search?q=${encodeURIComponent(query)}&language=${encodeURIComponent(
+  const stablePath = `/sentences?q=${encodeURIComponent(query)}&language=${encodeURIComponent(
     record.language_id,
-  )}&corpus=${encodeURIComponent(record.corpus_id)}&mode=${mode}&record=${encodeURIComponent(
+  )}&corpus=${encodeURIComponent(record.corpus_id)}&target=${encodeURIComponent(targetLanguage)}&mode=${mode}&record=${encodeURIComponent(
     record.id,
   )}`;
   const citation = [
@@ -164,12 +167,14 @@ export function SearchResultCard({
         </dl>
       )}
       <div className="translations">
-        {record.translations.map((translation, index) => (
-          <p key={`${translation.xml_lang}-${index}`} lang={translation.xml_lang}>
-            <span>{translation.xml_lang || tx("translation", "翻譯")}</span>
-            {translation.text}
-          </p>
-        ))}
+        {record.translations
+          .filter((translation) => !targetLanguage || translation.xml_lang === targetLanguage)
+          .map((translation, index) => (
+            <p key={`${translation.xml_lang}-${index}`} lang={translation.xml_lang}>
+              <span>{translationLanguageName(translation.xml_lang, locale)}</span>
+              {translation.text}
+            </p>
+          ))}
       </div>
       {(record.words.length > 0 ||
         record.phonology.length > 0 ||
@@ -239,7 +244,7 @@ export function SearchResultCard({
         {learner && (
           <Link
             className="text-button"
-            to={`/search?q=${encodeURIComponent(query)}&language=${record.language_id}`}
+            to={`/sentences?q=${encodeURIComponent(query)}&language=${record.language_id}&target=${targetLanguage}`}
           >
             {t("search.research")}
           </Link>

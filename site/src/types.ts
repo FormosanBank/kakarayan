@@ -110,7 +110,9 @@ export interface ModelService {
   space: string;
   url: string;
   api_url: string | null;
+  api_name: string | null;
   tasks: Array<"translation" | "automatic-speech-recognition">;
+  supported_languages: string[];
   status: "available" | "sleeping" | "unavailable" | "unchecked";
   checked_at: string | null;
   third_party_notice: string;
@@ -168,6 +170,21 @@ export interface SearchManifest {
   schema_version: string;
   release_id: string;
   record_unit: "sentence";
+  translation_targets: Array<{
+    xml_lang: string;
+    records: number;
+    sentence_records: number;
+    lexical_records: number;
+    language_ids: string[];
+    corpus_ids: string[];
+    scopes: Array<{
+      language_id: string;
+      corpus_id: string;
+      records: number;
+      sentence_records: number;
+      lexical_records: number;
+    }>;
+  }>;
   shards: SearchShard[];
   indexes: SearchIndex[];
 }

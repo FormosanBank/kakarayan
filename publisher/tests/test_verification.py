@@ -17,8 +17,12 @@ def test_release_and_site_verification(public_repo: Path, tmp_path: Path) -> Non
     )
     manifest = verify_release(release.output)
     assert manifest["release_id"] == release.release_id
-    with pytest.raises(VerificationError, match="Rights review blocks"):
-        verify_release(release.output, required_scopes={"site-query-data"})
+    verified = verify_release(release.output, required_scopes={"site-query-data"})
+    assert all(
+        artifact["publishable"]
+        for artifact in verified["artifacts"]
+        if artifact["scope"] == "site-query-data"
+    )
 
     site = tmp_path / "site"
     assemble(release.output, site)

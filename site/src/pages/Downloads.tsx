@@ -110,23 +110,6 @@ export function Downloads({data}: {data: AppData}) {
   return (
     <div className="page-wrap">
       <PageIntro title={t("download.title")} lede={t("download.lede")} />
-      <div className="download-principles">
-        <div>
-          <span>1</span>
-          <strong>{tx("Choose by use", "依用途選擇")}</strong>
-          <p>{tx("SQLite for local query, JSONL for streams, CSV for tables, XML for canon.", "SQLite 適合本機查詢，JSONL 適合串流，CSV 適合表格，XML 則是權威格式。")}</p>
-        </div>
-        <div>
-          <span>2</span>
-          <strong>{tx("Pin the release", "固定資料版本")}</strong>
-          <p>{tx("Every artifact names the public source commit and immutable release.", "每個成品都標明公開來源提交與不可變的資料版本。")}</p>
-        </div>
-        <div>
-          <span>3</span>
-          <strong>{tx("Carry the notice", "保留權利聲明")}</strong>
-          <p>{tx("Corpus and component rights remain attached to every derived package.", "每個衍生套件都保留語料庫及各組件的權利資訊。")}</p>
-        </div>
-      </div>
       {hasUnreviewedRights && (
         <p className="callout callout--warning">
           <strong>{tx("Rights review is still in progress.", "權利審查仍在進行中。")}</strong>{" "}
@@ -282,8 +265,8 @@ export function Downloads({data}: {data: AppData}) {
             <h3>{tx("Canonical XML", "權威 XML")}</h3>
             <p>
               {tx(
-                "The authoritative hierarchy and exact source bytes. Obtain from the pinned public FormosanBank tree while package rights review is pending.",
-                "保留權威階層與完全相同的來源位元組。套件權利審查期間，請從固定版本的公開 FormosanBank 樹狀目錄取得。",
+                "The authoritative hierarchy and exact source bytes from the pinned public FormosanBank tree.",
+                "來自固定版本公開 FormosanBank 樹狀目錄的權威階層與完全相同來源位元組。",
               )}
             </p>
           </article>

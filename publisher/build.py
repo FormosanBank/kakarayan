@@ -25,6 +25,7 @@ from referencing import Registry, Resource
 
 from publisher import API_VERSION, APPLICATION_VERSION, SCHEMA_VERSION
 from publisher.languages import language_rows
+from publisher.model_catalog import configured_model_catalog
 from publisher.orthography import build_orthography_catalog
 from publisher.prepared import build_prepared_formats
 from publisher.rights import build_rights_catalog
@@ -831,10 +832,75 @@ def _write_search_data(
                 flush()
         flush()
         write_index()
+    translation_targets: dict[str, dict[str, object]] = {}
+    for (
+        xml_lang,
+        language_id,
+        corpus_id,
+        records,
+        sentence_records,
+        lexical_records,
+    ) in connection.execute(
+        """
+        SELECT translation.xml_lang,
+               text.language_id,
+               text.corpus_id,
+               COUNT(DISTINCT scope.sentence_id),
+               COUNT(DISTINCT CASE
+                 WHEN translation.owner_type = 'sentence' THEN scope.sentence_id
+               END),
+               COUNT(DISTINCT CASE
+                 WHEN translation.owner_type != 'sentence' THEN scope.sentence_id
+               END)
+        FROM translations translation
+        JOIN tier_scope_view scope
+          ON scope.owner_type = translation.owner_type
+         AND scope.owner_id = translation.owner_id
+        JOIN sentences sentence ON scope.sentence_id = sentence.id
+        JOIN texts text ON sentence.parent_id = text.id
+        WHERE TRIM(translation.xml_lang) != ''
+        GROUP BY translation.xml_lang, text.language_id, text.corpus_id
+        ORDER BY translation.xml_lang, text.language_id, text.corpus_id
+        """
+    ):
+        target = translation_targets.setdefault(
+            str(xml_lang),
+            {
+                "xml_lang": str(xml_lang),
+                "records": 0,
+                "sentence_records": 0,
+                "lexical_records": 0,
+                "language_ids": set(),
+                "corpus_ids": set(),
+                "scopes": [],
+            },
+        )
+        target["records"] = cast(int, target["records"]) + int(records)
+        target["sentence_records"] = cast(int, target["sentence_records"]) + int(sentence_records)
+        target["lexical_records"] = cast(int, target["lexical_records"]) + int(lexical_records)
+        cast(set[str], target["language_ids"]).add(str(language_id))
+        cast(set[str], target["corpus_ids"]).add(str(corpus_id))
+        cast(list[dict[str, object]], target["scopes"]).append(
+            {
+                "language_id": str(language_id),
+                "corpus_id": str(corpus_id),
+                "records": int(records),
+                "sentence_records": int(sentence_records),
+                "lexical_records": int(lexical_records),
+            }
+        )
     return {
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,
         "record_unit": "sentence",
+        "translation_targets": [
+            {
+                **target,
+                "language_ids": sorted(cast(set[str], target["language_ids"])),
+                "corpus_ids": sorted(cast(set[str], target["corpus_ids"])),
+            }
+            for target in translation_targets.values()
+        ],
         "shards": shards,
         "indexes": indexes,
     }
@@ -1027,13 +1093,7 @@ def build_release(
     xml_paths = list(discover_xml(repo))
     corpus_names = sorted({path.relative_to(repo).parts[1] for path in xml_paths})
     rights = build_rights_catalog(corpus_names, overrides_path=rights_overrides)
-    models = model_catalog or {
-        "schema_version": SCHEMA_VERSION,
-        "generated_at": generated_at,
-        "provider": "Hugging Face",
-        "models": [],
-        "services": [],
-    }
+    models = model_catalog or configured_model_catalog(generated_at)
     models = {**models, "generated_at": generated_at}
     validate_document(models, schema_dir / "model-catalog.schema.json")
     orthography = build_orthography_catalog(repo, source.commit)

@@ -6,11 +6,12 @@ import type {AppData} from "../types";
 import {Diagnostics} from "./Diagnostics";
 
 const navigation = [
+  ["/dictionary", "nav.dictionary"],
+  ["/sentences", "nav.sentences"],
   ["/learn", "nav.learn"],
-  ["/explore", "nav.explore"],
+  ["/research", "nav.research"],
   ["/downloads", "nav.download"],
   ["/developers", "nav.developers"],
-  ["/models", "nav.models"],
   ["/about", "nav.about"],
 ] as const;
 

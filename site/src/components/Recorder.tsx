@@ -3,8 +3,7 @@ import {useEffect, useMemo, useRef, useState, type ChangeEvent} from "react";
 import {transcribe, type ServiceStage} from "../modelServices";
 import {useI18n} from "../i18n";
 import {wordError} from "../recorderMetrics";
-import {makeManualCard, saveCard} from "../study";
-import type {Language, ModelCatalog} from "../types";
+import type {ModelCatalog} from "../types";
 
 const ASR_LANGUAGES = [
   "Amis",
@@ -27,10 +26,8 @@ const ASR_LANGUAGES = [
 
 export function Recorder({
   catalog,
-  languages,
 }: {
   catalog: ModelCatalog;
-  languages: Language[];
 }) {
   const {number, tx} = useI18n();
   const recorder = useRef<MediaRecorder | null>(null);
@@ -50,7 +47,13 @@ export function Recorder({
   const [reference, setReference] = useState("");
   const [status, setStatus] = useState("");
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
-  const service = catalog.services.find((item) => item.space === "FormosanBank/formosan_asr");
+  const service = catalog.services.find(
+    (item) => item.tasks.includes("automatic-speech-recognition") && item.api_name,
+  );
+  const serviceReady = Boolean(service?.api_name && service.status !== "unavailable");
+  const asrLanguages = service?.supported_languages.length
+    ? service.supported_languages
+    : ASR_LANGUAGES;
   const modelSlug =
     language === "Yami / Tao"
       ? "yami"
@@ -159,7 +162,9 @@ export function Recorder({
   }
 
   async function runAsr() {
-    if (!audio || !consent || !model || audioDuration === null) return;
+    if (!audio || !consent || !service?.api_name || !serviceReady || audioDuration === null) {
+      return;
+    }
     if (audioDuration > 600) {
       setStatus(tx("Audio must be 10 minutes or shorter.", "音訊長度不得超過 10 分鐘。"));
       return;
@@ -169,13 +174,18 @@ export function Recorder({
     controller.current = next;
     setTranscript("");
     try {
-      const output = await transcribe(language, audio, {
-        signal: next.signal,
-        onStage: (nextStage, message) => {
-          setStage(nextStage);
-          setStatus(message ?? "");
+      const output = await transcribe(
+        language,
+        audio,
+        {space: service.space, endpoint: service.api_name},
+        {
+          signal: next.signal,
+          onStage: (nextStage, message) => {
+            setStage(nextStage);
+            setStatus(message ?? "");
+          },
         },
-      });
+      );
       setTranscript(output.text);
       setStatus(output.metadata);
     } catch (cause) {
@@ -208,27 +218,6 @@ export function Recorder({
       setStatus(tx("Automatic transcript copied.", "已複製自動轉錄文字。"));
     } catch {
       setStatus(tx("Clipboard access was unavailable. Select the transcript text to copy it.", "無法存取剪貼簿。請選取轉錄文字後自行複製。"));
-    }
-  }
-
-  async function saveTranscript() {
-    if (!transcript) return;
-    const targetLanguage = languages.find(
-      (item) => item.name.toLocaleLowerCase() === language.toLocaleLowerCase(),
-    );
-    try {
-      await saveCard(
-        makeManualCard({
-          front: reference.trim() || tx(`Automatic ${language} transcript`, `${language} 自動轉錄`),
-          back: transcript,
-          deck: "Pronunciation practice",
-          languageId: targetLanguage?.id ?? "",
-          tags: ["asr", "machine-output"],
-        }),
-      );
-      setStatus(tx("Automatic transcript saved as a local card.", "已將自動轉錄儲存為本機卡片。"));
-    } catch (cause) {
-      setStatus(cause instanceof Error ? cause.message : String(cause));
     }
   }
 
@@ -286,12 +275,14 @@ export function Recorder({
         <div className="asr-panel">
           <div className="tool-heading">
             <h4>{tx("Optional automatic transcript", "選用自動轉錄")}</h4>
-            <span className="status status--unchecked">{service?.status ?? "unavailable"}</span>
+            <span className={`status status--${service?.status ?? "unavailable"}`}>
+              {service?.status ?? "unavailable"}
+            </span>
           </div>
           <label className="field">
             {tx("Model language", "模型語言")}
             <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-              {ASR_LANGUAGES.map((value) => (
+              {asrLanguages.map((value) => (
                 <option key={value}>{value}</option>
               ))}
             </select>
@@ -303,8 +294,11 @@ export function Recorder({
               {model.limitations}
             </p>
           ) : (
-            <p className="callout callout--warning">
-              {tx(`This release has no registered public ASR model for ${language}. Recording, playback, and download remain available.`, `此版本沒有登錄 ${language} 的公開語音辨識模型。錄音、播放與下載仍可使用。`)}
+            <p className="model-disclosure">
+              {tx(
+                "The public multi-language ASR endpoint supplies this language. Detailed model metadata was not captured in this local release.",
+                "公開多語言語音辨識端點支援此語言；此本機版本未擷取詳細模型中繼資料。",
+              )}
             </p>
           )}
           <label className="field">
@@ -336,7 +330,7 @@ export function Recorder({
               disabled={
                 !consent ||
                 running ||
-                !model ||
+                !serviceReady ||
                 audioDuration === null ||
                 audioDuration > 600
               }
@@ -366,9 +360,6 @@ export function Recorder({
             </button>
             <button className="button button--quiet" onClick={downloadTranscript}>
               {tx("Download text", "下載文字")}
-            </button>
-            <button className="button button--quiet" onClick={saveTranscript}>
-              {tx("Save to local deck", "儲存至本機牌組")}
             </button>
           </div>
           {comparison && (

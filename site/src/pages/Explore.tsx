@@ -49,9 +49,8 @@ export function Explore({data}: {data: AppData}) {
                 .toLocaleLowerCase()
                 .includes(needle),
             )
-            .map((language, index) => (
+            .map((language) => (
               <article className="catalog-card" key={language.id}>
-                <span className="catalog-card__number">{String(index + 1).padStart(2, "0")}</span>
                 <p className="catalog-card__local">
                   {locale === "zh-Hant" ? language.names["zh-Hant"] : language.name}
                 </p>

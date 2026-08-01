@@ -23,6 +23,11 @@ export interface RunOptions {
   timeoutMs?: number;
 }
 
+export interface BrowserModelService {
+  space: string;
+  endpoint: string;
+}
+
 async function runGradio(
   space: string,
   endpoint: string,
@@ -133,11 +138,12 @@ export interface TranslationRequest {
 
 export async function translate(
   request: TranslationRequest,
+  service: BrowserModelService,
   options: RunOptions,
 ): Promise<{text: string; metadata: string}> {
   const data = await runGradio(
-    "FormosanBank/formosan-mt",
-    "/translate",
+    service.space,
+    service.endpoint,
     {
       text: request.text,
       direction_label: request.direction,
@@ -156,13 +162,14 @@ export async function translate(
 export async function transcribe(
   language: string,
   audio: Blob,
+  service: BrowserModelService,
   options: RunOptions,
 ): Promise<{text: string; metadata: string}> {
   if (audio.size > 25 * 1024 * 1024) throw new Error("Audio must be 25 MiB or smaller");
   const {handle_file} = await import("@gradio/client");
   const data = await runGradio(
-    "FormosanBank/formosan_asr",
-    "/transcribe",
+    service.space,
+    service.endpoint,
     {language_name: language, audio_path: handle_file(audio)},
     options,
   );

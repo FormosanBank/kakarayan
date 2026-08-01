@@ -42,13 +42,16 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
   const [status, setStatus] = useState("");
   const controller = useRef<AbortController | null>(null);
-  const service = catalog.services.find((item) => item.space === "FormosanBank/formosan-mt");
+  const service = catalog.services.find(
+    (item) => item.tasks.includes("translation") && item.api_name,
+  );
+  const serviceReady = Boolean(service?.api_name && service.status !== "unavailable");
 
   useEffect(() => () => controller.current?.abort(), []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!consent || !text.trim()) return;
+    if (!consent || !text.trim() || !service?.api_name || !serviceReady) return;
     controller.current?.abort();
     const next = new AbortController();
     controller.current = next;
@@ -57,6 +60,7 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
     try {
       const output = await translate(
         {text: text.trim(), direction, language, dialect},
+        {space: service.space, endpoint: service.api_name},
         {
           signal: next.signal,
           onStage: (nextStage, message) => {
@@ -87,12 +91,14 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
           <p className="eyebrow">{tx("Optional public service", "選用公開服務")}</p>
           <h3 id="translation-heading">{tx("Machine translation", "機器翻譯")}</h3>
         </div>
-        <span className="status status--unchecked">{service?.status ?? "unavailable"}</span>
+        <span className={`status status--${service?.status ?? "unavailable"}`}>
+          {service?.status ?? "unavailable"}
+        </span>
       </div>
       <p>
         {tx(
-          "Results are machine-generated drafts, not reviewed Amis. Corpus translation search remains available when this service is asleep.",
-          "結果是機器產生的草稿，並非經審查的阿美語。此服務休眠時，語料翻譯搜尋仍可使用。",
+          "Results are machine-generated drafts. Use sentence search for translations found in the corpus.",
+          "結果是機器產生的草稿。請使用例句搜尋查看語料庫中的翻譯。",
         )}
       </p>
       <form onSubmit={submit}>
@@ -163,7 +169,12 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
         <div className="button-row">
           <button
             className="button button--primary"
-            disabled={!consent || !text.trim() || !["idle", "complete", "cancelled", "error"].includes(stage)}
+            disabled={
+              !serviceReady ||
+              !consent ||
+              !text.trim() ||
+              !["idle", "complete", "cancelled", "error"].includes(stage)
+            }
           >
             {tx("Translate", "翻譯")}
           </button>

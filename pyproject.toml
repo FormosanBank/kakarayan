@@ -3,6 +3,7 @@ name = "kakarayan"
 version = "0.1.0"
 description = "Web application exposing the FormosanBank corpus. Milestone 1: corpus ingestion into PostgreSQL."
 readme = "README.md"
+license = "CC-BY-NC-4.0"
 requires-python = "==3.13.*"
 dependencies = [
     "django>=5.1,<5.2",

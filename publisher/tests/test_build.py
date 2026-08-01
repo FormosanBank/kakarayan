@@ -62,6 +62,42 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     )
     assert len(search_manifest["shards"][0]["uncompressed_sha256"]) == 64
     assert search_manifest["shards"][0]["part"] == 0
+    assert search_manifest["translation_targets"] == [
+        {
+            "corpus_ids": ["corpus_testcorpus"],
+            "language_ids": ["lang_amis"],
+            "lexical_records": 1,
+            "records": 1,
+            "scopes": [
+                {
+                    "corpus_id": "corpus_testcorpus",
+                    "language_id": "lang_amis",
+                    "lexical_records": 1,
+                    "records": 1,
+                    "sentence_records": 1,
+                }
+            ],
+            "sentence_records": 1,
+            "xml_lang": "eng",
+        },
+        {
+            "corpus_ids": ["corpus_testcorpus"],
+            "language_ids": ["lang_amis"],
+            "lexical_records": 0,
+            "records": 1,
+            "scopes": [
+                {
+                    "corpus_id": "corpus_testcorpus",
+                    "language_id": "lang_amis",
+                    "lexical_records": 0,
+                    "records": 1,
+                    "sentence_records": 1,
+                }
+            ],
+            "sentence_records": 1,
+            "xml_lang": "zho",
+        },
+    ]
     assert len(search_manifest["indexes"]) == 1
     search_records = json.loads(
         gzip.decompress(first.output.joinpath(search_manifest["shards"][0]["path"]).read_bytes())
@@ -91,8 +127,8 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     )["data"]
     assert downloads["release_id"] == first.release_id
     assert any(item["path"].endswith("csv-tables.zip") for item in downloads["artifacts"])
-    assert all(not item["publishable"] for item in downloads["artifacts"])
-    assert all(item["blocked_reasons"] for item in downloads["artifacts"])
+    assert all(item["publishable"] for item in downloads["artifacts"])
+    assert all(not item["blocked_reasons"] for item in downloads["artifacts"])
     assert all(item["format"] for item in downloads["artifacts"])
     assert all(item["language_ids"] == ["lang_amis"] for item in downloads["artifacts"])
     assert all(item["corpus_ids"] == ["corpus_testcorpus"] for item in downloads["artifacts"])

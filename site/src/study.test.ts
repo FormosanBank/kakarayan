@@ -1,7 +1,7 @@
 import {
+  cardFromDictionary,
   cardsAsAnkiTsv,
   cardsAsCsv,
-  makeManualCard,
   scheduleCard,
   type StudyCard,
 } from "./study";
@@ -67,19 +67,34 @@ describe("local study scheduling", () => {
     expect(cardsAsCsv([{...card, front: "=1+1"}])).toContain("'=1+1");
   });
 
-  it("normalizes manual card tags and keeps personal cards source-free", () => {
-    const manual = makeManualCard(
+  it("builds dictionary cards from a cited corpus record", () => {
+    const dictionary = cardFromDictionary(
       {
-        front: "  waco ",
-        back: "dog",
-        languageId: "lang_amis",
-        deck: "Vocabulary",
-        tags: ["noun", " noun ", ""],
+        id: "sentence_amis_waco",
+        text_id: "text_amis",
+        corpus_id: "corpus_test",
+        language_id: "lang_amis",
+        dialect: "Xiuguluan",
+        source_path: "Corpora/Test/XML/test.xml",
+        xml_id: "S1",
+        standard: "waco",
+        original: "waco",
+        translations: [{text: "dog", xml_lang: "eng", kind: "", version: ""}],
+        tokens: [],
+        forms: [],
+        phonology: [],
+        tier_translations: [],
+        words: [],
+        audio: [],
       },
-      now,
+      "fb-20260101-abcdef12",
+      "waco",
+      ["dog", "dog"],
+      "eng",
     );
-    expect(manual.front).toBe("waco");
-    expect(manual.tags).toEqual(["noun"]);
-    expect(manual.source).toBeNull();
+    expect(dictionary.front).toBe("waco");
+    expect(dictionary.back).toBe("dog");
+    expect(dictionary.deck).toBe("Saved words");
+    expect(dictionary.source?.recordId).toBe("sentence_amis_waco");
   });
 });

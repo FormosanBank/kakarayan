@@ -326,15 +326,32 @@ export function indexCandidateParts(
   return parts;
 }
 
-export function recordMatches(record: SearchRecord, query: string, mode: SearchMode): boolean {
+export function recordMatches(
+  record: SearchRecord,
+  query: string,
+  mode: SearchMode,
+  targetLanguage = "",
+  targetTier: "sentence" | "any" = "sentence",
+): boolean {
   const needle = normalizeSearch(query);
   if (!needle) return false;
+  const targetTranslations =
+    targetTier === "any" ? record.tier_translations : record.translations;
+  const translations = targetLanguage
+    ? record.translations.filter((item) => item.xml_lang === targetLanguage)
+    : record.translations;
+  if (
+    targetLanguage &&
+    !targetTranslations.some((item) => item.xml_lang === targetLanguage)
+  ) {
+    return false;
+  }
   if (mode === "source") {
     const exact = query.normalize("NFC").trim();
     return sourceForms(record).some((form) => form.normalize("NFC") === exact);
   }
   if (mode === "translation") {
-    return record.translations.some((item) => normalizeSearch(item.text).includes(needle));
+    return translations.some((item) => normalizeSearch(item.text).includes(needle));
   }
   if (mode === "phonology") {
     return record.phonology.some((item) => normalizeSearch(item.text).includes(needle));
@@ -371,6 +388,8 @@ export async function searchRecords(
   signal?: AbortSignal,
   limit = 200,
   indexes: SearchIndex[] = [],
+  targetLanguage = "",
+  targetTier: "sentence" | "any" = "sentence",
 ): Promise<SearchResult> {
   if (query.length > (mode === "regex" ? 128 : 256)) {
     throw new Error(`${mode === "regex" ? "Regular expression" : "Query"} is too long`);
@@ -423,11 +442,17 @@ export async function searchRecords(
       const matches = regex
         ? [
             ...sourceForms(record),
-            ...record.translations.map((item) => item.text),
+            ...record.translations
+              .filter((item) => !targetLanguage || item.xml_lang === targetLanguage)
+              .map((item) => item.text),
             ...record.tier_translations.map((item) => item.text),
             ...record.phonology.map((item) => item.text),
-          ].some((value) => regex?.test(value.normalize("NFC")))
-        : recordMatches(record, query, mode);
+          ].some((value) => regex?.test(value.normalize("NFC"))) &&
+          (!targetLanguage ||
+            (targetTier === "any" ? record.tier_translations : record.translations).some(
+              (item) => item.xml_lang === targetLanguage,
+            ))
+        : recordMatches(record, query, mode, targetLanguage, targetTier);
       if (matches) {
         matchesCount += 1;
         if (mode === "fuzzy") fuzzyScores.set(record.id, fuzzyDistance(record, query));

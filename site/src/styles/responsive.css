@@ -21,34 +21,22 @@
 
   .hero {
     grid-template-columns: 1fr;
+    padding-right: 4vw;
+    padding-left: 4vw;
   }
 
-  .hero__field-card {
-    max-width: 600px;
+  .hero-directory {
+    max-width: 700px;
   }
 
-  .pathways {
-    grid-template-columns: 1fr;
-    padding: 3rem 4vw;
-  }
-
-  .pathway {
-    min-height: 300px;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .pathway__index {
-    margin-bottom: 1.5rem;
+  .home-notes {
+    padding-right: 4vw;
+    padding-left: 4vw;
   }
 
   .catalog-grid,
   .model-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  .studio-tabs {
-    grid-template-columns: repeat(3, 1fr);
   }
 
   .code-samples,
@@ -79,7 +67,8 @@
 
   .builder__grid,
   .form-grid,
-  .download-filters {
+  .download-filters,
+  .lookup-options__grid {
     grid-template-columns: 1fr;
   }
 
@@ -121,27 +110,39 @@
 
   .hero {
     min-height: auto;
-    padding-top: 4rem;
-    padding-bottom: 5rem;
+    padding-top: 3.5rem;
+    padding-bottom: 3.5rem;
   }
 
   .page-intro h1 {
     font-size: clamp(2.55rem, 13vw, 4rem);
   }
 
-  .hero__field-card {
-    padding: 2.3rem 1.8rem;
-    box-shadow: 10px 10px 0 var(--gold);
+  .home-lookup {
+    grid-template-columns: 1fr;
+  }
+
+  .home-lookup .button-row {
+    grid-column: auto;
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .stats-grid,
   .catalog-grid,
   .model-grid,
-  .download-principles,
   .api-choice,
   .code-samples,
-  .format-guide > div {
+  .format-guide > div,
+  .home-notes {
     grid-template-columns: 1fr;
+  }
+
+  .home-notes > div,
+  .home-notes > div:first-child {
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 
   .explore-toolbar,
@@ -187,6 +188,11 @@
     grid-template-columns: 1fr;
   }
 
+  .lookup-options,
+  .home-lookup .button-row {
+    grid-column: 1;
+  }
+
   .mode-picker {
     overflow-x: auto;
   }
@@ -202,11 +208,27 @@
   }
 
   .studio-tabs button {
-    min-width: 170px;
+    min-width: auto;
   }
 
-  .learning-boundary {
+  .dictionary-entry__meaning {
     grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .dictionary-entry__details {
+    margin-left: 0;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+
+  .dictionary-entry footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dictionary-entry footer small {
+    margin-left: 0;
   }
 
   .review-card {

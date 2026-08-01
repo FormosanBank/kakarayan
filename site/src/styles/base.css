@@ -1,24 +1,24 @@
 :root {
   color-scheme: light;
-  font-family: "Avenir Next", Avenir, "Noto Sans", "Segoe UI", sans-serif;
+  font-family: "IBM Plex Sans", "Avenir Next", "Noto Sans", "Segoe UI", sans-serif;
   font-synthesis: none;
-  --paper: #f4efe4;
-  --paper-deep: #e7ddc9;
-  --paper-light: #fcfaf5;
-  --ink: #173f46;
-  --ink-dark: #102d33;
-  --ink-soft: #3d5d60;
-  --coral: #c95e48;
-  --coral-dark: #9f3f30;
-  --gold: #d6a83e;
-  --moss: #637e55;
-  --blue: #357787;
-  --line: #cfc4af;
-  --line-dark: #746956;
+  --paper: #f5f3ed;
+  --paper-deep: #e9e5db;
+  --paper-light: #fffefa;
+  --ink: #153f46;
+  --ink-dark: #102f34;
+  --ink-soft: #4f6668;
+  --coral: #c5533d;
+  --coral-dark: #9e3f2d;
+  --gold: #c99b32;
+  --moss: #5f7a52;
+  --blue: #2e7482;
+  --line: #d8d3c8;
+  --line-dark: #6f685e;
   --danger: #a2322e;
   --success: #3e714c;
-  --shadow: 0 20px 60px rgb(39 51 43 / 10%);
-  --serif: Iowan Old Style, Palatino Linotype, Book Antiqua, Palatino, Georgia, serif;
+  --shadow: 0 8px 24px rgb(25 45 42 / 7%);
+  --serif: Charter, Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --max: 1240px;
 }
@@ -34,9 +34,7 @@ html {
 body {
   margin: 0;
   color: var(--ink-dark);
-  background:
-    linear-gradient(rgb(244 239 228 / 94%), rgb(244 239 228 / 94%)),
-    repeating-linear-gradient(90deg, transparent 0 7px, rgb(23 63 70 / 4%) 7px 8px);
+  background: var(--paper);
   min-width: 320px;
   min-height: 100vh;
 }
@@ -128,31 +126,11 @@ h2 {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  min-height: 76px;
-  padding: 0 4vw;
+  min-height: 64px;
+  padding: 0 max(2rem, calc((100vw - var(--max)) / 2));
   border-bottom: 1px solid var(--line);
   background: rgb(244 239 228 / 94%);
   backdrop-filter: blur(14px);
-}
-
-.topbar::after {
-  position: absolute;
-  right: 0;
-  bottom: -5px;
-  left: 0;
-  height: 4px;
-  content: "";
-  background:
-    repeating-linear-gradient(
-      90deg,
-      var(--ink) 0 14px,
-      transparent 14px 19px,
-      var(--coral) 19px 28px,
-      transparent 28px 33px,
-      var(--gold) 33px 39px,
-      transparent 39px 44px
-    );
-  opacity: 0.6;
 }
 
 .brand {
@@ -165,15 +143,15 @@ h2 {
 
 .brand-mark {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   color: var(--paper-light);
   background: var(--ink);
   border: 2px solid var(--ink);
   place-items: center;
   font-family: var(--serif);
-  font-size: 1.5rem;
-  box-shadow: inset 0 0 0 4px var(--paper);
+  font-size: 1.25rem;
+  box-shadow: inset 0 0 0 3px var(--paper);
 }
 
 .brand strong,
@@ -183,7 +161,7 @@ h2 {
 
 .brand strong {
   font-family: var(--serif);
-  font-size: 1.35rem;
+  font-size: 1.18rem;
   line-height: 1;
 }
 
@@ -199,16 +177,16 @@ h2 {
 .primary-nav {
   display: flex;
   justify-content: center;
-  gap: clamp(0.6rem, 2vw, 2rem);
+  gap: clamp(0.65rem, 1.35vw, 1.3rem);
 }
 
 .primary-nav a {
   position: relative;
-  padding: 1.6rem 0 1.45rem;
+  padding: 1.35rem 0 1.2rem;
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.01em;
   text-decoration: none;
 }
 
@@ -220,7 +198,7 @@ h2 {
 .primary-nav a.active::after {
   position: absolute;
   right: 0;
-  bottom: 0.85rem;
+  bottom: 0.55rem;
   left: 0;
   height: 3px;
   content: "";
@@ -245,7 +223,7 @@ h2 {
 .locale-picker select {
   padding: 0.45rem 1.8rem 0.45rem 0.6rem;
   border: 1px solid var(--line-dark);
-  border-radius: 0;
+  border-radius: 3px;
   color: var(--ink-dark);
   background: var(--paper-light);
   font-weight: 700;

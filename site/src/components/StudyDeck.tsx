@@ -8,14 +8,12 @@ import {
   deleteCard,
   exportBackup,
   listCards,
-  makeManualCard,
   restoreBackup,
   saveCard,
   scheduleCard,
   type Grade,
   type StudyCard,
 } from "../study";
-import type {Language} from "../types";
 
 function download(value: string, name: string, type: string) {
   const url = URL.createObjectURL(new Blob([value], {type}));
@@ -27,10 +25,8 @@ function download(value: string, name: string, type: string) {
 }
 
 export function StudyDeck({
-  languages,
   currentRelease,
 }: {
-  languages: Language[];
   currentRelease: string;
 }) {
   const {number, t, tx} = useI18n();
@@ -38,13 +34,6 @@ export function StudyDeck({
   const [error, setError] = useState("");
   const [showAnswer, setShowAnswer] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const [front, setFront] = useState("");
-  const [back, setBack] = useState("");
-  const [deck, setDeck] = useState("Personal");
-  const [languageId, setLanguageId] = useState(languages[0]?.id ?? "");
-  const [tags, setTags] = useState("");
-  const [direction, setDirection] =
-    useState<StudyCard["direction"]>("recognition");
   const [filter, setFilter] = useState("");
   const reload = useCallback(() => {
     listCards().then(
@@ -119,27 +108,6 @@ export function StudyDeck({
     reload();
   }
 
-  async function addManualCard() {
-    try {
-      await saveCard(
-        makeManualCard({
-          front,
-          back,
-          deck,
-          languageId,
-          tags: tags.split(/[\s,]+/u),
-          direction,
-        }),
-      );
-      setFront("");
-      setBack("");
-      setTags("");
-      reload();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
   async function resetAll() {
     if (!window.confirm(tx("Delete every Kakarayan study card from this browser?", "要從此瀏覽器刪除所有 Kakarayan 學習卡片嗎？"))) return;
     await clearCards();
@@ -210,61 +178,6 @@ export function StudyDeck({
           )}
         </p>
       )}
-      <details className="manual-card">
-        <summary>{tx("Create a personal card", "建立個人卡片")}</summary>
-        <div className="form-grid">
-          <label className="field">
-            {tx("Front", "正面")}
-            <input value={front} maxLength={500} onChange={(event) => setFront(event.target.value)} />
-          </label>
-          <label className="field">
-            {tx("Answer", "答案")}
-            <input value={back} maxLength={1_500} onChange={(event) => setBack(event.target.value)} />
-          </label>
-          <label className="field">
-            {tx("Deck", "牌組")}
-            <input value={deck} maxLength={80} onChange={(event) => setDeck(event.target.value)} />
-          </label>
-          <label className="field">
-            {tx("Language", "語言")}
-            <select value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
-              {languages.map((language) => (
-                <option key={language.id} value={language.id}>
-                  {language.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            {tx("Direction", "方向")}
-            <select
-              value={direction}
-              onChange={(event) =>
-                setDirection(event.target.value as StudyCard["direction"])
-              }
-            >
-              <option value="recognition">{tx("Recognition: prompt to meaning", "辨識：提示詞到詞義")}</option>
-              <option value="production">{tx("Production: meaning to prompt", "產出：詞義到提示詞")}</option>
-            </select>
-          </label>
-          <label className="field">
-            {tx("Tags", "標籤")}
-            <input
-              value={tags}
-              maxLength={300}
-              onChange={(event) => setTags(event.target.value)}
-              placeholder={tx("comma or space separated", "以逗號或空格分隔")}
-            />
-          </label>
-        </div>
-        <button
-          className="button button--primary"
-          disabled={!front.trim() || !back.trim()}
-          onClick={addManualCard}
-        >
-          {tx("Save local card", "儲存本機卡片")}
-        </button>
-      </details>
       {!cards.length && <div className="empty-state">{t("deck.empty")}</div>}
       {current && (
         <article className="review-card">

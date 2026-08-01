@@ -26,8 +26,16 @@ def test_public_model_catalog_maps_models_and_services() -> None:
         },
     ]
     spaces = [
-        {"id": "FormosanBank/formosan-mt"},
-        {"id": "FormosanBank/formosan_asr"},
+        {
+            "id": "FormosanBank/formosan-mt",
+            "host": "https://formosanbank-formosan-mt.hf.space",
+            "runtime": {"stage": "RUNNING", "domains": [{"stage": "READY"}]},
+        },
+        {
+            "id": "FormosanBank/formosan_asr",
+            "host": "https://formosanbank-formosan-asr.hf.space",
+            "runtime": {"stage": "SLEEPING", "domains": []},
+        },
     ]
     with patch("publisher.model_catalog._get_json", side_effect=[models, spaces]):
         catalog = build_model_catalog()
@@ -42,5 +50,10 @@ def test_public_model_catalog_maps_models_and_services() -> None:
     assert translation["license"] == "cc-by-nc-4.0"
     assert translation["direction"] == "Formosan → English"
     assert "private" in str(translation["training_lineage"]).lower()
-    assert service_rows[0]["status"] == "unchecked"
+    assert service_rows[0]["status"] == "available"
+    assert service_rows[0]["api_name"] == "/translate"
+    assert service_rows[0]["api_url"] == "https://formosanbank-formosan-mt.hf.space"
+    assert service_rows[0]["checked_at"]
+    assert service_rows[1]["status"] == "sleeping"
+    assert service_rows[1]["api_name"] == "/transcribe"
     assert "Hugging Face" in str(service_rows[0]["third_party_notice"])

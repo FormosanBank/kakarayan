@@ -2,25 +2,20 @@ import {useState} from "react";
 
 import {DatasetBuilder} from "../components/DatasetBuilder";
 import {PageIntro} from "../components/Layout";
-import {SearchTool} from "../components/SearchTool";
 import {Summaries} from "../components/Summaries";
 import {useI18n} from "../i18n";
 import type {AppData} from "../types";
 
 export function Research({data}: {data: AppData}) {
-  const {t, tx} = useI18n();
-  const [view, setView] = useState<"search" | "builder" | "summaries">("search");
+  const {tx} = useI18n();
+  const [view, setView] = useState<"builder" | "summaries">("builder");
   return (
     <div className="page-wrap page-wrap--wide">
-      <PageIntro title={t("search.title")} lede={t("search.lede")} />
+      <PageIntro
+        title={tx("Research tools", "研究工具")}
+        lede={tx("Build a dataset or summarize a bounded corpus selection.", "建立資料集或彙整限定範圍的語料。")}
+      />
       <div className="research-tabs" role="tablist" aria-label={tx("Research tools", "研究工具")}>
-        <button
-          role="tab"
-          aria-selected={view === "search"}
-          onClick={() => setView("search")}
-        >
-          {tx("Concordance and dictionary", "索引行與詞典")}
-        </button>
         <button
           role="tab"
           aria-selected={view === "builder"}
@@ -37,7 +32,6 @@ export function Research({data}: {data: AppData}) {
         </button>
       </div>
       <div role="tabpanel">
-        {view === "search" && <SearchTool data={data} />}
         {view === "builder" && <DatasetBuilder data={data} />}
         {view === "summaries" && <Summaries data={data} />}
       </div>

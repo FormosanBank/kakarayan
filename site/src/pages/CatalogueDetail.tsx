@@ -53,8 +53,11 @@ export function LanguageDetail({
         } · ISO 639-3 ${language.iso639_3}`}
       />
       <div className="detail-actions">
-        <Link className="button button--primary" to={`/search?language=${language.id}`}>
-          {tx("Search this language", "搜尋此語言")}
+        <Link className="button button--primary" to={`/dictionary?language=${language.id}`}>
+          {tx("Dictionary", "單詞查詢")}
+        </Link>
+        <Link className="button button--quiet" to={`/sentences?language=${language.id}`}>
+          {tx("Sentence search", "例句搜尋")}
         </Link>
         <Link className="button button--quiet" to={`/downloads?language=${language.id}`}>
           {tx("Filter prepared data", "篩選預備資料")}
@@ -118,7 +121,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           <Link
             className="button button--primary"
             key={language.id}
-            to={`/search?language=${language.id}&corpus=${corpus.id}`}
+            to={`/sentences?language=${language.id}&corpus=${corpus.id}`}
           >
             {tx("Search", "搜尋")} {language.name}
           </Link>
@@ -223,8 +226,8 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         ) : null}
         <p>
           {tx(
-            "Public repository visibility is not a blanket license. Retain corpus-specific notices and source citations with every derived record.",
-            "公開儲存庫可見不等於全面授權。每筆衍生記錄都必須保留語料庫專屬聲明與來源引用。",
+            "This public corpus is approved for Kakarayan's noncommercial distribution. Retain its source notices and citations.",
+            "此公開語料庫已核准供 Kakarayan 非商業散布使用。請保留來源聲明與引用。",
           )}
         </p>
       </section>
@@ -232,8 +235,8 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         <h2>{tx("Known limitations", "已知限制")}</h2>
         <p>
           {tx(
-            "Counts describe records projected from this pinned public source, not language completeness or speaker populations. Empty fields mean the source did not supply that tier or Kakarayan could not map it defensibly. Audio references are not guaranteed to resolve on the public web.",
-            "數量只描述由此固定公開來源投影出的記錄，不代表語言完整性或使用者人口。空白欄位表示來源未提供該層級，或 Kakarayan 無法可靠對應。音訊參照不保證能在公開網路上開啟。",
+            "Counts describe this release, not language completeness or speaker populations. Some tiers and audio links may be absent.",
+            "數量只描述此資料版本，不代表語言完整性或使用者人口。部分層級與音訊連結可能缺漏。",
           )}
         </p>
       </section>

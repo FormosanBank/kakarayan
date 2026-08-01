@@ -12,10 +12,12 @@ interface CorpusSummary {
 }
 
 const routes = [
-  ["", /Listen closely/],
-  ["#/learn", /Amis learning studio/],
+  ["", /Find words, sentences, and research data/],
+  ["#/dictionary", /Dictionary/],
+  ["#/sentences", /Sentence search/],
+  ["#/learn", /Learn from corpus examples/],
+  ["#/research", /Research tools/],
   ["#/explore", /Explore the bank/],
-  ["#/search", /Corpus search/],
   ["#/downloads", /Download public data/],
   ["#/developers", /Build with FormosanBank/],
   ["#/models", /Public language models/],
@@ -23,11 +25,18 @@ const routes = [
 ] as const;
 
 async function selectSmallAmisScope(page: Page, fullCorpus = "Glosbe") {
-  const panel = page.getByRole("tabpanel");
-  const language = panel.getByRole("combobox", {name: "Language", exact: true});
-  const corpus = panel.getByRole("combobox", {name: "Corpus", exact: true});
+  const formosanLanguage = page.getByRole("combobox", {
+    name: "Formosan language",
+    exact: true,
+  });
+  const language = formosanLanguage
+    .or(page.getByRole("combobox", {name: "Language", exact: true}))
+    .first();
   await expect(language).toBeVisible();
   await language.selectOption({label: "Amis"});
+  const searchOptions = page.getByText("Search options", {exact: true});
+  if ((await searchOptions.count()) > 0) await searchOptions.first().click();
+  const corpus = page.getByRole("combobox", {name: "Corpus", exact: true}).first();
   const labels = await corpus.locator("option").allTextContents();
   const label = labels.includes("TestCorpus") ? "TestCorpus" : fullCorpus;
   expect(labels).toContain(label);
@@ -47,9 +56,13 @@ test("language and corpus catalogue entries have stable detail routes", async ({
   await page.goto("#/languages/lang_amis");
   await expect(page.getByRole("heading", {level: 1, name: "Amis"})).toBeVisible();
   await expect(page.getByText("ISO 639-3 ami")).toBeVisible();
-  await expect(page.getByRole("link", {name: "Search this language"})).toHaveAttribute(
+  await expect(page.locator("#main").getByRole("link", {name: "Dictionary"})).toHaveAttribute(
     "href",
-    /#\/search\?language=lang_amis/,
+    /#\/dictionary\?language=lang_amis/,
+  );
+  await expect(page.locator("#main").getByRole("link", {name: "Sentence search"})).toHaveAttribute(
+    "href",
+    /#\/sentences\?language=lang_amis/,
   );
 
   const response = await page.request.get("api/v1/corpora.json");
@@ -63,7 +76,7 @@ test("language and corpus catalogue entries have stable detail routes", async ({
     "href",
     /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\//,
   );
-  await expect(page.getByText(/Public repository visibility is not a blanket license/)).toBeVisible();
+  await expect(page.getByText(/approved for Kakarayan's noncommercial distribution/)).toBeVisible();
 });
 
 test("local corpus search reads a compressed shard", async ({page}) => {
@@ -71,9 +84,9 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   page.on("response", (response) => {
     if (response.url().includes("/data/search/")) searchAssets.push(response.url());
   });
-  await page.goto("#/search");
+  await page.goto("#/sentences");
   await selectSmallAmisScope(page);
-  await page.getByLabel("Word or meaning").fill("lima");
+  await page.getByLabel("Word, phrase, or translation").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".result-card").first()).toBeVisible();
   await expect(page.locator(".result-card").first()).toContainText(/lima/i);
@@ -83,15 +96,29 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   );
   expect(searchAssets.some((url) => url.includes("/indexes/"))).toBe(true);
   expect(searchAssets.some((url) => url.includes("/shards/"))).toBe(true);
-  await expect(page.locator(".results-heading")).toContainText(/\d[\d,]* attestations/);
-  await expect(page.locator(".results-heading")).toContainText("candidate records");
+  await expect(page.locator(".results-heading")).toContainText(/\d[\d,]* sentences/);
   await expect(page.locator(".kwic mark").first()).toContainText(/lima/i);
-  await page.getByRole("button", {name: "Headword candidates"}).click();
-  await expect(page.getByText(/not reviewed dictionary entries/)).toBeVisible();
-  await page.getByRole("button", {name: "Concordance occurrences"}).click();
   await page.getByRole("link", {name: "Stable record link"}).first().click();
   await page.reload();
   await expect(page.locator(".result-card").first()).toContainText(/lima/i);
+});
+
+test("dictionary lookup returns cited word meanings separately from sentence search", async ({
+  page,
+}) => {
+  await page.goto("#/dictionary");
+  await selectSmallAmisScope(page);
+  await page.getByLabel("Word", {exact: true}).fill("lima");
+  await page.getByRole("button", {name: "Search"}).click();
+  const entry = page.locator(".dictionary-entry").first();
+  await expect(entry).toBeVisible();
+  await expect(entry.getByRole("heading", {name: /lima/i})).toBeVisible();
+  await expect(entry).toContainText("FIVE");
+  await expect(entry.getByRole("link", {name: "View sentences"})).toHaveAttribute(
+    "href",
+    /#\/sentences\?q=lima/,
+  );
+  await expect(entry.getByRole("button", {name: "Save word"})).toBeEnabled();
 });
 
 test("scoped RE2 search runs without weakening the content security policy", async ({
@@ -99,10 +126,10 @@ test("scoped RE2 search runs without weakening the content security policy", asy
 }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.goto("#/search");
+  await page.goto("#/sentences");
   await selectSmallAmisScope(page);
   await page.getByRole("radio", {name: "Scoped RE2"}).check();
-  await page.getByLabel("Word or meaning").fill("li.a");
+  await page.getByLabel("Word, phrase, or translation").fill("li.a");
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".result-card").first()).toBeVisible();
   await expect(page.locator(".callout--error")).toHaveCount(0);
@@ -112,7 +139,7 @@ test("scoped RE2 search runs without weakening the content security policy", asy
 test("dataset recipes and worker summaries are available without a backend", async ({
   page,
 }) => {
-  await page.goto("#/search");
+  await page.goto("#/research");
   await page.getByRole("tab", {name: "Dataset builder"}).click();
   await selectSmallAmisScope(page, "MontgomeryTexts");
   await page.getByLabel("Record unit").selectOption("word");
@@ -148,9 +175,9 @@ test("dataset recipes and worker summaries are available without a backend", asy
 test("lazy DuckDB-Wasm export creates a real Parquet file", async ({page}, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Large export smoke test runs on desktop");
   test.setTimeout(120_000);
-  await page.goto("#/search");
+  await page.goto("#/sentences");
   await selectSmallAmisScope(page);
-  await page.getByLabel("Word or meaning").fill("lima");
+  await page.getByLabel("Word, phrase, or translation").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".result-card").first()).toBeVisible({timeout: 10_000});
   await page.getByLabel("Export").selectOption("parquet");
@@ -174,11 +201,11 @@ test("learning content fails closed when no reviewed lesson is published", async
   page,
 }) => {
   await page.goto("#/learn");
-  await page.getByRole("tab", {name: /Reviewed notes/}).click();
+  await page.getByRole("tab", {name: "Notes"}).click();
   await expect(
-    page.getByRole("heading", {name: "No reviewed lessons are published yet."}),
+    page.getByRole("heading", {name: "No reviewed notes yet"}),
   ).toBeVisible();
-  await expect(page.getByText(/does not generate grammar lessons/)).toBeVisible();
+  await expect(page.getByText(/Community-authored notes will appear here after review/)).toBeVisible();
 });
 
 test("Traditional Chinese navigation updates content and document language", async ({page}) => {
@@ -186,15 +213,15 @@ test("Traditional Chinese navigation updates content and document language", asy
   await page.getByLabel("Interface language").selectOption("zh-Hant");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hant");
   await expect(page.getByRole("heading", {level: 1})).toContainText(
-    "仔細聆聽，深入搜尋，讓語言繼續流傳",
+    "查單詞、找例句、下載研究資料",
   );
-  await page.getByRole("link", {name: "探索", exact: true}).click();
+  await page.goto("#/explore");
   await expect(page.getByRole("heading", {level: 1})).toContainText("探索語料庫");
   await expect(page.getByPlaceholder("篩選語言…")).toBeVisible();
 
-  await page.goto("#/search");
-  await expect(page.getByRole("tab", {name: "索引行與詞典"})).toBeVisible();
-  await expect(page.getByLabel("詞語或翻譯")).toBeVisible();
+  await page.goto("#/sentences");
+  await expect(page.getByLabel("單詞、片語或翻譯")).toBeVisible();
+  await page.goto("#/research");
   await page.getByRole("tab", {name: "資料集產生器"}).click();
   await expect(page.getByRole("heading", {name: "建立有界限的語言學資料集"})).toBeVisible();
 
@@ -213,7 +240,7 @@ test("primary navigation and research tabs are keyboard operable", async ({
   page,
 }, testInfo) => {
   await page.goto("");
-  await expect(page.getByRole("heading", {level: 1, name: /Listen closely/})).toBeVisible();
+  await expect(page.getByRole("heading", {level: 1, name: /Find words/})).toBeVisible();
   const skipLink = page.getByRole("link", {name: "Skip to content"});
   if (testInfo.project.name === "desktop-webkit") {
     // Desktop Safari follows the system "Press Tab to highlight" preference.
@@ -226,23 +253,27 @@ test("primary navigation and research tabs are keyboard operable", async ({
   await expect(page.locator("#main")).toBeFocused();
 
   await page.goto("");
-  await expect(page.getByRole("heading", {level: 1, name: /Listen closely/})).toBeVisible();
-  const exploreLink = page.getByRole("link", {name: "Explore", exact: true});
+  await expect(page.getByRole("heading", {level: 1, name: /Find words/})).toBeVisible();
+  const researchLink = page.getByRole("link", {name: "Research", exact: true}).first();
   if (testInfo.project.name === "desktop-webkit") {
-    await exploreLink.focus();
+    await researchLink.focus();
   } else {
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
     await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", {name: "Dictionary", exact: true})).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", {name: "Sentences", exact: true})).toBeFocused();
+    await page.keyboard.press("Tab");
     await expect(page.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
     await page.keyboard.press("Tab");
   }
-  await expect(exploreLink).toBeFocused();
+  await expect(researchLink).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", {level: 1, name: "Explore the bank"})).toBeVisible();
+  await expect(page.getByRole("heading", {level: 1, name: "Research tools"})).toBeVisible();
 
-  await page.goto("#/search");
+  await page.goto("#/research");
   const builderTab = page.getByRole("tab", {name: "Dataset builder"});
   await builderTab.focus();
   await page.keyboard.press("Enter");
@@ -273,7 +304,7 @@ test("browser transfer, search latency, and memory stay within release budgets",
     testInfo.project.name !== "desktop-chromium",
     "Release budgets are measured once in desktop Chromium",
   );
-  await page.goto("#/search");
+  await page.goto("#/sentences");
   const resources = await page.evaluate(() => {
     const entries = [
       ...performance.getEntriesByType("navigation"),
@@ -297,14 +328,14 @@ test("browser transfer, search latency, and memory stay within release budgets",
   expect(catalogueBytes).toBeLessThan(1024 * 1024);
 
   const corpus = await selectSmallAmisScope(page);
-  await page.getByLabel("Word or meaning").fill("lima");
+  await page.getByLabel("Word, phrase, or translation").fill("lima");
   const coldStart = Date.now();
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".kwic mark").first()).toContainText(/lima/i);
   const coldSearchMs = Date.now() - coldStart;
 
   const warmQuery = corpus === "TestCorpus" ? "waco" : "fangcalay";
-  await page.getByLabel("Word or meaning").fill(warmQuery);
+  await page.getByLabel("Word, phrase, or translation").fill(warmQuery);
   const warmStart = Date.now();
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".kwic mark").first()).toContainText(

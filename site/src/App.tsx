@@ -7,12 +7,14 @@ import {useI18n} from "./i18n";
 import {About} from "./pages/About";
 import {CorpusDetail, LanguageDetail} from "./pages/CatalogueDetail";
 import {Developers} from "./pages/Developers";
+import {Dictionary} from "./pages/Dictionary";
 import {Downloads} from "./pages/Downloads";
 import {Explore} from "./pages/Explore";
 import {Home} from "./pages/Home";
 import {Learn} from "./pages/Learn";
 import {Models} from "./pages/Models";
 import {Research} from "./pages/Research";
+import {Sentences} from "./pages/Sentences";
 import {Link, RoutingProvider, useRoutePath} from "./routing";
 
 function Loading() {
@@ -56,14 +58,14 @@ function NotFound() {
   return (
     <div className="page-wrap page-wrap--prose">
       <p className="eyebrow">404</p>
-      <h1>{tx("This path is not in the field notebook.", "田野筆記中沒有這個路徑。")}</h1>
-      <p>{tx("The release remains intact. Return home or open corpus search.", "資料版本仍然完整。請返回首頁或開啟語料搜尋。")}</p>
+      <h1>{tx("Page not found", "找不到頁面")}</h1>
+      <p>{tx("Return home or open the dictionary.", "請返回首頁或開啟單詞查詢。")}</p>
       <div className="button-row">
         <Link className="button button--primary" to="/">
           {tx("Home", "首頁")}
         </Link>
-        <Link className="button button--quiet" to="/search">
-          {tx("Search", "搜尋")}
+        <Link className="button button--quiet" to="/dictionary">
+          {tx("Dictionary", "單詞查詢")}
         </Link>
       </div>
     </div>
@@ -112,7 +114,10 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       "/": t("home.title"),
       "/learn": t("learn.title"),
       "/explore": t("explore.title"),
-      "/search": t("search.title"),
+      "/dictionary": tx("Dictionary", "單詞查詢"),
+      "/sentences": tx("Sentence search", "例句搜尋"),
+      "/search": tx("Sentence search", "例句搜尋"),
+      "/research": tx("Research tools", "研究工具"),
       "/downloads": t("download.title"),
       "/developers": t("developers.title"),
       "/models": t("models.title"),
@@ -120,7 +125,12 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
     }[path] ??
       tx("Page not found", "找不到頁面"));
   const routeDescription =
-    path === "/search"
+    path === "/dictionary"
+      ? tx(
+          "Look up a Formosan word and choose the translation language.",
+          "查詢臺灣南島語單詞，並選擇翻譯語言。",
+        )
+      : path === "/sentences" || path === "/search"
       ? t("search.lede")
       : path === "/learn"
         ? t("learn.lede")
@@ -141,7 +151,7 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       .querySelector('meta[name="robots"]')
       ?.setAttribute(
         "content",
-        `${path === "/search" ? "noindex" : "index"},follow,noai,noimageai`,
+        `${["/dictionary", "/sentences", "/search"].includes(path) ? "noindex" : "index"},follow,noai,noimageai`,
       );
   }, [locale, path, routeDescription, routeTitle]);
   const page = (() => {
@@ -162,7 +172,12 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
         return <Learn data={data} />;
       case "/explore":
         return <Explore data={data} />;
+      case "/dictionary":
+        return <Dictionary data={data} />;
+      case "/sentences":
       case "/search":
+        return <Sentences data={data} />;
+      case "/research":
         return <Research data={data} />;
       case "/downloads":
         return <Downloads data={data} />;

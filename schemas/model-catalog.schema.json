@@ -70,16 +70,34 @@
     },
     "service": {
       "type": "object",
-      "required": ["id", "space", "url", "tasks", "status", "third_party_notice"],
+      "required": [
+        "id",
+        "space",
+        "url",
+        "api_url",
+        "api_name",
+        "tasks",
+        "supported_languages",
+        "status",
+        "checked_at",
+        "third_party_notice"
+      ],
       "properties": {
         "id": {"type": "string", "pattern": "^service_"},
         "space": {"type": "string", "pattern": "^FormosanBank/"},
         "url": {"type": "string", "format": "uri"},
         "api_url": {"type": ["string", "null"], "format": "uri"},
+        "api_name": {"type": ["string", "null"], "pattern": "^/"},
         "tasks": {
           "type": "array",
           "items": {"enum": ["translation", "automatic-speech-recognition"]},
           "minItems": 1
+        },
+        "supported_languages": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
         },
         "status": {"enum": ["available", "sleeping", "unavailable", "unchecked"]},
         "checked_at": {"type": ["string", "null"], "format": "date-time"},
