@@ -151,8 +151,7 @@ export function Home({data}: {data: AppData}) {
     },
   ] as const;
   const tools = [
-    ["/dictionary", tx("Dictionary", "單詞查詢"), tx("word meanings", "詞義")],
-    ["/sentences", tx("Sentences", "例句搜尋"), tx("usage in context", "語境用法")],
+    ["/lookup", tx("Corpus lookup", "語料查詢"), tx("dictionary + sentences", "單詞釋義與語境例句")],
     ["/learn", tx("Learning tools", "學習工具"), tx("deck, MT, and ASR", "字卡、翻譯與語音")],
     ["/research", tx("Research", "研究工具"), tx("datasets and summaries", "資料集與摘要")],
     ["/downloads", tx("Downloads", "資料下載"), tx("prepared formats", "準備好的格式")],
@@ -172,11 +171,11 @@ export function Home({data}: {data: AppData}) {
           <h1>{t("home.title")}</h1>
           <p className="home-hero__lede">{t("home.lede")}</p>
           <nav className="home-hero__actions" aria-label={tx("Start here", "從這裡開始")}>
-            <Link className="button button--primary" to="/dictionary">
-              {tx("Dictionary", "單詞查詢")}
+            <Link className="button button--primary" to="/lookup">
+              {tx("Open corpus lookup", "開啟語料查詢")}
             </Link>
-            <Link className="button button--paper" to="/sentences">
-              {tx("Sentence search", "例句搜尋")}
+            <Link className="button button--paper" to="/explore">
+              {tx("Browse languages", "瀏覽語言")}
             </Link>
             <Link className="home-hero__text-link" to="/downloads">
               {tx("Download data", "下載資料")} <span aria-hidden="true">↗</span>

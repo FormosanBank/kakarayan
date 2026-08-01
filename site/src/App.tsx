@@ -7,14 +7,13 @@ import {useI18n} from "./i18n";
 import {About} from "./pages/About";
 import {CorpusDetail, LanguageDetail} from "./pages/CatalogueDetail";
 import {Developers} from "./pages/Developers";
-import {Dictionary} from "./pages/Dictionary";
 import {Downloads} from "./pages/Downloads";
 import {Explore} from "./pages/Explore";
 import {Home} from "./pages/Home";
 import {Learn} from "./pages/Learn";
+import {Lookup} from "./pages/Lookup";
 import {Models} from "./pages/Models";
 import {Research} from "./pages/Research";
-import {Sentences} from "./pages/Sentences";
 import {Link, RoutingProvider, useRoutePath} from "./routing";
 
 function Loading() {
@@ -59,13 +58,13 @@ function NotFound() {
     <div className="page-wrap page-wrap--prose">
       <p className="eyebrow">404</p>
       <h1>{tx("Page not found", "找不到頁面")}</h1>
-      <p>{tx("Return home or open the dictionary.", "請返回首頁或開啟單詞查詢。")}</p>
+      <p>{tx("Return home or open corpus lookup.", "請返回首頁或開啟語料查詢。")}</p>
       <div className="button-row">
         <Link className="button button--primary" to="/">
           {tx("Home", "首頁")}
         </Link>
-        <Link className="button button--quiet" to="/dictionary">
-          {tx("Dictionary", "單詞查詢")}
+        <Link className="button button--quiet" to="/lookup">
+          {tx("Corpus lookup", "語料查詢")}
         </Link>
       </div>
     </div>
@@ -114,9 +113,10 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       "/": t("home.title"),
       "/learn": t("learn.title"),
       "/explore": t("explore.title"),
-      "/dictionary": tx("Dictionary", "單詞查詢"),
-      "/sentences": tx("Sentence search", "例句搜尋"),
-      "/search": tx("Sentence search", "例句搜尋"),
+      "/lookup": tx("Dictionary and sentences", "單詞釋義與語境例句"),
+      "/dictionary": tx("Dictionary and sentences", "單詞釋義與語境例句"),
+      "/sentences": tx("Dictionary and sentences", "單詞釋義與語境例句"),
+      "/search": tx("Dictionary and sentences", "單詞釋義與語境例句"),
       "/research": tx("Research tools", "研究工具"),
       "/downloads": t("download.title"),
       "/developers": t("developers.title"),
@@ -125,13 +125,11 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
     }[path] ??
       tx("Page not found", "找不到頁面"));
   const routeDescription =
-    path === "/dictionary"
+    ["/lookup", "/dictionary", "/sentences", "/search"].includes(path)
       ? tx(
-          "Look up a Formosan word and choose the translation language.",
-          "查詢臺灣南島語單詞，並選擇翻譯語言。",
+          "Switch between dictionary meanings and sentences in context over the same public corpus data.",
+          "在同一套公開語料資料中切換單詞釋義與語境例句。",
         )
-      : path === "/sentences" || path === "/search"
-      ? t("search.lede")
       : path === "/learn"
         ? t("learn.lede")
         : path === "/downloads"
@@ -151,7 +149,7 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       .querySelector('meta[name="robots"]')
       ?.setAttribute(
         "content",
-        `${["/dictionary", "/sentences", "/search"].includes(path) ? "noindex" : "index"},follow,noai,noimageai`,
+        `${["/lookup", "/dictionary", "/sentences", "/search"].includes(path) ? "noindex" : "index"},follow,noai,noimageai`,
       );
   }, [locale, path, routeDescription, routeTitle]);
   const page = (() => {
@@ -172,11 +170,13 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
         return <Learn data={data} />;
       case "/explore":
         return <Explore data={data} />;
+      case "/lookup":
+        return <Lookup data={data} />;
       case "/dictionary":
-        return <Dictionary data={data} />;
+        return <Lookup data={data} initialKind="dictionary" />;
       case "/sentences":
       case "/search":
-        return <Sentences data={data} />;
+        return <Lookup data={data} initialKind="sentences" />;
       case "/research":
         return <Research data={data} />;
       case "/downloads":

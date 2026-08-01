@@ -199,7 +199,7 @@ export function CandidateGroups({
               .map((item) => item.text);
           }),
         );
-        const sentenceLink = `/sentences?q=${encodeURIComponent(candidate.label)}&language=${encodeURIComponent(
+        const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(candidate.label)}&language=${encodeURIComponent(
           firstRecord.language_id,
         )}&target=${encodeURIComponent(targetLanguage)}&mode=exact`;
         return (

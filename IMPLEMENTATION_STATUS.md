@@ -164,6 +164,9 @@ environment condition, not a reason to skip the new static, publisher, API, or c
 - [x] Redesign the landing page around learner, linguist, and developer routes, live release
   statistics, direct tool links, and a responsive Motion corpus signal with reduced-motion
   behavior.
+- [x] Consolidate dictionary meanings and sentence search into one canonical lookup route
+  with a prominent bilingual mode toggle, shared learner entry point, and compatible legacy
+  deep links.
 - [x] Add root CC BY-NC 4.0 licensing across project and client package metadata.
 - [x] Configure public MT and ASR service routes from the generated model catalogue rather
   than hard-coded frontend service names.
@@ -242,7 +245,7 @@ repositories or corpus sources were used.
 - Publisher tests: 23 pass
 - API and Python client tests: 11 pass
 - Frontend unit and component tests: 43 pass across 8 files
-- Full fixture browser matrix: 55 pass and 13 intentional project-specific skips across
+- Full fixture browser matrix: 59 pass and 13 intentional project-specific skips across
   desktop Chromium, mobile Chromium, Firefox, and WebKit
 - Full-data desktop Chromium: 14 pass, including measured budgets, offline local study,
   migration/backup/restore, microphone denial, deletion, keyboard, and accessibility

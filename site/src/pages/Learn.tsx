@@ -1,22 +1,23 @@
 import {useState} from "react";
 
 import {PageIntro} from "../components/Layout";
+import {LookupKindToggle} from "../components/LookupKindToggle";
 import {TranslationTool} from "../components/ModelTools";
 import {OrthographyTool} from "../components/OrthographyTool";
 import {Recorder} from "../components/Recorder";
-import {SearchTool} from "../components/SearchTool";
+import {SearchTool, type LookupKind} from "../components/SearchTool";
 import {StudyDeck} from "../components/StudyDeck";
 import {useI18n} from "../i18n";
 import type {AppData} from "../types";
 
-type StudioTab = "dictionary" | "sentences" | "deck" | "practice" | "translation" | "orthography" | "lessons";
+type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
 export function Learn({data}: {data: AppData}) {
   const {t, tx} = useI18n();
-  const [tab, setTab] = useState<StudioTab>("dictionary");
+  const [tab, setTab] = useState<StudioTab>("lookup");
+  const [lookupKind, setLookupKind] = useState<LookupKind>("dictionary");
   const tabs: Array<[StudioTab, string]> = [
-    ["dictionary", tx("Dictionary", "單詞")],
-    ["sentences", tx("Sentences", "例句")],
+    ["lookup", tx("Lookup", "查詢")],
     ["deck", t("learn.deck")],
     ["practice", t("learn.practice")],
     ["translation", t("learn.translate")],
@@ -50,8 +51,14 @@ export function Learn({data}: {data: AppData}) {
         ))}
       </div>
       <div className="studio-panel" id={`studio-${tab}`} role="tabpanel">
-        {tab === "dictionary" && <SearchTool data={data} kind="dictionary" learner />}
-        {tab === "sentences" && <SearchTool data={data} kind="sentences" learner />}
+        {tab === "lookup" && (
+          <>
+            <LookupKindToggle kind={lookupKind} onChange={setLookupKind} />
+            <div id="lookup-results">
+              <SearchTool key={lookupKind} data={data} kind={lookupKind} learner />
+            </div>
+          </>
+        )}
         {tab === "deck" && (
           <StudyDeck currentRelease={data.meta.release_id} />
         )}

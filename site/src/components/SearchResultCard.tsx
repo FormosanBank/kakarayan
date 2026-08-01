@@ -132,7 +132,7 @@ export function SearchResultCard({
   const {locale, number, t, tx} = useI18n();
   const language = data.languages.find((item) => item.id === record.language_id);
   const corpus = data.corpora.find((item) => item.id === record.corpus_id);
-  const stablePath = `/sentences?q=${encodeURIComponent(query)}&language=${encodeURIComponent(
+  const stablePath = `/lookup?type=sentences&q=${encodeURIComponent(query)}&language=${encodeURIComponent(
     record.language_id,
   )}&corpus=${encodeURIComponent(record.corpus_id)}&target=${encodeURIComponent(targetLanguage)}&mode=${mode}&record=${encodeURIComponent(
     record.id,
@@ -244,7 +244,7 @@ export function SearchResultCard({
         {learner && (
           <Link
             className="text-button"
-            to={`/sentences?q=${encodeURIComponent(query)}&language=${record.language_id}&target=${targetLanguage}`}
+            to={`/lookup?type=sentences&q=${encodeURIComponent(query)}&language=${record.language_id}&target=${targetLanguage}`}
           >
             {t("search.research")}
           </Link>

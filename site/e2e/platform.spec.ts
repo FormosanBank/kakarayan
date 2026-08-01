@@ -13,8 +13,7 @@ interface CorpusSummary {
 
 const routes = [
   ["", /FormosanBank, ready to use/],
-  ["#/dictionary", /Dictionary/],
-  ["#/sentences", /Sentence search/],
+  ["#/lookup", /Dictionary and sentences/],
   ["#/learn", /Learn from corpus examples/],
   ["#/research", /Research tools/],
   ["#/explore", /Explore the bank/],
@@ -78,7 +77,7 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
   );
   await expect(main.locator(".corpus-signal")).toBeVisible();
   await expect(main.locator(".home-stat")).toHaveCount(5);
-  await expect(main.locator(".home-tools__grid > a")).toHaveCount(6);
+  await expect(main.locator(".home-tools__grid > a")).toHaveCount(5);
   const geometry = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
@@ -97,17 +96,30 @@ test("landing animation respects reduced-motion preferences", async ({page}) => 
   expect(secondTransform).toBe(firstTransform);
 });
 
+test("legacy lookup routes open the matching mode on the unified page", async ({page}) => {
+  await page.goto("#/dictionary");
+  await expect(page.getByRole("button", {name: "Dictionary lookup"})).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.goto("#/sentences");
+  await expect(page.getByRole("button", {name: "Sentence lookup"})).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
 test("language and corpus catalogue entries have stable detail routes", async ({page}) => {
   await page.goto("#/languages/lang_amis");
   await expect(page.getByRole("heading", {level: 1, name: "Amis"})).toBeVisible();
   await expect(page.getByText("ISO 639-3 ami")).toBeVisible();
   await expect(page.locator("#main").getByRole("link", {name: "Dictionary"})).toHaveAttribute(
     "href",
-    /#\/dictionary\?language=lang_amis/,
+    /#\/lookup\?type=dictionary&language=lang_amis/,
   );
   await expect(page.locator("#main").getByRole("link", {name: "Sentence search"})).toHaveAttribute(
     "href",
-    /#\/sentences\?language=lang_amis/,
+    /#\/lookup\?type=sentences&language=lang_amis/,
   );
 
   const response = await page.request.get("api/v1/corpora.json");
@@ -129,7 +141,7 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   page.on("response", (response) => {
     if (response.url().includes("/data/search/")) searchAssets.push(response.url());
   });
-  await page.goto("#/sentences");
+  await page.goto("#/lookup?type=sentences");
   await selectSmallAmisScope(page);
   await page.getByLabel("Word, phrase, or translation").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
@@ -151,7 +163,11 @@ test("local corpus search reads a compressed shard", async ({page}) => {
 test("dictionary lookup returns cited word meanings separately from sentence search", async ({
   page,
 }) => {
-  await page.goto("#/dictionary");
+  await page.goto("#/lookup?type=dictionary");
+  await expect(page.getByRole("button", {name: "Dictionary lookup"})).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await selectSmallAmisScope(page);
   await page.getByLabel("Word", {exact: true}).fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
@@ -161,9 +177,15 @@ test("dictionary lookup returns cited word meanings separately from sentence sea
   await expect(entry).toContainText("FIVE");
   await expect(entry.getByRole("link", {name: "View sentences"})).toHaveAttribute(
     "href",
-    /#\/sentences\?q=lima/,
+    /#\/lookup\?type=sentences&q=lima/,
   );
   await expect(entry.getByRole("button", {name: "Save word"})).toBeEnabled();
+  await entry.getByRole("link", {name: "View sentences"}).click();
+  await expect(page.getByRole("button", {name: "Sentence lookup"})).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator(".result-card").first()).toBeVisible();
 });
 
 test("scoped RE2 search runs without weakening the content security policy", async ({
@@ -171,7 +193,7 @@ test("scoped RE2 search runs without weakening the content security policy", asy
 }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  await page.goto("#/sentences");
+  await page.goto("#/lookup?type=sentences");
   await selectSmallAmisScope(page);
   await page.getByRole("radio", {name: "Scoped RE2"}).check();
   await page.getByLabel("Word, phrase, or translation").fill("li.a");
@@ -220,7 +242,7 @@ test("dataset recipes and worker summaries are available without a backend", asy
 test("lazy DuckDB-Wasm export creates a real Parquet file", async ({page}, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Large export smoke test runs on desktop");
   test.setTimeout(120_000);
-  await page.goto("#/sentences");
+  await page.goto("#/lookup?type=sentences");
   await selectSmallAmisScope(page);
   await page.getByLabel("Word, phrase, or translation").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
@@ -264,7 +286,7 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByRole("heading", {level: 1})).toContainText("探索語料庫");
   await expect(page.getByPlaceholder("篩選語言…")).toBeVisible();
 
-  await page.goto("#/sentences");
+  await page.goto("#/lookup?type=sentences");
   await expect(page.getByLabel("單詞、片語或翻譯")).toBeVisible();
   await page.goto("#/research");
   await page.getByRole("tab", {name: "資料集產生器"}).click();
@@ -309,11 +331,7 @@ test("primary navigation and research tabs are keyboard operable", async ({
     await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(
-      primaryNavigation.getByRole("link", {name: "Dictionary", exact: true}),
-    ).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(
-      primaryNavigation.getByRole("link", {name: "Sentences", exact: true}),
+      primaryNavigation.getByRole("link", {name: "Lookup", exact: true}),
     ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(primaryNavigation.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
@@ -354,7 +372,7 @@ test("browser transfer, search latency, and memory stay within release budgets",
     testInfo.project.name !== "desktop-chromium",
     "Release budgets are measured once in desktop Chromium",
   );
-  await page.goto("#/sentences");
+  await page.goto("#/lookup?type=sentences");
   const resources = await page.evaluate(() => {
     const entries = [
       ...performance.getEntriesByType("navigation"),

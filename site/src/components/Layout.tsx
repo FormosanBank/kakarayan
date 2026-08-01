@@ -6,8 +6,7 @@ import type {AppData} from "../types";
 import {Diagnostics} from "./Diagnostics";
 
 const navigation = [
-  ["/dictionary", "nav.dictionary"],
-  ["/sentences", "nav.sentences"],
+  ["/lookup", "nav.lookup"],
   ["/learn", "nav.learn"],
   ["/research", "nav.research"],
   ["/downloads", "nav.download"],

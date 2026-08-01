@@ -53,10 +53,10 @@ export function LanguageDetail({
         } · ISO 639-3 ${language.iso639_3}`}
       />
       <div className="detail-actions">
-        <Link className="button button--primary" to={`/dictionary?language=${language.id}`}>
+        <Link className="button button--primary" to={`/lookup?type=dictionary&language=${language.id}`}>
           {tx("Dictionary", "單詞查詢")}
         </Link>
-        <Link className="button button--quiet" to={`/sentences?language=${language.id}`}>
+        <Link className="button button--quiet" to={`/lookup?type=sentences&language=${language.id}`}>
           {tx("Sentence search", "例句搜尋")}
         </Link>
         <Link className="button button--quiet" to={`/downloads?language=${language.id}`}>
@@ -121,7 +121,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           <Link
             className="button button--primary"
             key={language.id}
-            to={`/sentences?language=${language.id}&corpus=${corpus.id}`}
+            to={`/lookup?type=sentences&language=${language.id}&corpus=${corpus.id}`}
           >
             {tx("Search", "搜尋")} {language.name}
           </Link>

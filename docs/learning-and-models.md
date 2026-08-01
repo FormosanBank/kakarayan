@@ -14,13 +14,15 @@ The learner interface separates three kinds of material:
 The interface does not present an attestation as a universal grammar rule and does not
 present model output as a correction or community endorsement.
 
-## Dictionary and sentence search
+## Dictionary and sentence lookup
 
-Dictionary lookup and sentence search are separate tools over the same immutable shards.
-The dictionary matches a word or morpheme and shows word-level glosses or single-word
-record translations. Sentence search returns records containing the selected word or
-matching another chosen tier. Both tools let the user choose a Formosan source language
-and an available translation language for that exact scope.
+Dictionary meanings and sentence search share one lookup page and one explicit lookup-type
+toggle over the same immutable shards. Dictionary mode matches a word or morpheme and shows
+word-level glosses or single-word record translations. Sentences mode returns records
+containing the selected word or matching another chosen tier. Both modes let the user
+choose a Formosan source language and an available translation language for that exact
+scope. Legacy dictionary and sentence URLs remain compatible, but new links use the unified
+lookup route.
 
 Results show:
 

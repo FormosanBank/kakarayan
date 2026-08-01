@@ -12,8 +12,7 @@ export type Locale = "en" | "zh-Hant";
 
 const messages = {
   en: {
-    "nav.dictionary": "Dictionary",
-    "nav.sentences": "Sentences",
+    "nav.lookup": "Lookup",
     "nav.learn": "Learn",
     "nav.research": "Research",
     "nav.explore": "Explore",
@@ -85,8 +84,7 @@ const messages = {
       "Kakarayan is the public search, learning, download, and API interface for FormosanBank.",
   },
   "zh-Hant": {
-    "nav.dictionary": "單詞",
-    "nav.sentences": "例句",
+    "nav.lookup": "查詢",
     "nav.learn": "學習",
     "nav.research": "研究",
     "nav.explore": "探索",

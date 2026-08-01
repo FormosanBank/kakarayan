@@ -140,6 +140,7 @@ export function SearchTool({
       setSearched(false);
       if (updateUrl) {
         setParams({
+          type: kind,
           q: query.trim(),
           language: languageId,
           target: targetLanguage,

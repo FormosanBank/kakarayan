@@ -22,8 +22,93 @@
   max-width: 900px;
 }
 
-.page-wrap--lookup {
-  max-width: 1180px;
+.lookup-page > .page-intro {
+  max-width: 920px;
+  margin-bottom: 2.4rem;
+}
+
+.lookup-kind-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-bottom: 1rem;
+  border: 1px solid var(--line-dark);
+  background: var(--line-dark);
+}
+
+.lookup-kind-toggle button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  min-height: 116px;
+  padding: 1.25rem 1.4rem;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-dark);
+  background: var(--paper-light);
+  align-items: center;
+  text-align: left;
+  transition: color 160ms ease, background 160ms ease;
+}
+
+.lookup-kind-toggle button > span:first-child {
+  display: grid;
+  width: 48px;
+  aspect-ratio: 1;
+  border: 1px solid var(--line-dark);
+  place-items: center;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+}
+
+.lookup-kind-toggle strong,
+.lookup-kind-toggle small {
+  display: block;
+}
+
+.lookup-kind-toggle strong {
+  font-family: var(--serif);
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  line-height: 1;
+}
+
+.lookup-kind-toggle small {
+  margin-top: 0.45rem;
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.lookup-kind-toggle__state {
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.61rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.lookup-kind-toggle button[aria-pressed="true"] {
+  color: var(--paper-light);
+  background: var(--ink);
+}
+
+.lookup-kind-toggle button[aria-pressed="true"] > span:first-child {
+  border-color: var(--gold);
+  color: var(--ink-dark);
+  background: var(--gold);
+}
+
+.lookup-kind-toggle button[aria-pressed="true"] small,
+.lookup-kind-toggle button[aria-pressed="true"] .lookup-kind-toggle__state {
+  color: rgb(255 254 250 / 68%);
+}
+
+.lookup-kind-toggle button:hover:not([aria-pressed="true"]) {
+  background: var(--paper-deep);
+}
+
+.studio-panel > .lookup-kind-toggle {
+  margin: -1.5rem -1.5rem 1.25rem;
+  border-width: 0 0 1px;
 }
 
 .page-wrap--prose > section {
@@ -884,4 +969,10 @@
 
 .audio-evidence audio {
   width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lookup-kind-toggle button {
+    transition: none;
+  }
 }
