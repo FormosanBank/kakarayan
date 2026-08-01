@@ -1,15 +1,107 @@
-import {useState} from "react";
+import {LazyMotion, domAnimation, useReducedMotion} from "motion/react";
+import * as m from "motion/react-m";
 
-import {PageIntro, Stat} from "../components/Layout";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData} from "../types";
 
+const SIGNAL_POSITIONS = [
+  [50, 8],
+  [74, 15],
+  [91, 37],
+  [88, 66],
+  [68, 87],
+  [41, 92],
+  [15, 75],
+  [8, 47],
+  [24, 21],
+  [52, 22],
+] as const;
+
+function CorpusSignal({languages, label}: {languages: AppData["languages"]; label: string}) {
+  const reduceMotion = useReducedMotion();
+  const visibleLanguages = languages.slice(0, SIGNAL_POSITIONS.length);
+
+  return (
+    <div className="corpus-signal" aria-hidden="true">
+      <svg className="corpus-signal__rings" viewBox="0 0 100 100">
+        {[18, 29, 40].map((radius, index) => (
+          <m.circle
+            key={radius}
+            cx="50"
+            cy="50"
+            r={radius}
+            initial={reduceMotion ? false : {opacity: 0, pathLength: 0}}
+            animate={{opacity: 1, pathLength: 1}}
+            transition={{duration: 1.1, delay: index * 0.16, ease: "easeOut"}}
+          />
+        ))}
+        <m.path
+          d="M 9 58 C 23 35, 38 26, 52 29 S 77 49, 91 42"
+          initial={reduceMotion ? false : {pathLength: 0}}
+          animate={{pathLength: 1}}
+          transition={{duration: 1.35, delay: 0.35, ease: "easeInOut"}}
+        />
+      </svg>
+
+      <m.div
+        className="corpus-signal__sweep"
+        initial={reduceMotion ? false : {opacity: 0, rotate: -45}}
+        animate={reduceMotion ? {opacity: 0.2, rotate: 0} : {opacity: [0, 0.3, 0.18], rotate: 315}}
+        transition={
+          reduceMotion
+            ? {duration: 0}
+            : {opacity: {duration: 1.2}, rotate: {duration: 18, repeat: Infinity, ease: "linear"}}
+        }
+      />
+
+      <m.div
+        className="corpus-signal__center"
+        initial={reduceMotion ? false : {opacity: 0, scale: 0.82}}
+        animate={{opacity: 1, scale: 1}}
+        transition={{duration: 0.55, delay: 0.2}}
+      >
+        <strong>{languages.length}</strong>
+        <span>{label}</span>
+      </m.div>
+
+      {visibleLanguages.map((language, index) => {
+        const position = SIGNAL_POSITIONS[index];
+        if (!position) return null;
+        return (
+          <span
+            className={`corpus-signal__label ${index > 6 ? "corpus-signal__label--secondary" : ""}`}
+            key={language.id}
+            style={{left: `${position[0]}%`, top: `${position[1]}%`}}
+          >
+            <m.span
+              initial={reduceMotion ? false : {opacity: 0, y: 7}}
+              animate={
+                reduceMotion
+                  ? {opacity: 1, y: 0}
+                  : {opacity: 1, y: index % 2 === 0 ? [0, -3, 0] : [0, 3, 0]}
+              }
+              transition={
+                reduceMotion
+                  ? {duration: 0}
+                  : {
+                      opacity: {duration: 0.4, delay: 0.45 + index * 0.06},
+                      y: {duration: 4.5 + index * 0.18, delay: 1, repeat: Infinity, ease: "easeInOut"},
+                    }
+              }
+            >
+              {language.name}
+            </m.span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Home({data}: {data: AppData}) {
-  const {t, tx} = useI18n();
-  const amis = data.languages.find((language) => language.name === "Amis");
-  const [query, setQuery] = useState("");
-  const [languageId, setLanguageId] = useState(amis?.id ?? data.languages[0]?.id ?? "");
+  const {number, t, tx} = useI18n();
+  const reduceMotion = useReducedMotion();
   const counts = data.corpora.reduce(
     (total, corpus) => {
       total.sentences += corpus.counts.sentences ?? 0;
@@ -19,92 +111,142 @@ export function Home({data}: {data: AppData}) {
     },
     {sentences: 0, tokens: 0, audio: 0},
   );
-
-  function openLookup(path: "/dictionary" | "/sentences") {
-    const params = new URLSearchParams({language: languageId});
-    if (query.trim()) params.set("q", query.trim());
-    window.location.hash = `${path}?${params}`;
-  }
+  const stats = [
+    [data.languages.length, tx("Languages", "語言")],
+    [data.corpora.length, tx("Corpora", "語料庫")],
+    [counts.sentences, tx("Sentences", "句子")],
+    [counts.tokens, tx("Tokens", "詞元")],
+    [counts.audio, tx("Audio references", "音訊參照")],
+  ] as const;
+  const audiences = [
+    {
+      title: tx("For learners", "給學習者"),
+      description: tx(
+        "Save a dictionary entry or sentence, then review it in your private local deck.",
+        "儲存單詞或例句後，在私人本機字卡中複習。",
+      ),
+      link: "/learn",
+      action: tx("Open learning tools", "開啟學習工具"),
+      tone: "coral",
+    },
+    {
+      title: tx("For linguists", "給語言學家"),
+      description: tx(
+        "Filter corpus records and export reproducible research datasets.",
+        "篩選語料記錄並匯出可重現的研究資料集。",
+      ),
+      link: "/research",
+      action: tx("Open research tools", "開啟研究工具"),
+      tone: "gold",
+    },
+    {
+      title: tx("For developers", "給開發者"),
+      description: tx(
+        "Use versioned static APIs and JavaScript, Python, or R clients.",
+        "使用具版本的靜態 API 與 JavaScript、Python 或 R 用戶端。",
+      ),
+      link: "/developers",
+      action: tx("Read API docs", "查看 API 文件"),
+      tone: "moss",
+    },
+  ] as const;
+  const tools = [
+    ["/dictionary", tx("Dictionary", "單詞查詢"), tx("word meanings", "詞義")],
+    ["/sentences", tx("Sentences", "例句搜尋"), tx("usage in context", "語境用法")],
+    ["/learn", tx("Learning tools", "學習工具"), tx("deck, MT, and ASR", "字卡、翻譯與語音")],
+    ["/research", tx("Research", "研究工具"), tx("datasets and summaries", "資料集與摘要")],
+    ["/downloads", tx("Downloads", "資料下載"), tx("prepared formats", "準備好的格式")],
+    ["/developers", tx("API and clients", "API 與用戶端"), tx("build with the bank", "使用語料庫開發")],
+  ] as const;
 
   return (
-    <>
-      <section className="hero">
-        <div className="hero__copy">
-          <PageIntro eyebrow={t("home.eyebrow")} title={t("home.title")} lede={t("home.lede")} />
-          <form
-            className="home-lookup"
-            onSubmit={(event) => {
-              event.preventDefault();
-              openLookup("/dictionary");
-            }}
-          >
-            <label className="field field--query">
-              {tx("Start a lookup", "開始查詢")}
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={tx("Type a word or phrase", "輸入單詞或片語")}
-              />
-            </label>
-            <label className="field">
-              {tx("Language", "語言")}
-              <select value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
-                {data.languages.map((language) => (
-                  <option key={language.id} value={language.id}>{language.name}</option>
-                ))}
-              </select>
-            </label>
-            <div className="button-row">
-              <button className="button button--primary" type="submit">{t("home.learn")}</button>
-              <button className="button button--quiet" type="button" onClick={() => openLookup("/sentences")}>
-                {t("home.search")}
-              </button>
-            </div>
-          </form>
-          <p className="privacy-line">
-            <span aria-hidden="true">●</span>
-            {tx("Search runs on this device.", "搜尋在此裝置上執行。")}
+    <LazyMotion features={domAnimation} strict>
+      <section className="home-hero">
+        <m.div
+          className="home-hero__copy"
+          initial={reduceMotion ? false : {opacity: 0, y: 18}}
+          animate={{opacity: 1, y: 0}}
+          transition={{duration: 0.65, ease: "easeOut"}}
+        >
+          <p className="eyebrow">{t("home.eyebrow")}</p>
+          <h1>{t("home.title")}</h1>
+          <p className="home-hero__lede">{t("home.lede")}</p>
+          <nav className="home-hero__actions" aria-label={tx("Start here", "從這裡開始")}>
+            <Link className="button button--primary" to="/dictionary">
+              {tx("Dictionary", "單詞查詢")}
+            </Link>
+            <Link className="button button--paper" to="/sentences">
+              {tx("Sentence search", "例句搜尋")}
+            </Link>
+            <Link className="home-hero__text-link" to="/downloads">
+              {tx("Download data", "下載資料")} <span aria-hidden="true">↗</span>
+            </Link>
+          </nav>
+          <p className="home-hero__release">
+            <span>{tx("Current release", "目前版本")}</span>
+            <code>{data.meta.release_id}</code>
           </p>
-        </div>
-        <nav className="hero-directory" aria-label={tx("Main tools", "主要工具")}>
-          <p>{tx("OPEN A TOOL", "開啟工具")}</p>
-          <Link to="/dictionary"><span>01</span><strong>{tx("Dictionary", "單詞查詢")}</strong><small>{tx("word to translation", "單詞到翻譯")}</small></Link>
-          <Link to="/sentences"><span>02</span><strong>{tx("Sentences", "例句搜尋")}</strong><small>{tx("word in context", "語境中的單詞")}</small></Link>
-          <Link to="/research"><span>03</span><strong>{tx("Research", "研究工具")}</strong><small>{tx("datasets and summaries", "資料集與摘要")}</small></Link>
-          <Link to="/downloads"><span>04</span><strong>{tx("Downloads", "資料下載")}</strong><small>{tx("XML, tables, CLDF, and more", "XML、表格、CLDF 等格式")}</small></Link>
-        </nav>
+        </m.div>
+        <CorpusSignal languages={data.languages} label={tx("languages", "種語言")} />
       </section>
 
-      <section className="collection-band">
-        <div className="section-heading">
-          <p className="eyebrow">{t("home.collection")}</p>
-          <h2>{data.meta.release_id}</h2>
+      <section className="home-stats" aria-labelledby="home-stats-title">
+        <div className="home-section-heading">
+          <p className="eyebrow">{tx("THE PROJECT", "專案概況")}</p>
+          <h2 id="home-stats-title">{tx("FormosanBank at a glance", "FormosanBank 一覽")}</h2>
         </div>
-        <div className="stats-grid">
-          <Stat value={data.languages.length} label={tx("languages", "語言")} tone="ink" />
-          <Stat value={data.corpora.length} label={tx("corpora", "語料庫")} tone="coral" />
-          <Stat value={counts.sentences} label={tx("sentences", "句子")} tone="gold" />
-          <Stat value={counts.tokens} label={tx("tokens", "詞元")} tone="moss" />
+        <div className="home-stats__grid">
+          {stats.map(([value, label]) => (
+            <div className="home-stat" key={label}>
+              <strong>{number(value)}</strong>
+              <span>{label}</span>
+            </div>
+          ))}
         </div>
       </section>
 
-      <section className="home-notes" aria-label={tx("About this release", "關於此版本")}>
-        <div>
-          <strong>{tx("For learners", "給學習者")}</strong>
-          <p>{tx("Save a dictionary entry or sentence, then review it in your private local deck.", "儲存單詞或例句後，在私人本機字卡中複習。")}</p>
-          <Link to="/learn">{tx("Open learning tools", "開啟學習工具")}</Link>
+      <section className="home-audiences" aria-labelledby="home-audiences-title">
+        <div className="home-section-heading home-section-heading--split">
+          <div>
+            <p className="eyebrow">{tx("CHOOSE YOUR ROUTE", "選擇入口")}</p>
+            <h2 id="home-audiences-title">{tx("One corpus bank, three ways in.", "同一座語料庫，三種使用方式。")}</h2>
+          </div>
+          <p>{tx("Everything starts with public, cited corpus data.", "所有工具都以公開且可引用的語料為基礎。")}</p>
         </div>
-        <div>
-          <strong>{tx("For linguists", "給語言學家")}</strong>
-          <p>{tx("Filter corpus records and export reproducible research datasets.", "篩選語料記錄並匯出可重現的研究資料集。")}</p>
-          <Link to="/research">{tx("Open research tools", "開啟研究工具")}</Link>
-        </div>
-        <div>
-          <strong>{tx("For developers", "給開發者")}</strong>
-          <p>{tx("Use versioned static APIs and JavaScript, Python, or R clients.", "使用具版本的靜態 API 與 JavaScript、Python 或 R 用戶端。")}</p>
-          <Link to="/developers">{tx("Read API docs", "查看 API 文件")}</Link>
+        <div className="home-audience-grid">
+          {audiences.map((audience) => (
+            <article
+              className={`home-audience-card home-audience-card--${audience.tone}`}
+              key={audience.link}
+            >
+              <span className="home-audience-card__mark" aria-hidden="true" />
+              <h3>{audience.title}</h3>
+              <p>{audience.description}</p>
+              <Link to={audience.link}>
+                {audience.action} <span aria-hidden="true">→</span>
+              </Link>
+            </article>
+          ))}
         </div>
       </section>
-    </>
+
+      <nav className="home-tools" aria-labelledby="home-tools-title">
+        <div className="home-section-heading">
+          <p className="eyebrow">{tx("ALL TOOLS", "全部工具")}</p>
+          <h2 id="home-tools-title">{tx("Go straight to the work.", "直接開始使用。")}</h2>
+        </div>
+        <div className="home-tools__grid">
+          {tools.map(([to, label, description]) => (
+            <Link key={to} to={to}>
+              <span>
+                <strong>{label}</strong>
+                <small>{description}</small>
+              </span>
+              <span aria-hidden="true">↗</span>
+            </Link>
+          ))}
+        </div>
+      </nav>
+    </LazyMotion>
   );
 }

@@ -12,7 +12,7 @@ interface CorpusSummary {
 }
 
 const routes = [
-  ["", /Find words, sentences, and research data/],
+  ["", /FormosanBank, ready to use/],
   ["#/dictionary", /Dictionary/],
   ["#/sentences", /Sentence search/],
   ["#/learn", /Learn from corpus examples/],
@@ -50,6 +50,51 @@ test("all primary routes load a consistent release", async ({page}) => {
     await expect(page.getByRole("heading", {level: 1, name: heading})).toBeVisible();
     await expect(page.locator(".release-pill")).toHaveText(/^fb-\d{8}-[0-9a-f]{8}$/);
   }
+});
+
+test("landing page foregrounds audiences, project stats, and direct tool access", async ({
+  page,
+}) => {
+  await page.goto("");
+  const main = page.locator("#main");
+  await expect(main.getByRole("heading", {name: "FormosanBank at a glance"})).toBeVisible();
+  await expect(main.getByText("For learners", {exact: true})).toBeVisible();
+  await expect(
+    main.getByText(
+      "Save a dictionary entry or sentence, then review it in your private local deck.",
+    ),
+  ).toBeVisible();
+  await expect(main.getByRole("link", {name: /Open learning tools/})).toHaveAttribute(
+    "href",
+    "#/learn",
+  );
+  await expect(main.getByRole("link", {name: /Open research tools/})).toHaveAttribute(
+    "href",
+    "#/research",
+  );
+  await expect(main.getByRole("link", {name: /Read API docs/})).toHaveAttribute(
+    "href",
+    "#/developers",
+  );
+  await expect(main.locator(".corpus-signal")).toBeVisible();
+  await expect(main.locator(".home-stat")).toHaveCount(5);
+  await expect(main.locator(".home-tools__grid > a")).toHaveCount(6);
+  const geometry = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(geometry.document).toBe(geometry.viewport);
+});
+
+test("landing animation respects reduced-motion preferences", async ({page}) => {
+  await page.emulateMedia({reducedMotion: "reduce"});
+  await page.goto("");
+  const sweep = page.locator(".corpus-signal__sweep");
+  await expect(sweep).toBeVisible();
+  const firstTransform = await sweep.evaluate((element) => getComputedStyle(element).transform);
+  await page.waitForTimeout(250);
+  const secondTransform = await sweep.evaluate((element) => getComputedStyle(element).transform);
+  expect(secondTransform).toBe(firstTransform);
 });
 
 test("language and corpus catalogue entries have stable detail routes", async ({page}) => {
@@ -213,7 +258,7 @@ test("Traditional Chinese navigation updates content and document language", asy
   await page.getByLabel("Interface language").selectOption("zh-Hant");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hant");
   await expect(page.getByRole("heading", {level: 1})).toContainText(
-    "查單詞、找例句、下載研究資料",
+    "FormosanBank，開箱即用",
   );
   await page.goto("#/explore");
   await expect(page.getByRole("heading", {level: 1})).toContainText("探索語料庫");
@@ -240,7 +285,7 @@ test("primary navigation and research tabs are keyboard operable", async ({
   page,
 }, testInfo) => {
   await page.goto("");
-  await expect(page.getByRole("heading", {level: 1, name: /Find words/})).toBeVisible();
+  await expect(page.getByRole("heading", {level: 1, name: /FormosanBank, ready/})).toBeVisible();
   const skipLink = page.getByRole("link", {name: "Skip to content"});
   if (testInfo.project.name === "desktop-webkit") {
     // Desktop Safari follows the system "Press Tab to highlight" preference.
@@ -253,8 +298,9 @@ test("primary navigation and research tabs are keyboard operable", async ({
   await expect(page.locator("#main")).toBeFocused();
 
   await page.goto("");
-  await expect(page.getByRole("heading", {level: 1, name: /Find words/})).toBeVisible();
-  const researchLink = page.getByRole("link", {name: "Research", exact: true}).first();
+  await expect(page.getByRole("heading", {level: 1, name: /FormosanBank, ready/})).toBeVisible();
+  const primaryNavigation = page.getByRole("navigation", {name: "Primary"});
+  const researchLink = primaryNavigation.getByRole("link", {name: "Research", exact: true});
   if (testInfo.project.name === "desktop-webkit") {
     await researchLink.focus();
   } else {
@@ -262,11 +308,15 @@ test("primary navigation and research tabs are keyboard operable", async ({
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", {name: "Dictionary", exact: true})).toBeFocused();
+    await expect(
+      primaryNavigation.getByRole("link", {name: "Dictionary", exact: true}),
+    ).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", {name: "Sentences", exact: true})).toBeFocused();
+    await expect(
+      primaryNavigation.getByRole("link", {name: "Sentences", exact: true}),
+    ).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
+    await expect(primaryNavigation.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
     await page.keyboard.press("Tab");
   }
   await expect(researchLink).toBeFocused();
