@@ -71,13 +71,15 @@ uv sync --locked --all-groups
 npm ci --prefix site
 ```
 
-## Run the static site with invented data
+## Quick local preview with invented data
 
 Use a new output path for every publisher run. The publisher refuses to overwrite existing
-output.
+output. Include the small prepared packages so every public tool has data to display.
 
 ```bash
-uv run python -m publisher.fixture_cli --output build/fixture-release
+uv run python -m publisher.fixture_cli \
+  --output build/fixture-release \
+  --include-prepared
 uv run python -m publisher.verify_release --release build/fixture-release
 uv run python -m publisher.assemble_site \
   --release build/fixture-release \
@@ -89,6 +91,11 @@ npm --prefix site run preview -- --host 127.0.0.1
 
 Open `http://127.0.0.1:4173/kakarayan/`. The `/kakarayan/` subpath matches the production
 GitHub Pages project path.
+
+This fixture is intentionally tiny. It contains two invented Amis sentences in
+`TestCorpus`. Try `lima`, `waco`, `toki`, or `rima` in Lookup or Learn. In Research, choose
+Amis before previewing or exporting. Downloads contains small synthetic packages for
+testing the interface, not FormosanBank research data.
 
 To rebuild locally, remove only the generated, ignored output directories you intend to
 replace: `build/fixture-release`, `site/public/api`, `site/public/data`, and `site/dist`.
@@ -126,7 +133,21 @@ uv run python -m publisher.cli \
   --source-commit "$SOURCE_COMMIT" \
   --refresh-models \
   --site-only
+
+uv run python -m publisher.verify_release --release build/pages-release
+uv run python -m publisher.assemble_site \
+  --release build/pages-release \
+  --public site/public \
+  --download-manifest build/data-release/release-manifest.json
+npm --prefix site run build
+uv run python -m publisher.verify_site --site site/dist
+npm --prefix site run preview -- --host 127.0.0.1
 ```
+
+Open `http://127.0.0.1:4173/kakarayan/` to use the complete public corpus locally. This
+profile is much larger than the fixture because it generates the browser search indexes
+for every public corpus. It still needs no local server beyond Vite's static preview and no
+paid backend.
 
 Publication workflows additionally require reviewed, machine-readable rights decisions.
 Every corpus discovered in the canonical public FormosanBank checkout receives a reviewed
