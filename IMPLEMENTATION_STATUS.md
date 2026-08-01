@@ -196,6 +196,13 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   Traditional Chinese mobile learner experience.
 - [x] Open draft pull request
   [#1](https://github.com/FormosanBank/kakarayan/pull/1) and leave it unmerged.
+- [x] Commit and push the final license, public-corpus policy, lookup separation, cited-card
+  flow, public MT/ASR configuration, interface remediation, screenshots, tests, and
+  operations documentation to the same draft pull request.
+- [x] Replace the stale pull request description with the delivered scope, current rights
+  behavior, validation evidence, and administrator launch checklist.
+- [x] Complete both final-branch GitHub Actions runs successfully, including PostgreSQL,
+  Docker, browser, client, dependency-availability, and workflow gates.
 
 ## Final full-data evidence
 
@@ -281,7 +288,8 @@ Screenshots:
 
 ## Next slice
 
-Commit and push the completed platform changes, update the draft pull request, and fix every
-branch-owned CI failure. Then a repository administrator can merge the PR, enable Pages and
-the dependency graph, publish the first approved data release, and run the guarded Pages
-deployment in the order documented in [`docs/publication.md`](docs/publication.md).
+All branch-owned implementation, verification, documentation, publishing, pull request, and
+CI work is complete. A repository administrator must now merge the reviewed pull request,
+enable Pages and the dependency graph, publish the first approved data release, and run the
+guarded Pages deployment in the order documented in
+[`docs/publication.md`](docs/publication.md).
