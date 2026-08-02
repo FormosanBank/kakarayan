@@ -209,6 +209,19 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   behavior, validation evidence, and administrator launch checklist.
 - [x] Complete both final-branch GitHub Actions runs successfully, including PostgreSQL,
   Docker, browser, client, dependency-availability, and workflow gates.
+- [x] Connect learner lookup, saved material, pronunciation, MT, and orthography through a
+  shared language and dialect scope with visible per-language capability coverage.
+- [x] Let a cited sentence open directly as the pronunciation reference, support manual
+  deck cards with tags and direction, and keep saved MT results in a clearly labelled,
+  uncited machine-draft deck.
+- [x] Expand the dataset builder to combine languages and corpora, filter by dialect and
+  required linguistic tiers, update counts and sizes from real samples, disclose the
+  selected schema and rights, and preserve the complete selection in recipes.
+- [x] Add concordance dialect and evidence-tier filters before match counting, stable
+  result ordering, shareable filter state, and focused end-to-end coverage.
+- [x] Add an executable static API explorer, curl example, export field contract, format
+  semantics, model metadata-completeness counts, language coverage filtering, and direct
+  model-to-learner links.
 
 ## Final full-data evidence
 
@@ -244,8 +257,8 @@ repositories or corpus sources were used.
 - Mypy: pass across 78 source files
 - Publisher tests: 23 pass
 - API and Python client tests: 11 pass
-- Frontend unit and component tests: 43 pass across 8 files
-- Full fixture browser matrix: 59 pass and 13 intentional project-specific skips across
+- Frontend unit and component tests: 48 pass across 10 files
+- Full fixture browser matrix: 79 pass and 13 intentional project-specific skips across
   desktop Chromium, mobile Chromium, Firefox, and WebKit
 - Full-data desktop Chromium: 14 pass, including measured budgets, offline local study,
   migration/backup/restore, microphone denial, deletion, keyboard, and accessibility
@@ -294,8 +307,8 @@ Screenshots:
 
 ## Next slice
 
-All branch-owned implementation, verification, documentation, publishing, pull request, and
-CI work is complete. A repository administrator must now merge the reviewed pull request,
-enable Pages and the dependency graph, publish the first approved data release, and run the
-guarded Pages deployment in the order documented in
-[`docs/publication.md`](docs/publication.md).
+The current product-hardening pass is complete on the feature branch and remains bundled in
+draft pull request #1. No commit was made to `main`. The remaining launch work is external:
+a repository administrator must review and merge the pull request, enable Pages and the
+dependency graph, publish the first approved data release, and run the guarded Pages
+deployment in the order documented in [`docs/publication.md`](docs/publication.md).
