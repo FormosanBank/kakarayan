@@ -274,6 +274,23 @@ def build_prepared_formats(
         source_commit=source_commit,
         rights=rights,
     )
+    rights_by_corpus = {
+        str(entry["corpus"]): str(entry["id"])
+        for entry in cast(list[dict[str, Any]], rights["entries"])
+    }
+    with open_release(database) as connection:
+        corpus_rights = {
+            str(corpus_id): rights_by_corpus[str(corpus_name)]
+            for corpus_id, corpus_name in connection.execute(
+                "SELECT DISTINCT corpus_id, "
+                "substr(source_path, 9, instr(substr(source_path, 9), '/') - 1) "
+                "FROM texts"
+            )
+        }
+    for partition in cast(list[dict[str, Any]], jsonl_manifest["partitions"]):
+        assignments[f"prepared/{partition['path']}"] = [
+            corpus_rights[str(partition["corpus_id"])]
+        ]
     _package_metadata(prepared)
     (output / "search" / "sentences.jsonl").unlink()
     for path in prepared.rglob("*"):

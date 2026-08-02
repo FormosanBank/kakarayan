@@ -987,7 +987,7 @@ def _artifact_facets(
         export_format = "tsv"
     elif "csv" in name:
         export_format = "csv"
-    elif "jsonl" in name:
+    elif "jsonl" in name or "/jsonl/" in relative:
         export_format = "jsonl"
     elif "text" in name:
         export_format = "text"

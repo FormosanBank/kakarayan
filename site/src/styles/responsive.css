@@ -186,8 +186,20 @@
     gap: 12px;
   }
 
-  .artifact-list > article > div:last-child {
-    justify-items: start;
+  .artifact-card__header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .artifact-card__status {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    text-align: left;
+  }
+
+  .rights-list {
+    grid-template-columns: 1fr;
   }
 
   .search-form,

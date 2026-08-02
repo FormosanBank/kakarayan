@@ -278,6 +278,28 @@ test("learning content fails closed when no reviewed lesson is published", async
   await expect(page.getByText(/Community-authored notes will appear here after review/)).toBeVisible();
 });
 
+test("prepared downloads are readable, filterable, and hide internal blocker codes", async ({
+  page,
+}) => {
+  await page.goto("#/downloads");
+  const main = page.locator("#main");
+  const cards = main.locator(".artifact-card");
+  await expect(cards.first()).toBeVisible();
+  expect(await cards.count()).toBeLessThanOrEqual(24);
+  await expect(cards.first().getByRole("heading", {level: 2})).not.toHaveText(/\.gz$|\.zip$/);
+  await expect(main).not.toContainText(/rights_[a-z0-9_]+/);
+
+  const unavailable = cards.first().getByText("Why is this unavailable?");
+  if ((await unavailable.count()) > 0) {
+    await unavailable.click();
+    await expect(cards.first()).toContainText(/held from release/);
+  }
+
+  await page.getByRole("combobox", {name: "Format"}).selectOption("xml");
+  await expect(main.getByRole("button", {name: "Clear filters"})).toBeVisible();
+  await expect(cards.first().locator(".file-mark")).toHaveText("XML");
+});
+
 test("Traditional Chinese navigation updates content and document language", async ({page}) => {
   await page.goto("");
   await page.getByLabel("Interface language").selectOption("zh-Hant");
@@ -293,7 +315,7 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByLabel("單詞、片語或翻譯")).toBeVisible();
   await page.goto("#/research");
   await page.getByRole("tab", {name: "資料集產生器"}).click();
-  await expect(page.getByRole("heading", {name: "建立有界限的語言學資料集"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "選擇記錄"})).toBeVisible();
 
   await page.goto("#/learn");
   await expect(page.getByRole("tab", {name: /學習字卡/})).toBeVisible();
@@ -301,9 +323,9 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByRole("heading", {name: "發音錄音工具"})).toBeVisible();
 
   await page.goto("#/downloads");
-  const pendingRights = page.getByText("權利審查仍在進行中。");
+  const pendingRights = page.getByText("部分套件尚未發布。");
   if ((await pendingRights.count()) > 0) await expect(pendingRights).toBeVisible();
-  await expect(page.getByRole("heading", {name: "格式指南"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "選擇格式"})).toBeVisible();
 });
 
 test("primary navigation and research tabs are keyboard operable", async ({
@@ -371,7 +393,7 @@ test("primary navigation and research tabs are keyboard operable", async ({
   await page.keyboard.press("Enter");
   await expect(builderTab).toHaveAttribute("aria-selected", "true");
   await expect(
-    page.getByRole("heading", {name: "Build a bounded linguistic dataset"}),
+    page.getByRole("heading", {name: "Choose the records"}),
   ).toBeVisible();
 });
 
