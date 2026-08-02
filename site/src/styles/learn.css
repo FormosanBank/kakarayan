@@ -1,173 +1,174 @@
 .learner-page > .page-intro {
-  margin-bottom: 2rem;
+  margin-bottom: 28px;
 }
 
 .privacy-banner {
   display: flex;
-  gap: 1rem;
+  gap: 10px;
   align-items: center;
-  padding: 1rem 1.3rem;
-  margin-bottom: 1rem;
-  color: var(--ink-dark);
-  border: 1px solid #b9ccb7;
-  background: #edf4eb;
+  padding: 11px 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--body);
+  background: var(--surface);
 }
 
 .privacy-banner > span {
-  color: var(--moss);
-  font-size: 0.65rem;
+  color: #245c37;
+  font-size: 10px;
 }
 
 .privacy-banner p {
   margin: 0;
-  font-size: 0.86rem;
-}
-
-.privacy-banner strong {
-  display: inline;
+  font-size: 13px;
 }
 
 .studio-tabs {
   display: flex;
-  gap: 0;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px;
   overflow-x: auto;
-  border-bottom: 1px solid var(--line-dark);
-  background: transparent;
+  border-radius: 999px;
+  background: var(--surface);
 }
 
 .studio-tabs button {
-  min-height: 46px;
-  padding: 0.7rem 1rem;
+  min-height: 38px;
+  padding: 8px 14px;
   border: 0;
-  border-bottom: 3px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
   cursor: pointer;
-  color: var(--ink-soft);
-  background: var(--paper-light);
-  text-align: center;
+  font: 600 13px/1 var(--font-body);
   white-space: nowrap;
 }
 
 .studio-tabs button[aria-selected="true"] {
-  color: var(--ink-dark);
-  border-bottom-color: var(--coral);
-  background: var(--paper-light);
+  color: white;
+  background: var(--ink);
 }
 
 .studio-tabs span,
 .studio-tabs small {
-  display: block;
+  display: inline;
 }
 
-.studio-tabs span {
-  font-weight: 750;
+.studio-tabs small {
+  display: none;
 }
 
 .studio-panel {
-  min-height: 450px;
-  padding: 1.25rem 0;
+  min-height: 440px;
+  padding: 40px 0;
 }
 
-.studio-panel > .search-tool {
-  box-shadow: none;
+.studio-panel > .lookup-kind-toggle {
+  margin-bottom: 24px;
 }
 
 .learning-note {
-  padding-top: 1rem;
-  color: var(--ink-soft);
+  padding-top: 18px;
+  color: var(--muted);
   border-top: 1px solid var(--line);
-  font-size: 0.78rem;
+  font-size: 12px;
 }
 
-.model-tool {
-  max-width: 960px;
-  padding: 1.5rem;
+.model-tool,
+.study-deck {
+  max-width: 920px;
+  padding: 28px;
   border: 1px solid var(--line);
-  background: var(--paper-light);
+  border-radius: 12px;
+  background: white;
 }
 
 .tool-heading {
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 20px;
   align-items: start;
+  justify-content: space-between;
 }
 
 .tool-heading h3,
 .tool-heading h4 {
-  margin-bottom: 0.6rem;
-  font-family: var(--serif);
-  font-size: 1.6rem;
+  margin-bottom: 6px;
+  font-size: 20px;
 }
 
 .tool-heading h4 {
-  font-size: 1.25rem;
+  font-size: 18px;
 }
 
 .tool-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.8rem;
-  margin: 1.5rem 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 24px 0;
 }
 
 .consent {
   display: flex;
-  gap: 0.7rem;
+  gap: 10px;
   align-items: start;
-  padding: 1rem;
-  margin: 1rem 0;
+  padding: 13px 14px;
+  margin: 18px 0;
   border: 1px solid var(--line);
-  color: var(--ink-soft);
-  background: var(--paper);
-  font-size: 0.8rem;
-  line-height: 1.45;
+  border-radius: 12px;
+  color: var(--body);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .consent input {
-  width: 18px;
-  height: 18px;
-  margin: 0;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
   accent-color: var(--ink);
 }
 
 .machine-output,
 .orthography-result {
-  padding: 1.5rem;
-  margin-top: 1.5rem;
-  border-left: 6px solid var(--coral);
-  background: var(--paper);
+  padding: 20px;
+  margin-top: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
 .machine-output > span,
 .orthography-result > span {
-  color: var(--coral-dark);
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  font-weight: 800;
+  color: var(--muted);
+  font: 600 11px/1 var(--font-mono);
   text-transform: uppercase;
 }
 
 .machine-output p,
 .orthography-result > p {
-  margin: 0.7rem 0;
-  font-family: var(--serif);
-  font-size: 1.5rem;
+  margin: 10px 0;
+  font-size: 18px;
+  line-height: 1.55;
 }
 
 .orthography-result ol {
-  padding-left: 1.4rem;
-  line-height: 1.7;
+  padding-left: 20px;
+  margin-bottom: 0;
+  line-height: 1.65;
 }
 
 .recorder-panel {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.7rem;
+  gap: 8px;
   align-items: center;
-  padding: 1.3rem;
-  margin-top: 1.5rem;
+  padding: 18px;
+  margin-top: 24px;
   border: 1px solid var(--line);
-  background: var(--paper);
+  border-radius: 12px;
+  background: var(--surface);
 }
 
 .recorder-panel audio {
@@ -175,65 +176,40 @@
 }
 
 .recording-indicator {
-  color: var(--danger);
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  .recording-indicator {
-    animation: none;
-  }
+  color: #9a2828;
+  font: 600 12px/1 var(--font-mono);
 }
 
 .asr-panel {
-  padding: 1.5rem;
-  margin-top: 1rem;
-  border: 1px solid var(--line);
-}
-
-.study-deck {
-  min-height: 420px;
-  padding: 1.5rem;
-  border: 1px solid var(--line);
-  background: var(--paper-light);
+  padding: 24px;
+  margin-top: 20px;
+  border-top: 1px solid var(--line);
 }
 
 .queue-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1px;
-  margin: 1rem 0;
+  overflow: hidden;
+  margin: 24px 0;
   border: 1px solid var(--line);
+  border-radius: 12px;
   background: var(--line);
 }
 
 .queue-summary div {
-  padding: 0.8rem;
-  background: var(--paper);
+  padding: 16px;
+  background: white;
 }
 
 .queue-summary dt {
-  color: var(--ink-soft);
-  font-size: 0.67rem;
-  text-transform: uppercase;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .queue-summary dd {
-  margin: 0.25rem 0 0;
-  font-family: var(--mono);
-  font-size: 1.1rem;
+  margin: 5px 0 0;
+  font: 500 20px/1.2 var(--font-mono);
 }
 
 .file-button {
@@ -249,83 +225,74 @@
 }
 
 .review-card {
-  max-width: 680px;
+  max-width: 700px;
   min-height: 300px;
-  padding: 2.25rem;
-  margin: 2rem auto;
-  border: 1px solid var(--line-dark);
-  background: var(--paper-light);
-  box-shadow: var(--shadow);
+  padding: 40px;
+  margin: 28px auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   text-align: center;
 }
 
 .review-card > span,
 .review-card > small {
   display: block;
-  color: var(--ink-soft);
-  font-family: var(--mono);
-  font-size: 0.68rem;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .review-card h3 {
-  margin: 3rem 0 2rem;
-  font-family: var(--serif);
-  font-size: 2.5rem;
+  margin: 36px 0;
+  font-size: 24px;
 }
 
 .review-answer {
-  padding: 1.5rem;
-  margin: 1rem 0;
+  padding-top: 24px;
   border-top: 1px solid var(--line);
-  font-family: var(--serif);
-  font-size: 1.5rem;
 }
 
 .grade-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.5rem;
-  margin: 1rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 24px;
 }
 
 .grade-row button {
-  min-height: 44px;
-  border: 1px solid var(--line-dark);
+  min-width: 92px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  background: white;
   cursor: pointer;
-  background: var(--paper);
-  text-transform: capitalize;
-}
-
-.grade-row button:hover {
-  color: white;
-  background: var(--ink);
-}
-
-.card-inventory {
-  margin-top: 2rem;
-  border-top: 1px solid var(--line);
-}
-
-.card-inventory summary {
-  padding: 1rem 0;
-  cursor: pointer;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .card-inventory ul {
-  padding: 0;
+  padding: 12px 0 0;
   list-style: none;
 }
 
 .card-inventory li {
   display: flex;
+  gap: 16px;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.8rem 0;
-  border-top: 1px dotted var(--line);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
 }
 
 .card-inventory li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.asr-comparison {
   display: grid;
-  gap: 0.2rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
 }

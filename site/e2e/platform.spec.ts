@@ -318,10 +318,31 @@ test("primary navigation and research tabs are keyboard operable", async ({
 
   await page.goto("");
   await expect(page.getByRole("heading", {level: 1, name: /FormosanBank, ready/})).toBeVisible();
-  const primaryNavigation = page.getByRole("navigation", {name: "Primary"});
+  const mobile = testInfo.project.name === "mobile-chromium";
+  const primaryNavigation = mobile
+    ? page.locator(".mobile-menu").getByRole("navigation", {name: "Primary"})
+    : page.locator(".primary-nav");
   const researchLink = primaryNavigation.getByRole("link", {name: "Research", exact: true});
   if (testInfo.project.name === "desktop-webkit") {
     await researchLink.focus();
+  } else if (mobile) {
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("combobox", {name: "Interface language"})).toBeFocused();
+    await page.keyboard.press("Tab");
+    const menu = page.locator(".mobile-menu > summary");
+    await expect(menu).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".mobile-menu")).toHaveAttribute("open", "");
+    await page.keyboard.press("Tab");
+    await expect(
+      primaryNavigation.getByRole("link", {name: "Lookup", exact: true}),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(primaryNavigation.getByRole("link", {name: "Learn", exact: true})).toBeFocused();
+    await page.keyboard.press("Tab");
   } else {
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");

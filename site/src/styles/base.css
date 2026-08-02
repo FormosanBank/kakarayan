@@ -19,6 +19,14 @@
   --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   --content: 720px;
   --wide: 1120px;
+  --page-width: 960px;
+  --page-wide: 1120px;
+  --prose-width: 720px;
+  --surface: var(--surface-soft);
+  --line-strong: var(--hairline-strong);
+  --muted: var(--body);
+  --font-body: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--mono);
   --paper: var(--canvas);
   --paper-deep: var(--surface-soft);
   --paper-light: var(--canvas);

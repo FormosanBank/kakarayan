@@ -67,7 +67,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
         <div className="footer__inner">
           <div className="footer__brand">
             <strong>Kakarayan</strong>
-            <span>{data.meta.release_id}</span>
+            <span className="release-pill">{data.meta.release_id}</span>
           </div>
           <nav aria-label={tx("Footer", "頁尾")}>
             <NavLink to="/about">{t("nav.about")}</NavLink>
