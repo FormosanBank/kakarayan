@@ -215,6 +215,20 @@ test("scoped RE2 search runs without weakening the content security policy", asy
   expect(pageErrors).toEqual([]);
 });
 
+test("concordance filters apply dialect and evidence requirements before counting", async ({
+  page,
+}) => {
+  await page.goto("#/lookup?type=sentences");
+  const corpus = await selectSmallAmisScope(page, "ePark");
+  test.skip(corpus === "TestCorpus", "The generated fixture has no stable dialect mix");
+  await page.getByRole("combobox", {name: "Dialect", exact: true}).selectOption("Coastal");
+  await page.getByLabel("Word, phrase, or translation").fill("fangcalay");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  await expect(page.locator(".result-card")).toHaveCount(1);
+  await expect(page.locator(".result-summary")).toContainText("1 sentence");
+  await expect(page.locator(".result-card__scope")).toContainText("Coastal");
+});
+
 test("dataset recipes and worker summaries are available without a backend", async ({
   page,
 }) => {

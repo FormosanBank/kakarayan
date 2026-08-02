@@ -410,6 +410,7 @@ export async function searchRecords(
   indexes: SearchIndex[] = [],
   targetLanguage = "",
   targetTier: "sentence" | "any" = "sentence",
+  recordFilter?: (record: SearchRecord) => boolean,
 ): Promise<SearchResult> {
   if (query.length > (mode === "regex" ? 128 : 256)) {
     throw new Error(`${mode === "regex" ? "Regular expression" : "Query"} is too long`);
@@ -473,7 +474,7 @@ export async function searchRecords(
               (item) => item.xml_lang === targetLanguage,
             ))
         : recordMatches(record, query, mode, targetLanguage, targetTier);
-      if (matches) {
+      if (matches && (!recordFilter || recordFilter(record))) {
         matchesCount += 1;
         if (mode === "fuzzy") fuzzyScores.set(record.id, fuzzyDistance(record, query));
         if (mode === "fuzzy" || records.length < limit) records.push(record);

@@ -14,9 +14,17 @@ import {useSearchParams} from "../routing";
 import {cardFromDictionary, cardFromRecord, saveCard} from "../study";
 import {translationLanguageName} from "../translationLanguages";
 import type {AppData, SearchRecord} from "../types";
+import {
+  recordHasTier,
+  RESULT_TIERS,
+  sortResultRecords,
+  type ResultSort,
+  type ResultTier,
+} from "../searchResultControls";
 import {CandidateGroups} from "./CandidateGroups";
 import {Diagnostics} from "./Diagnostics";
 import {SearchResultCard} from "./SearchResultCard";
+import {SearchFilters} from "./SearchFilters";
 
 export type LookupKind = "dictionary" | "sentences";
 
@@ -30,6 +38,7 @@ const SENTENCE_MODES: SearchMode[] = [
   "regex",
   "source",
 ];
+
 
 export function SearchTool({
   data,
@@ -72,6 +81,18 @@ export function SearchTool({
   const [notice, setNotice] = useState("");
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [exporting, setExporting] = useState(false);
+  const [dialectFilter, setDialectFilter] = useState(params.get("dialect") ?? "");
+  const [requiredTiers, setRequiredTiers] = useState<ResultTier[]>(() =>
+    (params.get("tiers") ?? "").split(",").filter(
+      (value): value is ResultTier => RESULT_TIERS.includes(value as ResultTier),
+    ),
+  );
+  const requestedSort = params.get("sort") as ResultSort | null;
+  const [resultSort, setResultSort] = useState<ResultSort>(
+    requestedSort && ["source", "shortest", "longest", "corpus"].includes(requestedSort)
+      ? requestedSort
+      : "source",
+  );
   const controller = useRef<AbortController | null>(null);
   const initialStarted = useRef(false);
   const hasInitialQuery = useRef(Boolean(params.get("q") && initialLanguage));
@@ -127,6 +148,8 @@ export function SearchTool({
       return rights?.redistribution !== "allowed";
     });
   }, [data.corpora, data.rights.entries, records]);
+  const selectedLanguage = data.languages.find((language) => language.id === languageId);
+  const hasResultFilters = Boolean(dialectFilter || requiredTiers.length || resultSort !== "source");
 
   useEffect(
     () => () => {
@@ -152,6 +175,9 @@ export function SearchTool({
           language: languageId,
           target: targetLanguage,
           ...(corpusId && {corpus: corpusId}),
+          ...(kind === "sentences" && dialectFilter && {dialect: dialectFilter}),
+          ...(kind === "sentences" && requiredTiers.length && {tiers: requiredTiers.join(",")}),
+          ...(kind === "sentences" && resultSort !== "source" && {sort: resultSort}),
           mode,
         });
       }
@@ -165,8 +191,13 @@ export function SearchTool({
           indexes,
           targetLanguage,
           kind === "dictionary" ? "any" : "sentence",
+          kind === "sentences"
+            ? (record) =>
+                (!dialectFilter || (record.dialect || "unknown") === dialectFilter) &&
+                requiredTiers.every((tier) => recordHasTier(record, tier))
+            : undefined,
         );
-        setRecords(result.records);
+        setRecords(sortResultRecords(result.records, resultSort));
         setScanned(result.scanned);
         setMatches(result.matches);
         setTruncated(result.truncated);
@@ -179,7 +210,7 @@ export function SearchTool({
         if (controller.current === nextController) setBusy(false);
       }
     },
-    [corpusId, indexes, kind, languageId, mode, query, setParams, shards, targetLanguage],
+    [corpusId, dialectFilter, indexes, kind, languageId, mode, query, requiredTiers, resultSort, setParams, shards, targetLanguage],
   );
 
   useEffect(() => {
@@ -313,6 +344,23 @@ export function SearchTool({
                 </label>
               ))}
             </fieldset>
+            {kind === "sentences" && (
+              <SearchFilters
+                dialects={selectedLanguage?.dialects ?? []}
+                dialectFilter={dialectFilter}
+                hasFilters={hasResultFilters}
+                onDialectChange={setDialectFilter}
+                onReset={() => {
+                  setDialectFilter("");
+                  setRequiredTiers([]);
+                  setResultSort("source");
+                }}
+                onSortChange={setResultSort}
+                onTiersChange={setRequiredTiers}
+                requiredTiers={requiredTiers}
+                resultSort={resultSort}
+              />
+            )}
           </div>
         </details>
       </form>
