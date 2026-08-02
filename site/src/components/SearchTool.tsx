@@ -35,16 +35,22 @@ export function SearchTool({
   data,
   kind,
   learner = false,
+  selectedLanguageId,
+  onLanguageChange,
+  onPractice,
 }: {
   data: AppData;
   kind: LookupKind;
   learner?: boolean;
+  selectedLanguageId?: string;
+  onLanguageChange?: (languageId: string) => void;
+  onPractice?: (record: SearchRecord, targetLanguage: string) => void;
 }) {
   const {locale, number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const initialLanguage =
-    params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "";
+    selectedLanguageId ?? params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "";
   const modes = kind === "dictionary" ? DICTIONARY_MODES : SENTENCE_MODES;
   const requestedMode = params.get("mode") as SearchMode | null;
   const [query, setQuery] = useState(params.get("q") ?? "");
@@ -251,6 +257,7 @@ export function SearchTool({
             onChange={(event) => {
               setLanguageId(event.target.value);
               setCorpusId("");
+              onLanguageChange?.(event.target.value);
             }}
           >
             {data.languages.map((language) => (
@@ -425,6 +432,9 @@ export function SearchTool({
               learner={learner}
               onSave={(value) => void addSentence(value)}
               onNotice={setNotice}
+              {...(onPractice && {
+                onPractice: (value: SearchRecord) => onPractice(value, targetLanguage),
+              })}
             />
           ))}
         </div>

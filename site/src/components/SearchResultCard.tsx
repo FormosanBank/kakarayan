@@ -103,6 +103,7 @@ export function SearchResultCard({
   learner,
   onSave,
   onNotice,
+  onPractice,
 }: {
   data: AppData;
   record: SearchRecord;
@@ -112,6 +113,7 @@ export function SearchResultCard({
   learner: boolean;
   onSave: (record: SearchRecord) => void;
   onNotice: (notice: string) => void;
+  onPractice?: (record: SearchRecord) => void;
 }) {
   const {locale, number, t, tx} = useI18n();
   const language = data.languages.find((item) => item.id === record.language_id);
@@ -206,6 +208,11 @@ export function SearchResultCard({
           <button className="button button--primary" onClick={() => onSave(record)}>
             {t("search.save")}
           </button>
+          {learner && onPractice && (
+            <button className="button button--quiet" onClick={() => onPractice(record)}>
+              {tx("Practice speaking", "練習口說")}
+            </button>
+          )}
           <button
             className="button button--quiet"
             onClick={async () => {

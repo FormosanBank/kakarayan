@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useMemo, useState} from "react";
 
 import {PageIntro} from "../components/Layout";
 import {LookupKindToggle} from "../components/LookupKindToggle";
@@ -8,14 +8,38 @@ import {Recorder} from "../components/Recorder";
 import {SearchTool, type LookupKind} from "../components/SearchTool";
 import {StudyDeck} from "../components/StudyDeck";
 import {useI18n} from "../i18n";
-import type {AppData} from "../types";
+import type {AppData, SearchRecord} from "../types";
 
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
 export function Learn({data}: {data: AppData}) {
   const {t, tx} = useI18n();
+  const amis = data.languages.find((language) => language.name === "Amis");
+  const [languageId, setLanguageId] = useState(amis?.id ?? data.languages[0]?.id ?? "");
+  const language = data.languages.find((item) => item.id === languageId) ?? data.languages[0];
+  const [dialect, setDialect] = useState(language?.dialects[0] ?? "");
   const [tab, setTab] = useState<StudioTab>("lookup");
   const [lookupKind, setLookupKind] = useState<LookupKind>("dictionary");
+  const [practiceTarget, setPracticeTarget] = useState("");
+  const capability = useMemo(() => {
+    if (!language) return {mt: false, asr: false, orthography: false};
+    return {
+      mt: data.models.models.some((model) => model.task === "translation" && model.languages.includes(language.iso639_3)),
+      asr: data.models.models.some((model) => model.task === "automatic-speech-recognition" && model.languages.includes(language.iso639_3)),
+      orthography: data.orthography.tables.some((table) => table.language === language.name),
+    };
+  }, [data.models.models, data.orthography.tables, language]);
+
+  function changeLanguage(nextId: string) {
+    const next = data.languages.find((item) => item.id === nextId);
+    setLanguageId(nextId);
+    setDialect(next?.dialects[0] ?? "");
+  }
+
+  function practice(record: SearchRecord) {
+    setPracticeTarget(record.standard || record.original);
+    setTab("practice");
+  }
   const tabs: Array<[StudioTab, string]> = [
     ["lookup", tx("Lookup", "查詢")],
     ["deck", t("learn.deck")],
@@ -27,6 +51,31 @@ export function Learn({data}: {data: AppData}) {
   return (
     <div className="page-wrap page-wrap--wide learner-page">
       <PageIntro title={t("learn.title")} lede={t("learn.lede")} />
+      {language && (
+        <section className="learner-scope" aria-label={tx("Learning language", "學習語言")}>
+          <div className="learner-scope__selectors">
+            <label className="field">
+              {tx("Learning language", "學習語言")}
+              <select value={language.id} onChange={(event) => changeLanguage(event.target.value)}>
+                {data.languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              {tx("Dialect context", "方言脈絡")}
+              <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
+                {language.dialects.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            </label>
+          </div>
+          <dl className="learner-scope__coverage">
+            <div><dt>{tx("Corpus sentences", "語料句子")}</dt><dd>{(language.counts.sentences ?? 0).toLocaleString()}</dd></div>
+            <div><dt>{tx("Audio references", "音訊參照")}</dt><dd>{(language.counts.audio ?? 0).toLocaleString()}</dd></div>
+            <div><dt>MT</dt><dd>{capability.mt ? tx("model", "模型") : tx("corpus only", "僅語料")}</dd></div>
+            <div><dt>ASR</dt><dd>{capability.asr ? tx("model", "模型") : tx("not registered", "未登錄")}</dd></div>
+            <div><dt>{tx("Orthography", "正寫法")}</dt><dd>{capability.orthography ? tx("table", "轉換表") : tx("not registered", "未登錄")}</dd></div>
+          </dl>
+        </section>
+      )}
       <div className="privacy-banner">
         <span aria-hidden="true">●</span>
         <p>
@@ -55,19 +104,38 @@ export function Learn({data}: {data: AppData}) {
           <>
             <LookupKindToggle kind={lookupKind} onChange={setLookupKind} />
             <div id="lookup-results">
-              <SearchTool key={lookupKind} data={data} kind={lookupKind} learner />
+              <SearchTool
+                key={`${lookupKind}-${languageId}`}
+                data={data}
+                kind={lookupKind}
+                learner
+                selectedLanguageId={languageId}
+                onLanguageChange={changeLanguage}
+                onPractice={practice}
+              />
             </div>
           </>
         )}
         {tab === "deck" && (
-          <StudyDeck currentRelease={data.meta.release_id} />
+          <StudyDeck currentRelease={data.meta.release_id} languageId={languageId} dialect={dialect} />
         )}
-        {tab === "practice" && <Recorder catalog={data.models} />}
-        {tab === "translation" && <TranslationTool catalog={data.models} />}
+        {tab === "practice" && <Recorder key={`${languageId}-${practiceTarget}`} catalog={data.models} selectedLanguage={language?.name ?? "Amis"} referenceText={practiceTarget} />}
+        {tab === "translation" && (
+          <TranslationTool
+            catalog={data.models}
+            languages={data.languages}
+            selectedLanguageId={languageId}
+            selectedDialect={dialect}
+            onLanguageChange={changeLanguage}
+          />
+        )}
         {tab === "orthography" && (
           <OrthographyTool
+            key={`${languageId}-${dialect}`}
             catalog={data.orthography}
             sourceCommit={data.meta.source.commit}
+            languageName={language?.name ?? "Amis"}
+            selectedDialect={dialect}
           />
         )}
         {tab === "lessons" &&

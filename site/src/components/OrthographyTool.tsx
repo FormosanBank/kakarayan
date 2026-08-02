@@ -7,18 +7,24 @@ import type {OrthographyCatalog} from "../types";
 export function OrthographyTool({
   catalog,
   sourceCommit,
+  languageName = "Amis",
+  selectedDialect = "",
 }: {
   catalog: OrthographyCatalog;
   sourceCommit: string;
+  languageName?: string;
+  selectedDialect?: string;
 }) {
   const {number, tx} = useI18n();
-  const amisTables = useMemo(
-    () => catalog.tables.filter((table) => table.language === "Amis"),
-    [catalog.tables],
+  const languageTables = useMemo(
+    () => catalog.tables.filter((table) => table.language === languageName),
+    [catalog.tables, languageName],
   );
-  const [tableId, setTableId] = useState(amisTables[0]?.id ?? "");
-  const table = amisTables.find((item) => item.id === tableId) ?? amisTables[0];
-  const [dialect, setDialect] = useState(table?.dialects[0] ?? "");
+  const [tableId, setTableId] = useState(languageTables[0]?.id ?? "");
+  const table = languageTables.find((item) => item.id === tableId) ?? languageTables[0];
+  const [dialect, setDialect] = useState(
+    table?.dialects.includes(selectedDialect) ? selectedDialect : table?.dialects[0] ?? "",
+  );
   const [input, setInput] = useState("");
   const [result, setResult] = useState<{
     text: string;
@@ -30,7 +36,7 @@ export function OrthographyTool({
       <section className="model-tool">
         <h3>{tx("Orthography assistant", "正寫法輔助工具")}</h3>
         <p className="callout callout--warning">
-          {tx("This release contains no reviewed Amis conversion table. No conversion is guessed.", "此版本沒有經審查的阿美語轉換表，因此不會猜測任何轉換。")}
+          {tx(`This release contains no reviewed ${languageName} conversion table. No conversion is guessed.`, `此版本沒有經審查的${languageName}轉換表，因此不會猜測任何轉換。`)}
         </p>
       </section>
     );
@@ -57,13 +63,13 @@ export function OrthographyTool({
           <select
             value={table.id}
             onChange={(event) => {
-              const next = amisTables.find((item) => item.id === event.target.value);
+              const next = languageTables.find((item) => item.id === event.target.value);
               setTableId(event.target.value);
               setDialect(next?.dialects[0] ?? "");
               setResult(null);
             }}
           >
-            {amisTables.map((item) => (
+            {languageTables.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.name}
               </option>

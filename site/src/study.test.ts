@@ -2,6 +2,7 @@ import {
   cardFromDictionary,
   cardsAsAnkiTsv,
   cardsAsCsv,
+  manualStudyCard,
   scheduleCard,
   type StudyCard,
 } from "./study";
@@ -96,5 +97,24 @@ describe("local study scheduling", () => {
     expect(dictionary.back).toBe("dog");
     expect(dictionary.deck).toBe("Saved words");
     expect(dictionary.source?.recordId).toBe("sentence_amis_waco");
+  });
+
+  it("builds a labelled manual card without corpus provenance", () => {
+    const manual = manualStudyCard({
+      front: "  fangcalay ",
+      back: "good",
+      languageId: "lang_amis",
+      deck: "Class notes",
+      tags: ["Coastal", "Coastal", "lesson-2"],
+      direction: "production",
+    });
+    expect(manual).toMatchObject({
+      front: "fangcalay",
+      back: "good",
+      deck: "Class notes",
+      tags: ["Coastal", "lesson-2"],
+      direction: "production",
+      source: null,
+    });
   });
 });

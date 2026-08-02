@@ -1,4 +1,12 @@
 @media (max-width: 1024px) {
+  .learner-scope {
+    grid-template-columns: 1fr;
+  }
+
+  .learner-scope__coverage {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .catalog-grid,
   .model-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -168,6 +176,21 @@
   .tool-grid,
   .asr-comparison {
     grid-template-columns: 1fr;
+  }
+
+  .learner-scope__selectors,
+  .manual-card__form {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-card__form .field,
+  .manual-card__form .field:nth-child(1),
+  .manual-card__form .field:nth-child(2),
+  .manual-card__form .field:nth-child(3),
+  .manual-card__form .field:nth-child(4),
+  .manual-card__form .field:nth-child(5),
+  .manual-card__form > .button {
+    grid-column: auto;
   }
 
   .corpus-list > article,

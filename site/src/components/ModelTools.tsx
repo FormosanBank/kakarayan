@@ -1,8 +1,10 @@
-import {useEffect, useRef, useState, type FormEvent} from "react";
+import {useEffect, useMemo, useRef, useState, type FormEvent} from "react";
 
 import {translate, type ServiceStage, type TranslationRequest} from "../modelServices";
 import {useI18n} from "../i18n";
-import type {ModelCatalog} from "../types";
+import {Link} from "../routing";
+import {manualStudyCard, saveCard} from "../study";
+import type {Language, ModelCatalog} from "../types";
 
 const directions: TranslationRequest["direction"][] = [
   "Formosan → English",
@@ -11,41 +13,57 @@ const directions: TranslationRequest["direction"][] = [
   "Chinese → Formosan",
 ];
 
-const languages = [
-  "Amis",
-  "Atayal",
-  "Bunun",
-  "Kanakanavu",
-  "Kavalan",
-  "Paiwan",
-  "Puyuma",
-  "Rukai",
-  "Saaroa",
-  "Saisiyat",
-  "Sakizaya",
-  "Seediq",
-  "Thao",
-  "Tsou",
-  "Tao / Yami",
-];
+function serviceLanguageName(language: Language | undefined, supported: string[]): string {
+  if (!language) return "";
+  const aliases: Record<string, string> = {Truku: "Taroko", Yami: "Yami / Tao"};
+  const candidate = aliases[language.name] ?? language.name;
+  return supported.includes(candidate) ? candidate : language.name;
+}
 
-export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
+export function TranslationTool({
+  catalog,
+  languages,
+  selectedLanguageId,
+  selectedDialect,
+  onLanguageChange,
+}: {
+  catalog: ModelCatalog;
+  languages: Language[];
+  selectedLanguageId: string;
+  selectedDialect: string;
+  onLanguageChange: (languageId: string) => void;
+}) {
   const {number, tx} = useI18n();
   const [text, setText] = useState("");
   const [direction, setDirection] =
     useState<TranslationRequest["direction"]>("English → Formosan");
-  const [language, setLanguage] = useState("Amis");
-  const [dialect, setDialect] = useState("Default / unknown");
   const [consent, setConsent] = useState(false);
   const [result, setResult] = useState("");
   const [metadata, setMetadata] = useState("");
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
   const [status, setStatus] = useState("");
   const controller = useRef<AbortController | null>(null);
+  const language = languages.find((item) => item.id === selectedLanguageId) ?? languages[0];
   const service = catalog.services.find(
-    (item) => item.tasks.includes("translation") && item.api_name,
+    (item) =>
+      item.tasks.includes("translation") &&
+      item.api_name &&
+      (!language ||
+        !item.supported_languages.length ||
+        item.supported_languages.includes(serviceLanguageName(language, item.supported_languages)) ||
+        item.supported_languages.includes(language.iso639_3)),
   );
   const serviceReady = Boolean(service?.api_name && service.status !== "unavailable");
+  const model = useMemo(
+    () => catalog.models.find(
+      (item) =>
+        item.task === "translation" &&
+        item.direction === direction.replaceAll("Chinese", "Mandarin") &&
+        language &&
+        item.languages.includes(language.iso639_3),
+    ),
+    [catalog.models, direction, language],
+  );
 
   useEffect(() => () => controller.current?.abort(), []);
 
@@ -59,7 +77,12 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
     setMetadata("");
     try {
       const output = await translate(
-        {text: text.trim(), direction, language, dialect},
+        {
+          text: text.trim(),
+          direction,
+          language: serviceLanguageName(language, service.supported_languages),
+          dialect: selectedDialect || "Default / unknown",
+        },
         {space: service.space, endpoint: service.api_name},
         {
           signal: next.signal,
@@ -82,6 +105,28 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
         );
       }
     }
+  }
+
+  async function copyResult() {
+    try {
+      await navigator.clipboard.writeText(result);
+      setStatus(tx("Machine output copied.", "已複製機器輸出。"));
+    } catch {
+      setStatus(tx("Clipboard access was unavailable.", "無法存取剪貼簿。"));
+    }
+  }
+
+  async function saveResult() {
+    if (!language || !result) return;
+    const sourceIsFormosan = direction.startsWith("Formosan");
+    await saveCard(manualStudyCard({
+      front: sourceIsFormosan ? text : result,
+      back: sourceIsFormosan ? result : text,
+      languageId: language.id,
+      deck: "Machine translation drafts",
+      tags: ["machine-draft", selectedDialect, model?.id ?? ""].filter(Boolean),
+    }));
+    setStatus(tx("Draft saved to the local deck and labelled as machine output.", "草稿已儲存到本機牌組，並標示為機器輸出。"));
   }
 
   return (
@@ -125,22 +170,15 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
           </label>
           <label className="field">
             {tx("Formosan language", "臺灣南島語")}
-            <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+            <select value={language?.id ?? ""} onChange={(event) => onLanguageChange(event.target.value)}>
               {languages.map((value) => (
-                <option key={value}>{value}</option>
+                <option key={value.id} value={value.id}>{value.name}</option>
               ))}
             </select>
           </label>
           <label className="field">
             {tx("Dialect", "方言")}
-            <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
-              <option value="Default / unknown">{tx("Default / unknown", "預設／未知")}</option>
-              <option value="Coastal">{tx("Coastal", "海岸")}</option>
-              <option value="Hengchun">{tx("Hengchun", "恆春")}</option>
-              <option value="Malan">{tx("Malan", "馬蘭")}</option>
-              <option value="Southern">{tx("Southern", "南勢")}</option>
-              <option value="Xiuguluan">{tx("Xiuguluan", "秀姑巒")}</option>
-            </select>
+            <input value={selectedDialect || tx("Default / unknown", "預設／未知")} readOnly />
           </label>
         </div>
         <label className="field">
@@ -199,6 +237,28 @@ export function TranslationTool({catalog}: {catalog: ModelCatalog}) {
           <span>{tx("Machine output", "機器輸出")}</span>
           <p>{result}</p>
           {metadata && <small>{metadata}</small>}
+          <div className="button-row">
+            <button className="button button--quiet" onClick={copyResult}>{tx("Copy", "複製")}</button>
+            <button className="button button--quiet" onClick={saveResult}>{tx("Save as labelled draft", "儲存為已標示草稿")}</button>
+            {language && (
+              <Link
+                className="button button--quiet"
+                to={`/lookup?type=sentences&q=${encodeURIComponent(result)}&language=${encodeURIComponent(language.id)}&mode=exact`}
+              >
+                {tx("Check in corpus", "在語料庫中核對")}
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+      {language && (
+        <div className="model-disclosure model-disclosure--summary">
+          <strong>{tx("Selected capability", "所選功能")}</strong>
+          <span>{model ? model.repository : tx("No language-specific MT model is registered.", "沒有登錄此語言專用的機器翻譯模型。")}</span>
+          {model && <span>{tx("License", "授權")} {model.license} · {model.limitations}</span>}
+          <Link to={`/lookup?type=sentences&language=${encodeURIComponent(language.id)}&mode=translation`}>
+            {tx("Search human corpus translations", "搜尋人工語料翻譯")}
+          </Link>
         </div>
       )}
     </section>

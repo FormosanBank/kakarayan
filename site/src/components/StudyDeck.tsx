@@ -11,6 +11,7 @@ import {
   restoreBackup,
   saveCard,
   scheduleCard,
+  manualStudyCard,
   type Grade,
   type StudyCard,
 } from "../study";
@@ -26,8 +27,12 @@ function download(value: string, name: string, type: string) {
 
 export function StudyDeck({
   currentRelease,
+  languageId,
+  dialect,
 }: {
   currentRelease: string;
+  languageId: string;
+  dialect: string;
 }) {
   const {number, t, tx} = useI18n();
   const [cards, setCards] = useState<StudyCard[]>([]);
@@ -35,6 +40,11 @@ export function StudyDeck({
   const [showAnswer, setShowAnswer] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [filter, setFilter] = useState("");
+  const [manualFront, setManualFront] = useState("");
+  const [manualBack, setManualBack] = useState("");
+  const [manualDeck, setManualDeck] = useState("My cards");
+  const [manualTags, setManualTags] = useState("");
+  const [manualDirection, setManualDirection] = useState<StudyCard["direction"]>("recognition");
   const reload = useCallback(() => {
     listCards().then(
       (nextCards) => {
@@ -114,6 +124,26 @@ export function StudyDeck({
     reload();
   }
 
+  async function addManualCard() {
+    try {
+      await saveCard(manualStudyCard({
+        front: manualFront,
+        back: manualBack,
+        languageId,
+        deck: manualDeck,
+        tags: [dialect, ...manualTags.split(/[,\n]/u)].filter(Boolean),
+        direction: manualDirection,
+      }));
+      setManualFront("");
+      setManualBack("");
+      setManualTags("");
+      setError("");
+      reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
   return (
     <section className="study-deck">
       <div className="deck-toolbar">
@@ -150,6 +180,37 @@ export function StudyDeck({
         </div>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
+      <details className="manual-card">
+        <summary>{tx("Create a card", "建立卡片")}</summary>
+        <div className="manual-card__form">
+          <label className="field">
+            {tx("Prompt", "提示")}
+            <textarea rows={3} value={manualFront} onChange={(event) => setManualFront(event.target.value)} />
+          </label>
+          <label className="field">
+            {tx("Answer", "答案")}
+            <textarea rows={3} value={manualBack} onChange={(event) => setManualBack(event.target.value)} />
+          </label>
+          <label className="field">
+            {tx("Deck", "牌組")}
+            <input value={manualDeck} onChange={(event) => setManualDeck(event.target.value)} />
+          </label>
+          <label className="field">
+            {tx("Direction", "方向")}
+            <select value={manualDirection} onChange={(event) => setManualDirection(event.target.value as StudyCard["direction"])}>
+              <option value="recognition">{tx("Formosan → meaning", "南島語 → 釋義")}</option>
+              <option value="production">{tx("Meaning → Formosan", "釋義 → 南島語")}</option>
+            </select>
+          </label>
+          <label className="field">
+            {tx("Tags, comma separated", "標籤，以逗號分隔")}
+            <input value={manualTags} onChange={(event) => setManualTags(event.target.value)} />
+          </label>
+          <button className="button button--primary" disabled={!manualFront.trim() || !manualBack.trim()} onClick={addManualCard}>
+            {tx("Add to local deck", "加入本機牌組")}
+          </button>
+        </div>
+      </details>
       {cards.length > 0 && (
         <dl className="queue-summary">
           <div>

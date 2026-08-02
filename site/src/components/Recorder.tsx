@@ -24,10 +24,20 @@ const ASR_LANGUAGES = [
   "Yami / Tao",
 ];
 
+function serviceLanguageName(language: string, supported: string[]): string {
+  const aliases: Record<string, string> = {Truku: "Taroko", Yami: "Yami / Tao"};
+  const candidate = aliases[language] ?? language;
+  return supported.includes(candidate) ? candidate : language;
+}
+
 export function Recorder({
   catalog,
+  selectedLanguage,
+  referenceText = "",
 }: {
   catalog: ModelCatalog;
+  selectedLanguage: string;
+  referenceText?: string;
 }) {
   const {number, tx} = useI18n();
   const recorder = useRef<MediaRecorder | null>(null);
@@ -41,10 +51,9 @@ export function Recorder({
   const [audioUrl, setAudioUrl] = useState("");
   const [audioName, setAudioName] = useState("kakarayan-recording.webm");
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
-  const [language, setLanguage] = useState("Amis");
   const [consent, setConsent] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [reference, setReference] = useState("");
+  const [reference, setReference] = useState(referenceText);
   const [status, setStatus] = useState("");
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
   const service = catalog.services.find(
@@ -54,6 +63,9 @@ export function Recorder({
   const asrLanguages = service?.supported_languages.length
     ? service.supported_languages
     : ASR_LANGUAGES;
+  const [language, setLanguage] = useState(
+    serviceLanguageName(selectedLanguage, asrLanguages),
+  );
   const modelSlug =
     language === "Yami / Tao"
       ? "yami"
@@ -237,6 +249,12 @@ export function Recorder({
           "錄音與播放都留在此分頁中。只有在您明確選擇下方的自動轉錄後，資料才會上傳。",
         )}
       </p>
+      {reference && (
+        <div className="practice-reference">
+          <span>{tx("Practice target", "練習目標")}</span>
+          <p>{reference}</p>
+        </div>
+      )}
       <div className="recorder-panel">
         {!recording ? (
           <button className="button button--primary" onClick={startRecording}>

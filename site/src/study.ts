@@ -31,6 +31,15 @@ export interface StudyBackup {
   cards: StudyCard[];
 }
 
+export interface ManualCardInput {
+  front: string;
+  back: string;
+  languageId: string;
+  deck?: string;
+  tags?: string[];
+  direction?: StudyCard["direction"];
+}
+
 const DATABASE = "kakarayan-learning";
 const STORE = "cards";
 const VERSION = 1;
@@ -177,6 +186,31 @@ export function cardFromDictionary(
     front: front.trim(),
     back,
     tags: [...new Set([...card.tags, "dictionary", targetLanguage].filter(Boolean))].sort(),
+  };
+}
+
+export function manualStudyCard(input: ManualCardInput): StudyCard {
+  const front = input.front.trim();
+  const back = input.back.trim();
+  if (!front || !back) throw new Error("A study card needs a front and an answer");
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    deck: input.deck?.trim() || "My cards",
+    front,
+    back,
+    languageId: input.languageId,
+    tags: [...new Set((input.tags ?? []).map((tag) => tag.trim()).filter(Boolean))].sort(),
+    direction: input.direction ?? "recognition",
+    audioReferences: [],
+    source: null,
+    createdAt: now,
+    updatedAt: now,
+    dueAt: now,
+    intervalDays: 0,
+    ease: 2.5,
+    repetitions: 0,
+    lapses: 0,
   };
 }
 
