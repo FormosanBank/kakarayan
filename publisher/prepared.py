@@ -288,9 +288,7 @@ def build_prepared_formats(
             )
         }
     for partition in cast(list[dict[str, Any]], jsonl_manifest["partitions"]):
-        assignments[f"prepared/{partition['path']}"] = [
-            corpus_rights[str(partition["corpus_id"])]
-        ]
+        assignments[f"prepared/{partition['path']}"] = [corpus_rights[str(partition["corpus_id"])]]
     _package_metadata(prepared)
     (output / "search" / "sentences.jsonl").unlink()
     for path in prepared.rglob("*"):
