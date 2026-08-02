@@ -1,4 +1,4 @@
-import {useMemo, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 
 import {
   estimateScope,
@@ -44,6 +44,20 @@ function size(bytes: number): string {
   return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
 }
 
+function previewValue(record: SearchRecord, field: string): string {
+  if (field === "translations") {
+    return record.translations.map((item) => `${item.xml_lang}: ${item.text}`).join(" | ");
+  }
+  if (field === "tokens") return record.tokens.map((item) => item.surface).join(" ");
+  if (field === "phonology") return record.phonology.map((item) => item.text).join(" | ");
+  if (field === "glosses") return record.tier_translations.map((item) => item.text).join(" | ");
+  if (field === "audio") {
+    return record.audio.map((item) => item.file || item.url || item.source).filter(Boolean).join(" | ");
+  }
+  const value = record[field as keyof SearchRecord];
+  return typeof value === "string" ? value : "";
+}
+
 export function DatasetBuilder({data}: {data: AppData}) {
   const {number, tx} = useI18n();
   const [languageId, setLanguageId] = useState("");
@@ -52,12 +66,16 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const [mode, setMode] = useState<SearchMode>("exact");
   const [recordUnit, setRecordUnit] = useState<RecordUnit>("sentence");
   const [format, setFormat] = useState<ExportFormat>("csv");
-  const [maxRows, setMaxRows] = useState(1_000);
+  const [maxRows, setMaxRows] = useState<number | null>(1_000);
   const [fields, setFields] = useState<string[]>(FIELDS.slice(0, 8));
   const [preview, setPreview] = useState<SearchRecord[]>([]);
+  const [matchingSourceRows, setMatchingSourceRows] = useState<number | null>(null);
+  const [projectionRatio, setProjectionRatio] = useState(1);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [busy, setBusy] = useState<"preview" | "export" | null>(null);
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
+  const previewController = useRef<AbortController | null>(null);
 
   const corpora = useMemo(
     () =>
@@ -83,8 +101,54 @@ export function DatasetBuilder({data}: {data: AppData}) {
     .map((corpus) => rightsById.get(corpus.rights_id))
     .filter((entry) => entry && entry.redistribution !== "allowed");
   const overMemoryBudget = estimate.uncompressedBytes > 1024 ** 3;
+  const selectedSourceRows = matchingSourceRows ?? (query.trim() ? 0 : estimate.records);
+  const estimatedProjectedRows = Math.round(selectedSourceRows * projectionRatio);
+  const expectedRows = maxRows === null
+    ? estimatedProjectedRows
+    : Math.min(maxRows, estimatedProjectedRows);
+  const estimatedOutputBytes = useMemo(() => {
+    if (!preview.length || !expectedRows || !fields.length) return 0;
+    const sampleBytes = new TextEncoder().encode(
+      JSON.stringify(preview.map((record) => fields.map((field) => previewValue(record, field)))),
+    ).byteLength;
+    return Math.round((sampleBytes / preview.length) * expectedRows);
+  }, [expectedRows, fields, preview]);
+
+  useEffect(() => {
+    if (!languageId) return;
+    previewController.current?.abort();
+    const next = new AbortController();
+    previewController.current = next;
+    const timer = window.setTimeout(() => {
+      setPreviewBusy(true);
+      setError("");
+      void (async () => {
+        try {
+          const result = query.trim()
+            ? await searchRecords(shards, query.trim(), mode, next.signal, 12, indexes)
+            : null;
+          const sourceRecords = result?.records ?? await loadPreviewRecords(shards, next.signal, 12);
+          const projected = projectRecordUnits(sourceRecords, recordUnit);
+          setMatchingSourceRows(result?.matches ?? estimate.records);
+          setProjectionRatio(sourceRecords.length ? projected.length / sourceRecords.length : 0);
+          setPreview(projected.slice(0, 12));
+        } catch (cause) {
+          if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+            setError(cause instanceof Error ? cause.message : String(cause));
+          }
+        } finally {
+          if (previewController.current === next) setPreviewBusy(false);
+        }
+      })();
+    }, query.trim() ? 350 : 0);
+    return () => {
+      window.clearTimeout(timer);
+      next.abort();
+    };
+  }, [estimate.records, indexes, languageId, mode, query, recordUnit, shards]);
 
   async function recordsForExport(signal: AbortSignal): Promise<SearchRecord[]> {
+    const sourceLimit = maxRows ?? estimate.records;
     let sourceRecords: SearchRecord[];
     if (query.trim()) {
       if (estimate.uncompressedBytes > 512 * 1024 ** 2) {
@@ -96,12 +160,13 @@ export function DatasetBuilder({data}: {data: AppData}) {
         );
       }
       sourceRecords = (
-        await searchRecords(shards, query.trim(), mode, signal, maxRows, indexes)
+        await searchRecords(shards, query.trim(), mode, signal, sourceLimit, indexes)
       ).records;
     } else {
-      sourceRecords = await loadPreviewRecords(shards, signal, maxRows);
+      sourceRecords = await loadPreviewRecords(shards, signal, sourceLimit);
     }
-    return projectRecordUnits(sourceRecords, recordUnit).slice(0, maxRows);
+    const projected = projectRecordUnits(sourceRecords, recordUnit);
+    return maxRows === null ? projected : projected.slice(0, maxRows);
   }
 
   async function runPreview() {
@@ -112,19 +177,14 @@ export function DatasetBuilder({data}: {data: AppData}) {
     setBusy("preview");
     setError("");
     try {
-      const sourceRecords = query.trim()
-        ? (
-            await searchRecords(
-              shards,
-              query.trim(),
-              mode,
-              next.signal,
-              12,
-              indexes,
-            )
-          ).records
-        : await loadPreviewRecords(shards, next.signal, 12);
-      setPreview(projectRecordUnits(sourceRecords, recordUnit).slice(0, 12));
+      const result = query.trim()
+        ? await searchRecords(shards, query.trim(), mode, next.signal, 12, indexes)
+        : null;
+      const sourceRecords = result?.records ?? await loadPreviewRecords(shards, next.signal, 12);
+      const projected = projectRecordUnits(sourceRecords, recordUnit);
+      setMatchingSourceRows(result?.matches ?? estimate.records);
+      setProjectionRatio(sourceRecords.length ? projected.length / sourceRecords.length : 0);
+      setPreview(projected.slice(0, 12));
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -142,7 +202,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     setBusy("export");
     setError("");
     try {
-      const records = await recordsForExport(next.signal);
+      const records = format === "recipe" ? [] : await recordsForExport(next.signal);
       await downloadExport(
         records,
         {
@@ -168,36 +228,29 @@ export function DatasetBuilder({data}: {data: AppData}) {
 
   return (
     <section className="builder">
-      <div className="builder__steps">
-        <div>
-          <span>01</span>
-          <strong>{tx("Scope", "範圍")}</strong>
-        </div>
-        <div>
-          <span>02</span>
-          <strong>{tx("Fields", "欄位")}</strong>
-        </div>
-        <div>
-          <span>03</span>
-          <strong>{tx("Preview", "預覽")}</strong>
-        </div>
-        <div>
-          <span>04</span>
-          <strong>{tx("Export", "匯出")}</strong>
-        </div>
-      </div>
       <div className="builder__grid">
         <div className="builder__controls">
-          <h2>{tx("Build a bounded linguistic dataset", "建立有界限的語言學資料集")}</h2>
+          <h2>{tx("Choose the records", "選擇記錄")}</h2>
+          <p className="tool-note">
+            {tx(
+              "The preview and size estimate update as the selection changes.",
+              "預覽與大小估算會隨選取條件更新。",
+            )}
+          </p>
           <div className="form-grid">
             <label className="field">
               {tx("Language", "語言")}
               <select
                 value={languageId}
                 onChange={(event) => {
-                  setLanguageId(event.target.value);
+                  const value = event.target.value;
+                  previewController.current?.abort();
+                  setLanguageId(value);
                   setCorpusId("");
                   setPreview([]);
+                  setMatchingSourceRows(null);
+                  setProjectionRatio(1);
+                  setPreviewBusy(Boolean(value));
                 }}
               >
                 <option value="">{tx("Choose a display language…", "選擇顯示語言…")}</option>
@@ -210,7 +263,11 @@ export function DatasetBuilder({data}: {data: AppData}) {
             </label>
             <label className="field">
               {tx("Corpus", "語料庫")}
-              <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
+              <select
+                value={corpusId}
+                disabled={!languageId}
+                onChange={(event) => setCorpusId(event.target.value)}
+              >
                 <option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>
                 {corpora.map((corpus) => (
                   <option value={corpus.id} key={corpus.id}>
@@ -247,7 +304,11 @@ export function DatasetBuilder({data}: {data: AppData}) {
             </label>
             <label className="field">
               {tx("Query mode", "查詢模式")}
-              <select value={mode} onChange={(event) => setMode(event.target.value as SearchMode)}>
+              <select
+                value={mode}
+                disabled={!query.trim()}
+                onChange={(event) => setMode(event.target.value as SearchMode)}
+              >
                 <option value="source">{tx("Source exact", "來源完全相符")}</option>
                 <option value="exact">{tx("Normalized exact", "正規化後完全相符")}</option>
                 <option value="prefix">{tx("Prefix", "前綴")}</option>
@@ -260,6 +321,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
               </select>
             </label>
           </div>
+          <h2 className="builder__section-title">
+            {tx("Choose the columns and file", "選擇欄位與檔案")}
+          </h2>
           <fieldset className="field-checks">
             <legend>{tx("Included fields", "包含欄位")}</legend>
             {FIELDS.map((field) => (
@@ -283,12 +347,17 @@ export function DatasetBuilder({data}: {data: AppData}) {
             <label className="field">
               {tx("Output row cap", "輸出列數上限")}
               <select
-                value={maxRows}
-                onChange={(event) => setMaxRows(Number(event.target.value))}
+                value={maxRows ?? "all"}
+                onChange={(event) =>
+                  setMaxRows(event.target.value === "all" ? null : Number(event.target.value))
+                }
               >
                 <option value={1000}>1,000</option>
                 <option value={5000}>5,000</option>
                 <option value={10000}>10,000</option>
+                <option value={50000}>50,000</option>
+                <option value={100000}>100,000</option>
+                <option value="all">{tx("All rows in scope", "範圍內所有列")}</option>
               </select>
             </label>
             <label className="field">
@@ -315,7 +384,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               disabled={!languageId || Boolean(busy)}
               onClick={runPreview}
             >
-              {busy === "preview" ? tx("Loading preview…", "載入預覽中…") : tx("Preview", "預覽")}
+              {busy === "preview" ? tx("Refreshing…", "更新中…") : tx("Refresh preview", "更新預覽")}
             </button>
             <button
               className="button button--primary"
@@ -323,8 +392,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                 !languageId ||
                 fields.length === 0 ||
                 Boolean(busy) ||
-                overMemoryBudget ||
-                (blockedRights.length > 0 && format !== "recipe")
+                (format !== "recipe" && (overMemoryBudget || blockedRights.length > 0))
               }
               onClick={runExport}
             >
@@ -338,31 +406,50 @@ export function DatasetBuilder({data}: {data: AppData}) {
           </div>
         </div>
         <aside className="builder__estimate">
-          <p className="eyebrow">{tx("Selection estimate", "選取範圍估算")}</p>
+          <div className="builder__estimate-heading">
+            <p className="eyebrow">{tx("Current selection", "目前選取範圍")}</p>
+            {previewBusy && <span>{tx("Updating…", "更新中…")}</span>}
+          </div>
           <dl>
             <div>
-              <dt>{tx("Source sentences in scope", "範圍內來源句子")}</dt>
-              <dd>{number(estimate.records)}</dd>
+              <dt>
+                {query.trim()
+                  ? tx("Matching source sentences", "相符來源句子")
+                  : tx("Source sentences", "來源句子")}
+              </dt>
+              <dd>{previewBusy ? "…" : number(selectedSourceRows)}</dd>
             </div>
             <div>
-              <dt>{tx("Network transfer", "網路傳輸量")}</dt>
-              <dd>{size(estimate.compressedBytes)}</dd>
+              <dt>{tx("Estimated output rows", "估計輸出列數")}</dt>
+              <dd>
+                {number(expectedRows)}
+                {recordUnit !== "sentence" && (
+                  <small>{tx("sample estimate", "樣本估算")}</small>
+                )}
+              </dd>
             </div>
             <div>
-              <dt>{tx("Decoded input", "解碼後輸入量")}</dt>
-              <dd>{size(estimate.uncompressedBytes)}</dd>
+              <dt>{tx("Approximate output size", "估計輸出大小")}</dt>
+              <dd>{estimatedOutputBytes ? size(estimatedOutputBytes) : "—"}</dd>
             </div>
             <div>
-              <dt>{recordUnit} {tx("row bound", "列數上限")}</dt>
-              <dd>{number(Math.min(maxRows, estimate.records))} {tx("rows", "列")}</dd>
+              <dt>{tx("Output limit", "輸出上限")}</dt>
+              <dd>{maxRows === null ? tx("All rows", "所有列") : number(maxRows)}</dd>
             </div>
           </dl>
-          <p>
-            {tx(
-              "The estimate covers source shards, not the final file. Queries may return fewer rows. Word, morpheme, token, and audio totals are known after the bounded source records load. Ordering follows source path and tier order.",
-              "估算涵蓋來源分片，而非最終檔案。查詢可能傳回較少列數。詞、語素、詞元與音訊總數會在載入有界限的來源記錄後確定；排列順序依來源路徑與層級順序。",
-            )}
-          </p>
+          <details className="builder__workload">
+            <summary>{tx("Browser workload", "瀏覽器工作量")}</summary>
+            <dl>
+              <div>
+                <dt>{tx("Network transfer", "網路傳輸量")}</dt>
+                <dd>{size(estimate.compressedBytes)}</dd>
+              </div>
+              <div>
+                <dt>{tx("Decoded input", "解碼後輸入量")}</dt>
+                <dd>{size(estimate.uncompressedBytes)}</dd>
+              </div>
+            </dl>
+          </details>
           {overMemoryBudget && (
             <p className="callout callout--warning">
               {tx("This scope exceeds the 1 GiB browser safety limit. Narrow it or use a prepared download.", "此範圍超過瀏覽器 1 GiB 安全限制。請縮小範圍或使用預備下載檔案。")}
@@ -377,41 +464,52 @@ export function DatasetBuilder({data}: {data: AppData}) {
         </aside>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
-      {preview.length > 0 && (
-        <div className="builder__preview">
-          <h2>{tx("Preview in deterministic source order", "依可重現來源順序預覽")}</h2>
-          <p>
-            {tx("Showing", "顯示")} {number(preview.length)} {tx("projected", "筆投影的")}{" "}
-            {recordUnit} {tx("rows. Empty units mean the selected source lacks that structure.", "列。空白單位表示所選來源缺少該結構。")}
-          </p>
+      <div className="builder__preview" aria-busy={previewBusy}>
+        <div className="builder__preview-heading">
+          <div>
+            <h2>{tx("Dataset preview", "資料集預覽")}</h2>
+            <p>
+              {languageId
+                ? tx(
+                    `First ${preview.length} ${recordUnit} rows in deterministic source order.`,
+                    `依可重現來源順序顯示前 ${preview.length} 筆 ${recordUnit} 列。`,
+                  )
+                : tx("Choose a language to inspect the dataset.", "選擇語言以檢視資料集。")}
+            </p>
+          </div>
+          {previewBusy && <span className="status">{tx("Updating…", "更新中…")}</span>}
+        </div>
+        {languageId && !previewBusy && preview.length === 0 && (
+          <div className="empty-state">
+            {tx("No rows match this selection.", "沒有符合此選取範圍的列。")}
+          </div>
+        )}
+        {preview.length > 0 && fields.length > 0 && (
           <div className="table-scroll" tabIndex={0}>
             <table>
               <thead>
                 <tr>
-                  <th>{tx("Source form", "來源形式")}</th>
-                  <th>{tx("Translation", "翻譯")}</th>
-                  <th>{tx("Corpus", "語料庫")}</th>
-                  <th>{tx("Locator", "定位資訊")}</th>
+                  {fields.map((field) => <th key={field}>{field}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {preview.map((record) => (
                   <tr key={record.id}>
-                    <td>{record.standard || record.original}</td>
-                    <td>{record.translations.map((item) => item.text).join(" | ")}</td>
-                    <td>
-                      {data.corpora.find((corpus) => corpus.id === record.corpus_id)?.name}
-                    </td>
-                    <td>
-                      <code>{record.xml_id}</code>
-                    </td>
+                    {fields.map((field) => (
+                      <td key={field}>{previewValue(record, field) || "—"}</td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+        {fields.length === 0 && (
+          <div className="empty-state">
+            {tx("Select at least one field to preview and export.", "請至少選擇一個欄位以預覽及匯出。")}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

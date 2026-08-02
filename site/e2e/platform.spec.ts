@@ -209,11 +209,15 @@ test("dataset recipes and worker summaries are available without a backend", asy
   await page.getByRole("tab", {name: "Dataset builder"}).click();
   await selectSmallAmisScope(page, "MontgomeryTexts");
   await page.getByLabel("Record unit").selectOption("word");
-  await page.getByRole("button", {name: "Preview"}).click();
+  await page.getByRole("button", {name: "Refresh preview"}).click();
   await expect(
-    page.getByRole("heading", {name: "Preview in deterministic source order"}),
+    page.getByRole("heading", {name: "Dataset preview"}),
   ).toBeVisible({timeout: 30_000});
-  await expect(page.getByText(/projected word rows/)).toBeVisible();
+  await expect(page.getByText(/First \d+ word rows/)).toBeVisible();
+  await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  await expect(page.locator(".builder__estimate")).toContainText("Estimated output rows");
+  await page.getByLabel("Output row cap").selectOption("all");
+  await expect(page.locator(".builder__estimate")).toContainText("All rows");
   await page.getByLabel("Format").selectOption("recipe");
   const recipeDownload = page.waitForEvent("download");
   await page.getByRole("button", {name: "Download", exact: true}).click();

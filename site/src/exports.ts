@@ -228,9 +228,6 @@ export async function downloadExport(
   signal?: AbortSignal,
 ): Promise<void> {
   if (format === "parquet") {
-    if (records.length > 10_000) {
-      throw new Error("Browser Parquet export is limited to 10,000 records");
-    }
     const {parquetFromRows} = await import("./duckdbExport");
     const columns = context.fields ?? COLUMNS;
     const rows = records.map((record) => {
