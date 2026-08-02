@@ -1,13 +1,20 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 
 import {
   estimateScope,
   loadPreviewRecords,
-  matchingIndexes,
-  matchingShards,
   searchRecords,
   type SearchMode,
 } from "../data";
+import {
+  DATASET_FIELD_INFO,
+  DATASET_FIELDS,
+  datasetFieldValue,
+  ESSENTIAL_DATASET_FIELDS,
+  recordMeetsFilters,
+  TIER_REQUIREMENTS,
+  type TierRequirement,
+} from "../datasetSelection";
 import {downloadExport, type ExportFormat} from "../exports";
 import {useI18n} from "../i18n";
 import {
@@ -16,22 +23,7 @@ import {
 } from "../recordUnits";
 import {Link} from "../routing";
 import type {AppData, SearchRecord} from "../types";
-
-const FIELDS = [
-  "id",
-  "text_id",
-  "standard",
-  "original",
-  "translations",
-  "tokens",
-  "phonology",
-  "glosses",
-  "language_id",
-  "corpus_id",
-  "dialect",
-  "source_path",
-  "audio",
-];
+import {DatasetPreview} from "./DatasetPreview";
 
 function size(bytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB"];
@@ -44,30 +36,20 @@ function size(bytes: number): string {
   return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
 }
 
-function previewValue(record: SearchRecord, field: string): string {
-  if (field === "translations") {
-    return record.translations.map((item) => `${item.xml_lang}: ${item.text}`).join(" | ");
-  }
-  if (field === "tokens") return record.tokens.map((item) => item.surface).join(" ");
-  if (field === "phonology") return record.phonology.map((item) => item.text).join(" | ");
-  if (field === "glosses") return record.tier_translations.map((item) => item.text).join(" | ");
-  if (field === "audio") {
-    return record.audio.map((item) => item.file || item.url || item.source).filter(Boolean).join(" | ");
-  }
-  const value = record[field as keyof SearchRecord];
-  return typeof value === "string" ? value : "";
-}
-
 export function DatasetBuilder({data}: {data: AppData}) {
   const {number, tx} = useI18n();
   const [languageId, setLanguageId] = useState("");
+  const [additionalLanguageIds, setAdditionalLanguageIds] = useState<string[]>([]);
   const [corpusId, setCorpusId] = useState("");
+  const [additionalCorpusIds, setAdditionalCorpusIds] = useState<string[]>([]);
+  const [dialects, setDialects] = useState<string[]>([]);
+  const [requirements, setRequirements] = useState<TierRequirement[]>([]);
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("exact");
   const [recordUnit, setRecordUnit] = useState<RecordUnit>("sentence");
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [maxRows, setMaxRows] = useState<number | null>(1_000);
-  const [fields, setFields] = useState<string[]>(FIELDS.slice(0, 8));
+  const [fields, setFields] = useState<string[]>(ESSENTIAL_DATASET_FIELDS);
   const [preview, setPreview] = useState<SearchRecord[]>([]);
   const [matchingSourceRows, setMatchingSourceRows] = useState<number | null>(null);
   const [projectionRatio, setProjectionRatio] = useState(1);
@@ -77,31 +59,47 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const controller = useRef<AbortController | null>(null);
   const previewController = useRef<AbortController | null>(null);
 
+  const languageIds = useMemo(
+    () => [languageId, ...additionalLanguageIds].filter(Boolean),
+    [additionalLanguageIds, languageId],
+  );
   const corpora = useMemo(
     () =>
       data.corpora.filter(
-        (corpus) => !languageId || corpus.languages.includes(languageId),
+        (corpus) => !languageIds.length || corpus.languages.some((id) => languageIds.includes(id)),
       ),
-    [data.corpora, languageId],
+    [data.corpora, languageIds],
+  );
+  const corpusIds = useMemo(
+    () => corpusId ? [corpusId, ...additionalCorpusIds].filter((id) => corpora.some((item) => item.id === id)) : [],
+    [additionalCorpusIds, corpora, corpusId],
+  );
+  const availableDialects = useMemo(
+    () => [...new Set(data.languages.filter((item) => languageIds.includes(item.id)).flatMap((item) => item.dialects))].sort(),
+    [data.languages, languageIds],
   );
   const shards = useMemo(
-    () => matchingShards(data.search, languageId, corpusId),
-    [corpusId, data.search, languageId],
+    () => data.search.shards.filter(
+      (shard) => languageIds.includes(shard.language_id) && (!corpusIds.length || corpusIds.includes(shard.corpus_id)),
+    ),
+    [corpusIds, data.search.shards, languageIds],
   );
   const indexes = useMemo(
-    () => matchingIndexes(data.search, languageId, corpusId),
-    [corpusId, data.search, languageId],
+    () => data.search.indexes.filter(
+      (index) => languageIds.includes(index.language_id) && (!corpusIds.length || corpusIds.includes(index.corpus_id)),
+    ),
+    [corpusIds, data.search.indexes, languageIds],
   );
   const estimate = useMemo(() => estimateScope(shards), [shards]);
-  const selectedCorpora = corpusId
-    ? data.corpora.filter((corpus) => corpus.id === corpusId)
+  const selectedCorpora = corpusIds.length
+    ? data.corpora.filter((corpus) => corpusIds.includes(corpus.id))
     : corpora;
   const rightsById = new Map(data.rights.entries.map((entry) => [entry.id, entry]));
   const blockedRights = selectedCorpora
     .map((corpus) => rightsById.get(corpus.rights_id))
     .filter((entry) => entry && entry.redistribution !== "allowed");
   const overMemoryBudget = estimate.uncompressedBytes > 1024 ** 3;
-  const selectedSourceRows = matchingSourceRows ?? (query.trim() ? 0 : estimate.records);
+  const selectedSourceRows = matchingSourceRows ?? estimate.records;
   const estimatedProjectedRows = Math.round(selectedSourceRows * projectionRatio);
   const expectedRows = maxRows === null
     ? estimatedProjectedRows
@@ -109,10 +107,28 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const estimatedOutputBytes = useMemo(() => {
     if (!preview.length || !expectedRows || !fields.length) return 0;
     const sampleBytes = new TextEncoder().encode(
-      JSON.stringify(preview.map((record) => fields.map((field) => previewValue(record, field)))),
+      JSON.stringify(preview.map((record) => fields.map((field) => datasetFieldValue(record, field)))),
     ).byteLength;
     return Math.round((sampleBytes / preview.length) * expectedRows);
   }, [expectedRows, fields, preview]);
+
+  const previewSelection = useCallback(async (signal: AbortSignal) => {
+    const sampleLimit = Math.min(500, estimate.records);
+    const result = query.trim()
+      ? await searchRecords(shards, query.trim(), mode, signal, sampleLimit, indexes)
+      : null;
+    const sourceRecords = result?.records ?? await loadPreviewRecords(shards, signal, sampleLimit);
+    const filtered = sourceRecords.filter((record) => recordMeetsFilters(record, dialects, requirements));
+    const baseRows = result?.matches ?? estimate.records;
+    const filterRatio = sourceRecords.length ? filtered.length / sourceRecords.length : 0;
+    const filteredRows = dialects.length || requirements.length
+      ? Math.round(baseRows * filterRatio)
+      : baseRows;
+    const projected = projectRecordUnits(filtered, recordUnit);
+    setMatchingSourceRows(filteredRows);
+    setProjectionRatio(filtered.length ? projected.length / filtered.length : 0);
+    setPreview(projected.slice(0, 12));
+  }, [dialects, estimate.records, indexes, mode, query, recordUnit, requirements, shards]);
 
   useEffect(() => {
     if (!languageId) return;
@@ -124,14 +140,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
       setError("");
       void (async () => {
         try {
-          const result = query.trim()
-            ? await searchRecords(shards, query.trim(), mode, next.signal, 12, indexes)
-            : null;
-          const sourceRecords = result?.records ?? await loadPreviewRecords(shards, next.signal, 12);
-          const projected = projectRecordUnits(sourceRecords, recordUnit);
-          setMatchingSourceRows(result?.matches ?? estimate.records);
-          setProjectionRatio(sourceRecords.length ? projected.length / sourceRecords.length : 0);
-          setPreview(projected.slice(0, 12));
+          await previewSelection(next.signal);
         } catch (cause) {
           if (!(cause instanceof DOMException && cause.name === "AbortError")) {
             setError(cause instanceof Error ? cause.message : String(cause));
@@ -145,10 +154,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
       window.clearTimeout(timer);
       next.abort();
     };
-  }, [estimate.records, indexes, languageId, mode, query, recordUnit, shards]);
+  }, [languageId, previewSelection, query]);
 
   async function recordsForExport(signal: AbortSignal): Promise<SearchRecord[]> {
-    const sourceLimit = maxRows ?? estimate.records;
+    const sourceLimit = estimate.records;
     let sourceRecords: SearchRecord[];
     if (query.trim()) {
       if (estimate.uncompressedBytes > 512 * 1024 ** 2) {
@@ -165,7 +174,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
     } else {
       sourceRecords = await loadPreviewRecords(shards, signal, sourceLimit);
     }
-    const projected = projectRecordUnits(sourceRecords, recordUnit);
+    const filtered = sourceRecords.filter((record) => recordMeetsFilters(record, dialects, requirements));
+    const projected = projectRecordUnits(filtered, recordUnit);
     return maxRows === null ? projected : projected.slice(0, maxRows);
   }
 
@@ -177,14 +187,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     setBusy("preview");
     setError("");
     try {
-      const result = query.trim()
-        ? await searchRecords(shards, query.trim(), mode, next.signal, 12, indexes)
-        : null;
-      const sourceRecords = result?.records ?? await loadPreviewRecords(shards, next.signal, 12);
-      const projected = projectRecordUnits(sourceRecords, recordUnit);
-      setMatchingSourceRows(result?.matches ?? estimate.records);
-      setProjectionRatio(sourceRecords.length ? projected.length / sourceRecords.length : 0);
-      setPreview(projected.slice(0, 12));
+      await previewSelection(next.signal);
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setError(cause instanceof Error ? cause.message : String(cause));
@@ -211,6 +214,11 @@ export function DatasetBuilder({data}: {data: AppData}) {
           mode,
           languageId,
           corpusId,
+          languageIds,
+          corpusIds,
+          dialects,
+          requirements,
+          maxRows,
           fields,
           recordUnit,
         },
@@ -246,7 +254,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
                   const value = event.target.value;
                   previewController.current?.abort();
                   setLanguageId(value);
+                  setAdditionalLanguageIds([]);
                   setCorpusId("");
+                  setAdditionalCorpusIds([]);
+                  setDialects([]);
                   setPreview([]);
                   setMatchingSourceRows(null);
                   setProjectionRatio(1);
@@ -266,7 +277,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
               <select
                 value={corpusId}
                 disabled={!languageId}
-                onChange={(event) => setCorpusId(event.target.value)}
+                onChange={(event) => {
+                  setCorpusId(event.target.value);
+                  setAdditionalCorpusIds([]);
+                }}
               >
                 <option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>
                 {corpora.map((corpus) => (
@@ -321,12 +335,100 @@ export function DatasetBuilder({data}: {data: AppData}) {
               </select>
             </label>
           </div>
+          <details className="builder__scope-details">
+            <summary>{tx("Combine languages and corpora", "合併語言與語料庫")}</summary>
+            <div className="builder__scope-options">
+              <fieldset className="field-checks">
+                <legend>{tx("Additional languages", "其他語言")}</legend>
+                {data.languages.filter((language) => language.id !== languageId).map((language) => (
+                  <label key={language.id}>
+                    <input
+                      type="checkbox"
+                      checked={additionalLanguageIds.includes(language.id)}
+                      disabled={!languageId}
+                      onChange={() => {
+                        setAdditionalLanguageIds((current) =>
+                          current.includes(language.id)
+                            ? current.filter((value) => value !== language.id)
+                            : [...current, language.id],
+                        );
+                        setCorpusId("");
+                        setAdditionalCorpusIds([]);
+                        setDialects([]);
+                      }}
+                    />
+                    <span>{language.name}</span>
+                  </label>
+                ))}
+              </fieldset>
+              <fieldset className="field-checks">
+                <legend>{tx("Additional corpora", "其他語料庫")}</legend>
+                {!corpusId && <small>{tx("Choose a primary corpus first. Leaving it at all already includes every compatible corpus.", "請先選擇主要語料庫。保留為全部時已包含所有相容語料庫。")}</small>}
+                {corpora.filter((corpus) => corpus.id !== corpusId).map((corpus) => (
+                  <label key={corpus.id}>
+                    <input
+                      type="checkbox"
+                      checked={additionalCorpusIds.includes(corpus.id)}
+                      disabled={!corpusId}
+                      onChange={() => setAdditionalCorpusIds((current) =>
+                        current.includes(corpus.id)
+                          ? current.filter((value) => value !== corpus.id)
+                          : [...current, corpus.id]
+                      )}
+                    />
+                    <span>{corpus.name}</span>
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+          </details>
+          {languageId && <div className="builder__filters">
+            <fieldset className="field-checks">
+              <legend>{tx("Dialect filter", "方言篩選")}</legend>
+              {availableDialects.map((value) => (
+                <label key={value}>
+                  <input
+                    type="checkbox"
+                    checked={dialects.includes(value)}
+                    onChange={() => setDialects((current) =>
+                      current.includes(value)
+                        ? current.filter((item) => item !== value)
+                        : [...current, value]
+                    )}
+                  />
+                  <span>{value}</span>
+                </label>
+              ))}
+            </fieldset>
+            <fieldset className="field-checks">
+              <legend>{tx("Require tiers", "必須包含的層級")}</legend>
+              {TIER_REQUIREMENTS.map(([value, label]) => (
+                <label key={value}>
+                  <input
+                    type="checkbox"
+                    checked={requirements.includes(value)}
+                    onChange={() => setRequirements((current) =>
+                      current.includes(value)
+                        ? current.filter((item) => item !== value)
+                        : [...current, value]
+                    )}
+                  />
+                  <span>{tx(label, label)}</span>
+                </label>
+              ))}
+            </fieldset>
+          </div>}
           <h2 className="builder__section-title">
             {tx("Choose the columns and file", "選擇欄位與檔案")}
           </h2>
+          <div className="builder__field-actions">
+            <button className="text-button" onClick={() => setFields(ESSENTIAL_DATASET_FIELDS)}>{tx("Essential", "基本欄位")}</button>
+            <button className="text-button" onClick={() => setFields([...DATASET_FIELDS])}>{tx("Select all", "全選")}</button>
+            <button className="text-button" onClick={() => setFields([])}>{tx("Clear", "清除")}</button>
+          </div>
           <fieldset className="field-checks">
             <legend>{tx("Included fields", "包含欄位")}</legend>
-            {FIELDS.map((field) => (
+            {DATASET_FIELD_INFO.map(([field, description]) => (
               <label key={field}>
                 <input
                   type="checkbox"
@@ -339,7 +441,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                     )
                   }
                 />
-                {field}
+                <span><code>{field}</code><small aria-hidden="true">{description}</small></span>
               </label>
             ))}
           </fieldset>
@@ -412,6 +514,14 @@ export function DatasetBuilder({data}: {data: AppData}) {
           </div>
           <dl>
             <div>
+              <dt>{tx("Languages", "語言")}</dt>
+              <dd>{number(languageIds.length)}</dd>
+            </div>
+            <div>
+              <dt>{tx("Corpora", "語料庫")}</dt>
+              <dd>{number(languageIds.length ? corpusIds.length || corpora.length : 0)}</dd>
+            </div>
+            <div>
               <dt>
                 {query.trim()
                   ? tx("Matching source sentences", "相符來源句子")
@@ -437,6 +547,12 @@ export function DatasetBuilder({data}: {data: AppData}) {
               <dd>{maxRows === null ? tx("All rows", "所有列") : number(maxRows)}</dd>
             </div>
           </dl>
+          {(dialects.length > 0 || requirements.length > 0) && (
+            <div className="builder__active-filters">
+              {dialects.map((value) => <span key={`dialect-${value}`}>{tx("dialect", "方言")}: {value}</span>)}
+              {requirements.map((value) => <span key={`tier-${value}`}>{tx("has", "包含")}: {value}</span>)}
+            </div>
+          )}
           <details className="builder__workload">
             <summary>{tx("Browser workload", "瀏覽器工作量")}</summary>
             <dl>
@@ -460,56 +576,32 @@ export function DatasetBuilder({data}: {data: AppData}) {
               {tx("Data export is disabled because at least one corpus does not have a reviewed redistribution decision. A recipe may still be saved.", "至少一個語料庫尚無經審查的再散布決定，因此停用資料匯出；仍可儲存操作配方。")}
             </p>
           )}
+          <details className="builder__rights">
+            <summary>{tx("Rights and provenance", "權利與來源")}</summary>
+            <ul>
+              {selectedCorpora.map((corpus) => {
+                const rights = rightsById.get(corpus.rights_id);
+                return (
+                  <li key={corpus.id}>
+                    <Link to={`/corpora/${corpus.id}`}>{corpus.name}</Link>
+                    <span>{rights?.redistribution ?? tx("unknown", "未知")} · {corpus.rights_id}</span>
+                  </li>
+                );
+              })}
+            </ul>
+            <small>{tx("Every export is pinned to release", "每份匯出皆固定於版本")} <code>{data.meta.release_id}</code>.</small>
+          </details>
           <Link to="/downloads">{tx("Browse prepared packages →", "瀏覽預備套件 →")}</Link>
         </aside>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
-      <div className="builder__preview" aria-busy={previewBusy}>
-        <div className="builder__preview-heading">
-          <div>
-            <h2>{tx("Dataset preview", "資料集預覽")}</h2>
-            <p>
-              {languageId
-                ? tx(
-                    `First ${preview.length} ${recordUnit} rows in deterministic source order.`,
-                    `依可重現來源順序顯示前 ${preview.length} 筆 ${recordUnit} 列。`,
-                  )
-                : tx("Choose a language to inspect the dataset.", "選擇語言以檢視資料集。")}
-            </p>
-          </div>
-          {previewBusy && <span className="status">{tx("Updating…", "更新中…")}</span>}
-        </div>
-        {languageId && !previewBusy && preview.length === 0 && (
-          <div className="empty-state">
-            {tx("No rows match this selection.", "沒有符合此選取範圍的列。")}
-          </div>
-        )}
-        {preview.length > 0 && fields.length > 0 && (
-          <div className="table-scroll" tabIndex={0}>
-            <table>
-              <thead>
-                <tr>
-                  {fields.map((field) => <th key={field}>{field}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {preview.map((record) => (
-                  <tr key={record.id}>
-                    {fields.map((field) => (
-                      <td key={field}>{previewValue(record, field) || "—"}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {fields.length === 0 && (
-          <div className="empty-state">
-            {tx("Select at least one field to preview and export.", "請至少選擇一個欄位以預覽及匯出。")}
-          </div>
-        )}
-      </div>
+      <DatasetPreview
+        fields={fields}
+        languageSelected={Boolean(languageId)}
+        preview={preview}
+        previewBusy={previewBusy}
+        recordUnit={recordUnit}
+      />
     </section>
   );
 }

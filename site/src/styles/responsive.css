@@ -293,6 +293,12 @@
     grid-template-columns: 1fr;
   }
 
+  .builder__scope-options,
+  .builder__filters,
+  .builder__schema dl {
+    grid-template-columns: 1fr;
+  }
+
   .builder__estimate {
     position: static;
   }

@@ -21,8 +21,10 @@ export interface ExportRecipe {
     match: SearchMode;
     language_ids: string[];
     corpus_ids: string[];
+    dialects: string[];
+    requirements: string[];
     record_ids: string[];
-    max_rows: number;
+    max_rows: number | null;
     record_unit: RecordUnit;
   };
   fields: string[];
@@ -36,6 +38,11 @@ export interface ExportContext {
   mode: SearchMode;
   languageId: string;
   corpusId: string;
+  languageIds?: string[];
+  corpusIds?: string[];
+  dialects?: string[];
+  requirements?: string[];
+  maxRows?: number | null;
   fields?: string[];
   recordUnit?: RecordUnit;
 }
@@ -103,10 +110,12 @@ export function makeRecipe(
     selection: {
       query: context.query,
       match: context.mode,
-      language_ids: [context.languageId],
-      corpus_ids: context.corpusId ? [context.corpusId] : [],
+      language_ids: context.languageIds ?? [context.languageId],
+      corpus_ids: context.corpusIds ?? (context.corpusId ? [context.corpusId] : []),
+      dialects: context.dialects ?? [],
+      requirements: context.requirements ?? [],
       record_ids: records.map((record) => record.id),
-      max_rows: records.length,
+      max_rows: context.maxRows === undefined ? records.length : context.maxRows,
       record_unit: context.recordUnit ?? "sentence",
     },
     fields: context.fields ?? COLUMNS,

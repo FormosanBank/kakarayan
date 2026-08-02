@@ -728,6 +728,71 @@
   margin: 24px 0;
 }
 
+.builder__scope-details {
+  padding: 14px 16px;
+  margin: 20px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.builder__scope-details > summary,
+.builder__schema > summary,
+.builder__rights > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.builder__scope-options,
+.builder__filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.builder__scope-options .field-checks,
+.builder__filters .field-checks {
+  margin-bottom: 0;
+}
+
+.builder__scope-options fieldset > small {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.builder__filters {
+  padding: 18px;
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.builder__field-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.builder__controls > .field-checks label span {
+  display: inline-grid;
+  gap: 3px;
+}
+
+.builder__controls > .field-checks label span small {
+  max-width: 250px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.builder__controls > .field-checks input:checked + span small,
+.builder__controls > .field-checks input:checked + span code {
+  color: inherit;
+}
+
 .builder__estimate {
   position: sticky;
   top: 80px;
@@ -776,6 +841,22 @@
   font: 400 9px/1.3 var(--font-body);
 }
 
+.builder__active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.builder__active-filters span {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: white;
+  font-size: 9px;
+}
+
 .builder__workload {
   padding: 14px 0;
   margin: 10px 0 16px;
@@ -787,6 +868,34 @@
 .builder__workload summary {
   cursor: pointer;
   font-weight: 600;
+}
+
+.builder__rights {
+  padding: 14px 0;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.builder__rights ul {
+  max-height: 220px;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.builder__rights li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+}
+
+.builder__rights li span,
+.builder__rights > small {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
 }
 
 .builder__preview,
@@ -820,6 +929,43 @@
   min-width: 120px;
   max-width: 320px;
   overflow-wrap: anywhere;
+}
+
+.builder__schema {
+  padding: 18px 20px;
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.builder__schema > p {
+  max-width: 75ch;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.builder__schema dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 24px;
+}
+
+.builder__schema dl div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+
+.builder__schema dt,
+.builder__schema dd {
+  margin: 0;
+  font-size: 11px;
+}
+
+.builder__schema dd {
+  color: var(--muted);
 }
 
 .table-scroll {
