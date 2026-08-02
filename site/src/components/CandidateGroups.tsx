@@ -210,12 +210,11 @@ export function CandidateGroups({
           <article key={candidate.key} className="dictionary-entry">
             <header>
               <div>
-                <p className="eyebrow">{tx("Corpus entry", "語料詞條")}</p>
                 <h3>{candidate.label}</h3>
               </div>
               <span>
                 {number(candidate.records.length)}{" "}
-                {tx(candidate.records.length === 1 ? "example" : "examples", "筆例句")}
+                {tx(candidate.records.length === 1 ? "corpus example" : "corpus examples", "筆語料例句")}
               </span>
             </header>
             <div className="dictionary-entry__meaning">
@@ -255,6 +254,7 @@ export function CandidateGroups({
                 {tx("Save word", "儲存單詞")}
               </button>
               <small>
+                {tx("Sources:", "來源：")}{" "}
                 {[...corpora].map((corpusId, index) => {
                   const corpus = data.corpora.find((item) => item.id === corpusId);
                   return (
@@ -264,8 +264,6 @@ export function CandidateGroups({
                     </span>
                   );
                 })}
-                {" · "}
-                {tx("cited corpus record", "附引用的語料記錄")}
               </small>
             </footer>
           </article>

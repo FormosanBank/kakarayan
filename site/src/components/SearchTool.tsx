@@ -58,7 +58,8 @@ export function SearchTool({
   const [scanned, setScanned] = useState(0);
   const [matches, setMatches] = useState(0);
   const [truncated, setTruncated] = useState(false);
-  const [visibleLimit, setVisibleLimit] = useState(learner ? 60 : 200);
+  const initialLimit = learner ? 30 : kind === "dictionary" ? 200 : 25;
+  const [visibleLimit, setVisibleLimit] = useState(initialLimit);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -179,10 +180,10 @@ export function SearchTool({
     if (!hasInitialQuery.current || initialStarted.current || !targetLanguage) return;
     const timer = window.setTimeout(() => {
       initialStarted.current = true;
-      void performSearch(learner ? 60 : 200, false);
+      void performSearch(initialLimit, false);
     });
     return () => window.clearTimeout(timer);
-  }, [learner, performSearch, targetLanguage]);
+  }, [initialLimit, performSearch, targetLanguage]);
 
   useEffect(() => {
     const recordId = params.get("record");
@@ -192,7 +193,7 @@ export function SearchTool({
 
   function runSearch(event: FormEvent) {
     event.preventDefault();
-    void performSearch(learner ? 60 : 200, true);
+    void performSearch(initialLimit, true);
   }
 
   async function addSentence(record: SearchRecord) {
@@ -221,10 +222,9 @@ export function SearchTool({
     }
   }
 
-  const resultLabel =
-    kind === "dictionary"
-      ? tx(matches === 1 ? "entry" : "entries", "筆詞條")
-      : tx(matches === 1 ? "sentence" : "sentences", "句子");
+  const resultLabel = kind === "dictionary"
+    ? tx("matching corpus records", "筆相符語料記錄")
+    : tx(matches === 1 ? "sentence" : "sentences", "句子");
 
   return (
     <section className={`search-tool search-tool--${kind} ${learner ? "search-tool--learner" : ""}`}>
@@ -330,11 +330,20 @@ export function SearchTool({
 
       {(records.length > 0 || (!busy && searched)) && (
         <div className="results-heading" aria-live="polite">
-          <p>
-            <strong>{number(matches)}</strong> {resultLabel}
-            <span> · {tx("showing", "顯示")} {number(records.length)}</span>
-            <span> · {tx("checked", "已檢查")} {number(scanned)}</span>
-          </p>
+          <dl className="result-summary">
+            <div>
+              <dt>{tx("Matches", "相符結果")}</dt>
+              <dd><strong>{number(matches)}</strong> {resultLabel}</dd>
+            </div>
+            <div>
+              <dt>{tx("Displayed", "目前顯示")}</dt>
+              <dd>{number(records.length)}</dd>
+            </div>
+            <div>
+              <dt>{tx("Records searched", "已搜尋記錄")}</dt>
+              <dd>{number(scanned)}</dd>
+            </div>
+          </dl>
           {kind === "sentences" && !learner && records.length > 0 && (
             <div className="result-export">
               <label>
@@ -379,7 +388,7 @@ export function SearchTool({
                   }
                 }}
               >
-                {exporting ? tx("Preparing…", "準備中…") : tx("Download", "下載")}
+                {exporting ? tx("Preparing…", "準備中…") : tx("Download shown", "下載目前結果")}
               </button>
             </div>
           )}
@@ -428,9 +437,14 @@ export function SearchTool({
             <button
               className="button button--quiet"
               disabled={busy}
-              onClick={() => void performSearch(Math.min(visibleLimit + 200, 2_000), false)}
+              onClick={() =>
+                void performSearch(
+                  Math.min(visibleLimit + (kind === "dictionary" ? 200 : 25), 2_000),
+                  false,
+                )
+              }
             >
-              {tx("Show more", "顯示更多")}
+              {tx("Load more", "載入更多")}
             </button>
           )}
         </div>

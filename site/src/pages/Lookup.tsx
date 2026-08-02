@@ -35,8 +35,8 @@ export function Lookup({
         eyebrow={tx("CORPUS LOOKUP", "語料查詢")}
         title={tx("Dictionary and sentences", "單詞釋義與語境例句")}
         lede={tx(
-          "Choose what you want to find, then search the same cited public corpus data.",
-          "選擇查詢方式，再搜尋同一套附引用的公開語料資料。",
+          "Look up a headword or find it in context across the public corpora.",
+          "查詢詞目，或在公開語料庫中查看其使用語境。",
         )}
       />
       <LookupKindToggle kind={kind} onChange={selectKind} />

@@ -233,15 +233,20 @@
   .dictionary-entry footer,
   .result-card footer {
     align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .kwic {
     grid-template-columns: 1fr;
   }
 
-  .kwic span:first-child {
-    text-align: left;
+  .dictionary-entry footer {
+    flex-direction: column;
+  }
+
+  .record-provenance > div {
+    justify-items: start;
+  }
+
+  .translations p {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .builder__steps {

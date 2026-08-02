@@ -142,17 +142,19 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   await selectSmallAmisScope(page);
   await page.getByLabel("Word, phrase, or translation").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
-  await expect(page.locator(".result-card").first()).toBeVisible();
-  await expect(page.locator(".result-card").first()).toContainText(/lima/i);
-  await expect(page.getByRole("link", {name: "Source XML"}).first()).toHaveAttribute(
+  const firstResult = page.locator(".result-card").first();
+  await expect(firstResult).toBeVisible();
+  await expect(firstResult).toContainText(/lima/i);
+  await firstResult.locator(".record-provenance").click();
+  await expect(firstResult.getByRole("link", {name: "Source XML"})).toHaveAttribute(
     "href",
     /FormosanBank\/blob\/[0-9a-f]{40}\//,
   );
   expect(searchAssets.some((url) => url.includes("/indexes/"))).toBe(true);
   expect(searchAssets.some((url) => url.includes("/shards/"))).toBe(true);
   await expect(page.locator(".results-heading")).toContainText(/\d[\d,]* sentences?/);
-  await expect(page.locator(".kwic mark").first()).toContainText(/lima/i);
-  await page.getByRole("link", {name: "Stable record link"}).first().click();
+  await expect(firstResult.locator(".kwic mark")).toContainText(/lima/i);
+  await firstResult.getByRole("link", {name: "Stable record link"}).click();
   await page.reload();
   await expect(page.locator(".result-card").first()).toContainText(/lima/i);
 });
@@ -247,11 +249,11 @@ test("lazy DuckDB-Wasm export creates a real Parquet file", async ({page}, testI
   await page.getByLabel("Export").selectOption("parquet");
   const blocked = page.getByText(/Search-result data export is disabled/);
   if (await blocked.isVisible()) {
-    await expect(page.getByRole("button", {name: "Download", exact: true})).toBeDisabled();
+    await expect(page.getByRole("button", {name: "Download shown", exact: true})).toBeDisabled();
     return;
   }
   const parquetDownload = page.waitForEvent("download");
-  await page.getByRole("button", {name: "Download", exact: true}).click();
+  await page.getByRole("button", {name: "Download shown", exact: true}).click();
   const parquet = await parquetDownload;
   expect(parquet.suggestedFilename()).toMatch(/\.parquet$/);
   const parquetPath = await parquet.path();
