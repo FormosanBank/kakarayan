@@ -313,6 +313,19 @@ test("prepared downloads are readable, filterable, and hide internal blocker cod
   await expect(cards.first().locator(".file-mark")).toHaveText("XML");
 });
 
+test("model catalogue keeps repeated caveats inside per-model details", async ({page}) => {
+  await page.goto("#/models");
+  const cards = page.locator(".model-grid > article");
+  await expect(cards).toHaveCount(20);
+  await expect(page.getByText("Intended use from metadata:")).toHaveCount(0);
+  const details = cards.first().getByText("Metadata and limitations", {exact: true});
+  await details.click();
+  await expect(cards.first().getByText("Intended use:", {exact: true})).toBeVisible();
+
+  await page.getByRole("button", {name: /^MT 4$/}).click();
+  await expect(cards).toHaveCount(4);
+});
+
 test("Traditional Chinese navigation updates content and document language", async ({page}) => {
   await page.goto("");
   await page.getByLabel("Interface language").selectOption("zh-Hant");
