@@ -1,107 +1,9 @@
-import {LazyMotion, domAnimation, useReducedMotion} from "motion/react";
-import * as m from "motion/react-m";
-
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData} from "../types";
 
-const SIGNAL_POSITIONS = [
-  [50, 8],
-  [74, 15],
-  [91, 37],
-  [88, 66],
-  [68, 87],
-  [41, 92],
-  [15, 75],
-  [8, 47],
-  [24, 21],
-  [52, 22],
-] as const;
-
-function CorpusSignal({languages, label}: {languages: AppData["languages"]; label: string}) {
-  const reduceMotion = useReducedMotion();
-  const visibleLanguages = languages.slice(0, SIGNAL_POSITIONS.length);
-
-  return (
-    <div className="corpus-signal" aria-hidden="true">
-      <svg className="corpus-signal__rings" viewBox="0 0 100 100">
-        {[18, 29, 40].map((radius, index) => (
-          <m.circle
-            key={radius}
-            cx="50"
-            cy="50"
-            r={radius}
-            initial={reduceMotion ? false : {opacity: 0, pathLength: 0}}
-            animate={{opacity: 1, pathLength: 1}}
-            transition={{duration: 1.1, delay: index * 0.16, ease: "easeOut"}}
-          />
-        ))}
-        <m.path
-          d="M 9 58 C 23 35, 38 26, 52 29 S 77 49, 91 42"
-          initial={reduceMotion ? false : {pathLength: 0}}
-          animate={{pathLength: 1}}
-          transition={{duration: 1.35, delay: 0.35, ease: "easeInOut"}}
-        />
-      </svg>
-
-      <m.div
-        className="corpus-signal__sweep"
-        initial={reduceMotion ? false : {opacity: 0, rotate: -45}}
-        animate={reduceMotion ? {opacity: 0.2, rotate: 0} : {opacity: [0, 0.3, 0.18], rotate: 315}}
-        transition={
-          reduceMotion
-            ? {duration: 0}
-            : {opacity: {duration: 1.2}, rotate: {duration: 18, repeat: Infinity, ease: "linear"}}
-        }
-      />
-
-      <m.div
-        className="corpus-signal__center"
-        initial={reduceMotion ? false : {opacity: 0, scale: 0.82}}
-        animate={{opacity: 1, scale: 1}}
-        transition={{duration: 0.55, delay: 0.2}}
-      >
-        <strong>{languages.length}</strong>
-        <span>{label}</span>
-      </m.div>
-
-      {visibleLanguages.map((language, index) => {
-        const position = SIGNAL_POSITIONS[index];
-        if (!position) return null;
-        return (
-          <span
-            className={`corpus-signal__label ${index > 6 ? "corpus-signal__label--secondary" : ""}`}
-            key={language.id}
-            style={{left: `${position[0]}%`, top: `${position[1]}%`}}
-          >
-            <m.span
-              initial={reduceMotion ? false : {opacity: 0, y: 7}}
-              animate={
-                reduceMotion
-                  ? {opacity: 1, y: 0}
-                  : {opacity: 1, y: index % 2 === 0 ? [0, -3, 0] : [0, 3, 0]}
-              }
-              transition={
-                reduceMotion
-                  ? {duration: 0}
-                  : {
-                      opacity: {duration: 0.4, delay: 0.45 + index * 0.06},
-                      y: {duration: 4.5 + index * 0.18, delay: 1, repeat: Infinity, ease: "easeInOut"},
-                    }
-              }
-            >
-              {language.name}
-            </m.span>
-          </span>
-        );
-      })}
-    </div>
-  );
-}
-
 export function Home({data}: {data: AppData}) {
   const {number, t, tx} = useI18n();
-  const reduceMotion = useReducedMotion();
   const counts = data.corpora.reduce(
     (total, corpus) => {
       total.sentences += corpus.counts.sentences ?? 0;
@@ -127,7 +29,6 @@ export function Home({data}: {data: AppData}) {
       ),
       link: "/learn",
       action: tx("Open learning tools", "開啟學習工具"),
-      tone: "coral",
     },
     {
       title: tx("For linguists", "給語言學家"),
@@ -137,7 +38,6 @@ export function Home({data}: {data: AppData}) {
       ),
       link: "/research",
       action: tx("Open research tools", "開啟研究工具"),
-      tone: "gold",
     },
     {
       title: tx("For developers", "給開發者"),
@@ -147,7 +47,6 @@ export function Home({data}: {data: AppData}) {
       ),
       link: "/developers",
       action: tx("Read API docs", "查看 API 文件"),
-      tone: "moss",
     },
   ] as const;
   const tools = [
@@ -159,40 +58,39 @@ export function Home({data}: {data: AppData}) {
   ] as const;
 
   return (
-    <LazyMotion features={domAnimation} strict>
+    <div className="home-page">
       <section className="home-hero">
-        <m.div
-          className="home-hero__copy"
-          initial={reduceMotion ? false : {opacity: 0, y: 18}}
-          animate={{opacity: 1, y: 0}}
-          transition={{duration: 0.65, ease: "easeOut"}}
-        >
-          <p className="eyebrow">{t("home.eyebrow")}</p>
-          <h1>{t("home.title")}</h1>
-          <p className="home-hero__lede">{t("home.lede")}</p>
-          <nav className="home-hero__actions" aria-label={tx("Start here", "從這裡開始")}>
-            <Link className="button button--primary" to="/lookup">
-              {tx("Open corpus lookup", "開啟語料查詢")}
-            </Link>
-            <Link className="button button--paper" to="/explore">
-              {tx("Browse languages", "瀏覽語言")}
-            </Link>
-            <Link className="home-hero__text-link" to="/downloads">
-              {tx("Download data", "下載資料")} <span aria-hidden="true">↗</span>
-            </Link>
-          </nav>
-          <p className="home-hero__release">
-            <span>{tx("Current release", "目前版本")}</span>
-            <code>{data.meta.release_id}</code>
-          </p>
-        </m.div>
-        <CorpusSignal languages={data.languages} label={tx("languages", "種語言")} />
+        <div className="home-hero__mark" aria-hidden="true">K</div>
+        <h1>{t("home.title")}</h1>
+        <p className="home-hero__lede">{t("home.lede")}</p>
+        <div className="home-hero__release">
+          <code>
+            {number(data.languages.length)} {tx("languages", "種語言")} · {number(counts.sentences)} {tx("sentences", "句子")}
+          </code>
+        </div>
+        <Link className="button button--primary" to="/lookup">
+          {tx("Open lookup", "開啟查詢")}
+        </Link>
+      </section>
+
+      <section className="home-audiences" aria-labelledby="home-audiences-title">
+        <h2 id="home-audiences-title" className="sr-only">{tx("Choose a tool", "選擇工具")}</h2>
+        <div className="home-audience-grid">
+          {audiences.map((audience) => (
+            <article className="home-audience-card" key={audience.link}>
+              <div>
+              <h3>{audience.title}</h3>
+              <p>{audience.description}</p>
+              </div>
+              <Link className="button button--quiet" to={audience.link}>{audience.action}</Link>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="home-stats" aria-labelledby="home-stats-title">
         <div className="home-section-heading">
-          <p className="eyebrow">{tx("THE PROJECT", "專案概況")}</p>
-          <h2 id="home-stats-title">{tx("FormosanBank at a glance", "FormosanBank 一覽")}</h2>
+          <h2 id="home-stats-title">{tx("Corpus snapshot", "語料概況")}</h2>
         </div>
         <div className="home-stats__grid">
           {stats.map(([value, label]) => (
@@ -204,35 +102,9 @@ export function Home({data}: {data: AppData}) {
         </div>
       </section>
 
-      <section className="home-audiences" aria-labelledby="home-audiences-title">
-        <div className="home-section-heading home-section-heading--split">
-          <div>
-            <p className="eyebrow">{tx("CHOOSE YOUR ROUTE", "選擇入口")}</p>
-            <h2 id="home-audiences-title">{tx("One corpus bank, three ways in.", "同一座語料庫，三種使用方式。")}</h2>
-          </div>
-          <p>{tx("Everything starts with public, cited corpus data.", "所有工具都以公開且可引用的語料為基礎。")}</p>
-        </div>
-        <div className="home-audience-grid">
-          {audiences.map((audience) => (
-            <article
-              className={`home-audience-card home-audience-card--${audience.tone}`}
-              key={audience.link}
-            >
-              <span className="home-audience-card__mark" aria-hidden="true" />
-              <h3>{audience.title}</h3>
-              <p>{audience.description}</p>
-              <Link to={audience.link}>
-                {audience.action} <span aria-hidden="true">→</span>
-              </Link>
-            </article>
-          ))}
-        </div>
-      </section>
-
       <nav className="home-tools" aria-labelledby="home-tools-title">
         <div className="home-section-heading">
-          <p className="eyebrow">{tx("ALL TOOLS", "全部工具")}</p>
-          <h2 id="home-tools-title">{tx("Go straight to the work.", "直接開始使用。")}</h2>
+          <h2 id="home-tools-title">{tx("All tools", "全部工具")}</h2>
         </div>
         <div className="home-tools__grid">
           {tools.map(([to, label, description]) => (
@@ -241,11 +113,11 @@ export function Home({data}: {data: AppData}) {
                 <strong>{label}</strong>
                 <small>{description}</small>
               </span>
-              <span aria-hidden="true">↗</span>
+              <span aria-hidden="true">→</span>
             </Link>
           ))}
         </div>
       </nav>
-    </LazyMotion>
+    </div>
   );
 }

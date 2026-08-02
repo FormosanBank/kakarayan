@@ -56,7 +56,7 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
 }) => {
   await page.goto("");
   const main = page.locator("#main");
-  await expect(main.getByRole("heading", {name: "FormosanBank at a glance"})).toBeVisible();
+  await expect(main.getByRole("heading", {name: "Corpus snapshot"})).toBeVisible();
   await expect(main.getByText("For learners", {exact: true})).toBeVisible();
   await expect(
     main.getByText(
@@ -75,7 +75,7 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
     "href",
     "#/developers",
   );
-  await expect(main.locator(".corpus-signal")).toBeVisible();
+  await expect(main.locator(".corpus-signal")).toHaveCount(0);
   await expect(main.locator(".home-stat")).toHaveCount(5);
   await expect(main.locator(".home-tools__grid > a")).toHaveCount(5);
   const geometry = await page.evaluate(() => ({
@@ -85,15 +85,12 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
   expect(geometry.document).toBe(geometry.viewport);
 });
 
-test("landing animation respects reduced-motion preferences", async ({page}) => {
-  await page.emulateMedia({reducedMotion: "reduce"});
+test("landing page does not use decorative animation", async ({page}) => {
   await page.goto("");
-  const sweep = page.locator(".corpus-signal__sweep");
-  await expect(sweep).toBeVisible();
-  const firstTransform = await sweep.evaluate((element) => getComputedStyle(element).transform);
-  await page.waitForTimeout(250);
-  const secondTransform = await sweep.evaluate((element) => getComputedStyle(element).transform);
-  expect(secondTransform).toBe(firstTransform);
+  const animatedElements = await page.locator("#main *").evaluateAll((elements) =>
+    elements.filter((element) => getComputedStyle(element).animationName !== "none").length,
+  );
+  expect(animatedElements).toBe(0);
 });
 
 test("legacy lookup routes open the matching mode on the unified page", async ({page}) => {

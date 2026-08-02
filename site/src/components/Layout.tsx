@@ -11,7 +11,6 @@ const navigation = [
   ["/research", "nav.research"],
   ["/downloads", "nav.download"],
   ["/developers", "nav.developers"],
-  ["/about", "nav.about"],
 ] as const;
 
 export function Layout({data, children}: {data: AppData; children: ReactNode}) {
@@ -22,66 +21,69 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
         {t("nav.skip")}
       </a>
       <header className="topbar">
-        <NavLink className="brand" to="/" aria-label={tx("Kakarayan home", "Kakarayan 首頁")}>
-          <span className="brand-mark" aria-hidden="true">
-            K
-          </span>
-          <span>
+        <div className="topbar__inner">
+          <NavLink className="brand" to="/" aria-label={tx("Kakarayan home", "Kakarayan 首頁")}>
+            <span className="brand-mark" aria-hidden="true">K</span>
             <strong>Kakarayan</strong>
-            <small>FormosanBank</small>
-          </span>
-        </NavLink>
-        <nav className="primary-nav" aria-label={tx("Primary", "主要導覽")}>
-          {navigation.map(([to, key]) => (
-            <NavLink key={to} to={to}>
-              {t(key)}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="topbar-tools">
-          <span className="release-pill" title={data.meta.source.commit}>
-            {data.meta.release_id}
-          </span>
-          <label className="locale-picker">
-            <span className="sr-only">{tx("Interface language", "介面語言")}</span>
-            <select
-              value={locale}
-              onChange={(event) => setLocale(event.target.value as "en" | "zh-Hant")}
-            >
-              <option value="en">EN</option>
-              <option value="zh-Hant">繁中</option>
-            </select>
-          </label>
+          </NavLink>
+          <nav className="primary-nav" aria-label={tx("Primary", "主要導覽")}>
+            {navigation.map(([to, key]) => (
+              <NavLink key={to} to={to}>{t(key)}</NavLink>
+            ))}
+          </nav>
+          <div className="topbar-tools">
+            <label className="locale-picker">
+              <span className="sr-only">{tx("Interface language", "介面語言")}</span>
+              <select
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as "en" | "zh-Hant")}
+              >
+                <option value="en">EN</option>
+                <option value="zh-Hant">繁中</option>
+              </select>
+            </label>
+            <a className="button button--primary topbar-github" href="https://github.com/FormosanBank/FormosanBank">
+              GitHub
+            </a>
+          </div>
+          <details className="mobile-menu">
+            <summary aria-label={tx("Open navigation", "開啟導覽")}>
+              <span aria-hidden="true" />
+              <span aria-hidden="true" />
+            </summary>
+            <nav aria-label={tx("Primary", "主要導覽")}>
+              {navigation.map(([to, key]) => (
+                <NavLink key={to} to={to}>{t(key)}</NavLink>
+              ))}
+              <NavLink to="/about">{t("nav.about")}</NavLink>
+            </nav>
+          </details>
         </div>
       </header>
       <main id="main" tabIndex={-1}>
         {children}
       </main>
       <footer className="footer">
-        <div>
-          <strong>Kakarayan</strong>
-          <p>{t("footer.summary")}</p>
+        <div className="footer__inner">
+          <div className="footer__brand">
+            <strong>Kakarayan</strong>
+            <span>{data.meta.release_id}</span>
+          </div>
+          <nav aria-label={tx("Footer", "頁尾")}>
+            <NavLink to="/about">{t("nav.about")}</NavLink>
+            <a href="https://github.com/FormosanBank/kakarayan">GitHub</a>
+            <a href={`https://github.com/FormosanBank/FormosanBank/commit/${data.meta.source.commit}`}>
+              {t("common.source")} <code>{data.meta.source.commit.slice(0, 7)}</code>
+            </a>
+          </nav>
+          <Diagnostics releaseId={data.meta.release_id} />
         </div>
-        <div>
-          <span>{t("common.release")}</span>
-          <code>{data.meta.release_id}</code>
-        </div>
-        <div>
-          <span>{t("common.source")}</span>
-          <a
-            href={`https://github.com/FormosanBank/FormosanBank/commit/${data.meta.source.commit}`}
-          >
-            <code>{data.meta.source.commit.slice(0, 12)}</code>
-          </a>
-        </div>
-        <Diagnostics releaseId={data.meta.release_id} />
       </footer>
     </div>
   );
 }
 
 export function PageIntro({
-  eyebrow,
   title,
   lede,
 }: {
@@ -91,7 +93,6 @@ export function PageIntro({
 }) {
   return (
     <header className="page-intro">
-      {eyebrow && <p className="eyebrow">{eyebrow}</p>}
       <h1>{title}</h1>
       <p>{lede}</p>
     </header>

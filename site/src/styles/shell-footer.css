@@ -1,89 +1,158 @@
-.footer {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 3rem;
-  align-items: center;
-  padding: 3rem max(4vw, calc((100vw - var(--max)) / 2));
-  color: #dce7df;
-  background: var(--ink-dark);
+.site-shell {
+  min-height: 100vh;
 }
 
-.footer > .diagnostic-actions {
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 56px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgb(255 255 255 / 96%);
+}
+
+.topbar__inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 24px;
+  width: min(calc(100% - 48px), var(--wide));
+  height: 100%;
+  margin: 0 auto;
+  align-items: center;
+}
+
+.brand {
+  display: inline-flex;
+  gap: 9px;
+  align-items: center;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  place-items: center;
+  font-family: var(--display);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.brand strong {
+  font-family: var(--display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.primary-nav {
+  display: flex;
+  gap: 22px;
+  justify-content: center;
+}
+
+.primary-nav a {
+  color: var(--charcoal);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.primary-nav a.active {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 5px;
+}
+
+.topbar-tools {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.locale-picker select {
+  min-height: 36px;
+  padding: 7px 30px 7px 13px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 9999px;
+  color: var(--ink);
+  background: var(--canvas);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.topbar-github {
+  min-width: 72px;
+}
+
+.release-pill,
+.mobile-menu {
+  display: none;
+}
+
+.footer {
+  padding: 32px 0;
+  border-top: 1px solid var(--hairline);
+  color: var(--body);
+  background: var(--canvas);
+}
+
+.footer__inner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 20px 32px;
+  width: min(calc(100% - 48px), var(--wide));
+  margin: 0 auto;
+  align-items: center;
+}
+
+.footer__brand {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.footer__brand strong {
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 14px;
+}
+
+.footer__brand span,
+.footer nav,
+.footer .diagnostic-actions {
+  font-size: 12px;
+}
+
+.footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: flex-end;
+}
+
+.footer a,
+.footer button {
+  color: var(--body);
+}
+
+.footer > .diagnostic-actions,
+.footer .diagnostic-actions {
   display: flex;
   grid-column: 1 / -1;
   flex-wrap: wrap;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgb(255 255 255 / 18%);
-}
-
-.footer .diagnostic-actions .text-button {
-  color: white;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
 }
 
 .diagnostic-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.8rem;
+  gap: 12px;
   align-items: center;
-  font-size: 0.72rem;
-}
-
-.diagnostic-actions span {
-  color: inherit;
-  text-transform: none;
-}
-
-.footer p {
-  max-width: 480px;
-  margin: 0.35rem 0 0;
-  color: #a9c0ba;
-  font-size: 0.82rem;
-}
-
-.footer > div:not(:first-child) {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.footer span {
-  color: #a9c0ba;
-  font-size: 0.65rem;
-  text-transform: uppercase;
-}
-
-.footer a,
-.footer code {
-  color: white;
-}
-
-.boot-state {
-  display: grid;
-  min-height: 100vh;
-  padding: 2rem;
-  place-content: center;
-  justify-items: center;
-  text-align: center;
-}
-
-.boot-state code {
-  max-width: min(760px, 90vw);
-  padding: 0.8rem;
-  margin: 1rem;
-  overflow-wrap: anywhere;
-  border: 1px solid var(--line);
-  background: var(--paper-light);
-}
-
-.boot-mark {
-  display: grid;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 1rem;
-  color: white;
-  background: var(--ink);
-  place-items: center;
-  font-family: var(--serif);
-  font-size: 2.4rem;
-  box-shadow: 9px 9px 0 var(--gold);
+  color: var(--body);
+  font-size: 12px;
 }
