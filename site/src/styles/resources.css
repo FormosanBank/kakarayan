@@ -370,6 +370,41 @@
   margin-bottom: 8px;
 }
 
+.client-section {
+  padding: 40px 0;
+  border-top: 1px solid var(--line);
+}
+
+.client-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.client-grid article {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.client-grid h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.client-grid code {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.client-grid a {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .model-grid {
   margin-top: 28px;
 }

@@ -93,6 +93,33 @@ languages[, c("id", "name", "iso639_3")]`}</code>
           </pre>
         </div>
       </section>
+      <section className="client-section">
+        <div className="section-heading">
+          <p className="eyebrow">{tx("Repository clients", "儲存庫用戶端")}</p>
+          <h2>{tx("JavaScript, Python, and R", "JavaScript、Python 與 R")}</h2>
+          <p>
+            {tx(
+              "Each client supports release pinning, verified static search shards, timeouts, and the optional live API.",
+              "每個用戶端都支援固定版本、經驗證的靜態搜尋分片、逾時設定與選用的即時 API。",
+            )}
+          </p>
+        </div>
+        <div className="client-grid">
+          {[
+            ["JavaScript", "@formosanbank/kakarayan-client", "javascript"],
+            ["Python", "kakarayan_client", "python"],
+            ["R", "kakarayan", "R"],
+          ].map(([name, packageName, path]) => (
+            <article key={name}>
+              <h3>{name}</h3>
+              <code>{packageName}</code>
+              <a href={`https://github.com/FormosanBank/kakarayan/tree/main/clients/${path}`}>
+                {tx("Setup and source →", "設定與原始碼 →")}
+              </a>
+            </article>
+          ))}
+        </div>
+      </section>
       <section className="contract-notes">
         <h2>{tx("Contract rules", "介面契約規則")}</h2>
         <ul>

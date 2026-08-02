@@ -49,11 +49,15 @@ export function Explore({data}: {data: AppData}) {
                 .toLocaleLowerCase()
                 .includes(needle),
             )
-            .map((language) => (
-              <article className="catalog-card" key={language.id}>
-                <p className="catalog-card__local">
-                  {locale === "zh-Hant" ? language.names["zh-Hant"] : language.name}
-                </p>
+            .map((language) => {
+              const localName = locale === "zh-Hant"
+                ? language.names["zh-Hant"]
+                : language.names.autonym;
+              return (
+                <article className="catalog-card" key={language.id}>
+                {localName && localName !== language.name && (
+                  <p className="catalog-card__local">{localName}</p>
+                )}
                 <h2>{language.name}</h2>
                 <p>
                   {tx("ISO", "ISO 代碼")} <code>{language.iso639_3}</code>
@@ -82,7 +86,8 @@ export function Explore({data}: {data: AppData}) {
                   {tx("Language details →", "語言詳細資料 →")}
                 </Link>
               </article>
-            ))}
+              );
+            })}
         </div>
       ) : (
         <div className="corpus-list">

@@ -83,6 +83,7 @@ export function Summaries({data}: {data: AppData}) {
     [corpusId, data.search, languageId],
   );
   const estimate = useMemo(() => estimateScope(shards), [shards]);
+  const analysisRows = Math.min(estimate.records, 50_000);
 
   async function run() {
     if (!languageId) return;
@@ -143,7 +144,14 @@ export function Summaries({data}: {data: AppData}) {
           </label>
           <label className="field">
             {tx("Corpus", "語料庫")}
-            <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
+            <select
+              value={corpusId}
+              disabled={!languageId}
+              onChange={(event) => {
+                setCorpusId(event.target.value);
+                setResult(null);
+              }}
+            >
               <option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>
               {corpora.map((corpus) => (
                 <option key={corpus.id} value={corpus.id}>
@@ -181,14 +189,25 @@ export function Summaries({data}: {data: AppData}) {
           </label>
         </div>
         <p className="tool-note">
-          {tx("Scope:", "範圍：")} {number(estimate.records)} {tx("sentences", "句")}，{" "}
-          {(estimate.uncompressedBytes / 1024 / 1024).toFixed(1)} MiB decoded. Browser
-          {tx(" summaries are limited to 50,000 sentences.", "；瀏覽器摘要最多處理 50,000 句。")}
+          {!languageId
+            ? tx("Choose a language to see the analysis scope.", "請選擇語言以查看分析範圍。")
+            : (
+              <>
+                {tx("Available scope:", "可用範圍：")} {number(estimate.records)} {tx("sentences", "句")}
+                {tx(", ", "，")}{(estimate.uncompressedBytes / 1024 / 1024).toFixed(1)} MiB {tx("decoded", "解碼後")}.
+                {" "}{estimate.records > 50_000
+                  ? tx(
+                      `This browser run analyzes the first ${number(analysisRows)} sentences in deterministic source order. Use prepared data for the full scope.`,
+                      `此次瀏覽器分析會依固定來源順序處理前 ${number(analysisRows)} 句。完整範圍請使用預備資料。`,
+                    )
+                  : tx("The complete selected scope will be analyzed.", "將分析完整的選定範圍。")}
+              </>
+            )}
         </p>
         <div className="button-row">
           <button
             className="button button--primary"
-            disabled={!languageId || busy || estimate.records > 50_000}
+            disabled={!languageId || busy}
             onClick={run}
           >
             {busy ? tx("Computing in worker…", "背景執行緒計算中…") : tx("Compute summaries", "計算摘要")}
@@ -198,7 +217,7 @@ export function Summaries({data}: {data: AppData}) {
               {tx("Cancel", "取消")}
             </button>
           )}
-          {estimate.records > 50_000 && <Link to="/downloads">{tx("Use prepared data →", "使用預備資料 →")}</Link>}
+          {languageId && estimate.records > 50_000 && <Link to="/downloads">{tx("Open full prepared data →", "開啟完整預備資料 →")}</Link>}
         </div>
       </div>
       {error && <p className="callout callout--error">{error}</p>}

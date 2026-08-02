@@ -1,3 +1,5 @@
+import {useState} from "react";
+
 import {PageIntro, StatusBadge} from "../components/Layout";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
@@ -21,8 +23,25 @@ function CountsGrid({counts}: {counts: Counts}) {
     morphemes: tx("Morphemes", "語素"),
     tokens: tx("Tokens", "詞元"),
     audio: tx("Audio references", "音訊參照"),
+    forms: tx("Forms", "形式"),
+    phonology: tx("Phonology records", "音韻記錄"),
+    translations: tx("Translations", "翻譯"),
   };
-  const entries = Object.entries(counts).filter(([, value]) => value !== undefined);
+  const order = [
+    "texts",
+    "sentences",
+    "words",
+    "morphemes",
+    "forms",
+    "phonology",
+    "translations",
+    "tokens",
+    "audio",
+  ];
+  const entries = order.flatMap((name) => {
+    const value = counts[name as keyof Counts];
+    return value === undefined ? [] : [[name, value] as const];
+  });
   return (
     <dl className="detail-counts">
       {entries.map(([name, value]) => (
@@ -42,15 +61,18 @@ export function LanguageDetail({
   data: AppData;
   language: Language;
 }) {
-  const {tx} = useI18n();
+  const {number, tx} = useI18n();
   const corpora = data.corpora.filter((corpus) => corpus.languages.includes(language.id));
+  const identity = [
+    language.names["zh-Hant"],
+    language.names.autonym,
+    `ISO 639-3 ${language.iso639_3}`,
+  ].filter((value, index, values) => value && values.indexOf(value) === index);
   return (
     <div className="page-wrap">
       <PageIntro
         title={language.name}
-        lede={`${language.names["zh-Hant"] || tx("No reviewed Traditional Chinese name", "尚無經審查的繁體中文名稱")} · ${
-          language.names.autonym || tx("No reviewed autonym", "尚無經審查的自稱")
-        } · ISO 639-3 ${language.iso639_3}`}
+        lede={identity.join(" · ")}
       />
       <div className="detail-actions">
         <Link className="button button--primary" to={`/lookup?type=dictionary&language=${language.id}`}>
@@ -73,7 +95,8 @@ export function LanguageDetail({
         </div>
         <p>
           <strong>{tx("Published dialect labels:", "已發布的方言標籤：")}</strong>{" "}
-          {language.dialects.join(", ") || tx("none supplied in this release", "此版本未提供")}。
+          {language.dialects.join(", ") || tx("none supplied in this release", "此版本未提供")}
+          {tx(".", "。")}
         </p>
         <p>
           {tx(
@@ -91,7 +114,16 @@ export function LanguageDetail({
                 <h3>{corpus.name}</h3>
                 <p>{corpus.source_path}</p>
               </div>
-              <CountsGrid counts={corpus.counts} />
+              <dl className="detail-counts">
+                <div>
+                  <dt>{tx("Searchable sentences in this language", "此語言的可搜尋句子")}</dt>
+                  <dd>
+                    {number(data.search.shards
+                      .filter((shard) => shard.language_id === language.id && shard.corpus_id === corpus.id)
+                      .reduce((total, shard) => total + shard.records, 0))}
+                  </dd>
+                </div>
+              </dl>
               <Link to={`/corpora/${corpus.id}`}>{tx("Corpus details →", "語料庫詳細資料 →")}</Link>
             </article>
           ))}
@@ -107,6 +139,10 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
   const languages = corpus.languages
     .map((id) => data.languages.find((language) => language.id === id))
     .filter((language): language is Language => Boolean(language));
+  const [selectedLanguageId, setSelectedLanguageId] = useState(languages[0]?.id ?? "");
+  const searchLanguageId = languages.some((language) => language.id === selectedLanguageId)
+    ? selectedLanguageId
+    : languages[0]?.id ?? "";
   return (
     <div className="page-wrap">
       <PageIntro
@@ -116,16 +152,28 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           `公開來源範圍為 ${corpus.source_path}。所有連結與數量皆固定於 ${data.meta.release_id}。`,
         )}
       />
-      <div className="detail-actions">
-        {languages.map((language) => (
+      <div className="detail-actions detail-actions--scope">
+        {languages.length > 0 && (
+          <label className="field field--compact">
+            {tx("Search language", "搜尋語言")}
+            <select
+              value={searchLanguageId}
+              onChange={(event) => setSelectedLanguageId(event.target.value)}
+            >
+              {languages.map((language) => (
+                <option key={language.id} value={language.id}>{language.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {searchLanguageId && (
           <Link
             className="button button--primary"
-            key={language.id}
-            to={`/lookup?type=sentences&language=${language.id}&corpus=${corpus.id}`}
+            to={`/lookup?type=sentences&language=${searchLanguageId}&corpus=${corpus.id}`}
           >
-            {tx("Search", "搜尋")} {language.name}
+            {tx("Search sentences", "搜尋例句")}
           </Link>
-        ))}
+        )}
         <Link className="button button--quiet" to={`/downloads?corpus=${corpus.id}`}>
           {tx("Filter prepared data", "篩選預備資料")}
         </Link>
@@ -141,7 +189,8 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         <CountsGrid counts={corpus.counts} />
         <p>
           {tx("Display languages:", "顯示語言：")}{" "}
-          {languages.map((language) => language.name).join(", ") || tx("not resolved", "無法判定")}。
+          {languages.map((language) => language.name).join(", ") || tx("not resolved", "無法判定")}
+          {tx(".", "。")}
         </p>
         <p>
           <strong>{tx("Source statement:", "來源聲明：")}</strong>{" "}

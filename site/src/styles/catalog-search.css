@@ -280,6 +280,10 @@
   margin: -20px 0 48px;
 }
 
+.detail-actions--scope {
+  align-items: flex-end;
+}
+
 .search-tool {
   padding-top: 24px;
   border-top: 1px solid var(--line);

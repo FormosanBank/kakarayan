@@ -110,6 +110,8 @@ test("language and corpus catalogue entries have stable detail routes", async ({
   await page.goto("#/languages/lang_amis");
   await expect(page.getByRole("heading", {level: 1, name: "Amis"})).toBeVisible();
   await expect(page.getByText("ISO 639-3 ami")).toBeVisible();
+  await expect(page.getByText("No reviewed autonym")).toHaveCount(0);
+  await expect(page.getByText("Searchable sentences in this language").first()).toBeVisible();
   await expect(page.locator("#main").getByRole("link", {name: "Dictionary"})).toHaveAttribute(
     "href",
     /#\/lookup\?type=dictionary&language=lang_amis/,
@@ -126,11 +128,22 @@ test("language and corpus catalogue entries have stable detail routes", async ({
   if (!corpus) throw new Error("The static API returned no corpora");
   await page.goto(`#/corpora/${corpus.id}`);
   await expect(page.getByRole("heading", {level: 1, name: corpus.name})).toBeVisible();
+  await expect(page.getByRole("combobox", {name: "Search language"})).toBeVisible();
+  await expect(page.getByRole("link", {name: "Search sentences"})).toHaveCount(1);
   await expect(page.getByRole("link", {name: "Pinned public source"})).toHaveAttribute(
     "href",
     /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\//,
   );
   await expect(page.getByText(/approved for Kakarayan's noncommercial distribution/)).toBeVisible();
+});
+
+test("developer documentation links all maintained client libraries", async ({page}) => {
+  await page.goto("#/developers");
+  const clients = page.locator(".client-grid");
+  await expect(clients.getByRole("heading", {name: "JavaScript"})).toBeVisible();
+  await expect(clients.getByRole("heading", {name: "Python"})).toBeVisible();
+  await expect(clients.getByRole("heading", {name: "R", exact: true})).toBeVisible();
+  await expect(clients.getByRole("link", {name: "Setup and source →"})).toHaveCount(3);
 });
 
 test("local corpus search reads a compressed shard", async ({page}) => {
