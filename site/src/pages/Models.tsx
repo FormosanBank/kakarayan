@@ -2,6 +2,7 @@ import {useMemo, useState} from "react";
 
 import {PageIntro, StatusBadge} from "../components/Layout";
 import {useI18n} from "../i18n";
+import {Link} from "../routing";
 import type {AppData, ModelEntry} from "../types";
 
 function size(bytes: number | null): string {
@@ -27,17 +28,34 @@ function languageNames(model: ModelEntry, data: AppData): string {
   }).join(" · ");
 }
 
+function targetLanguageForModel(model: ModelEntry, data: AppData) {
+  const matches = data.languages.filter((language) => model.languages.includes(language.iso639_3));
+  const repository = model.repository.toLowerCase();
+  if (repository.includes("taroko")) return matches.find((language) => language.name === "Truku");
+  if (repository.includes("seediq")) return matches.find((language) => language.name === "Seediq");
+  return matches[0];
+}
+
 export function Models({data}: {data: AppData}) {
   const {number, t, tx} = useI18n();
   const [task, setTask] = useState<"all" | "translation" | "automatic-speech-recognition">(
     "all",
   );
+  const [languageId, setLanguageId] = useState("");
+  const selectedLanguage = data.languages.find((language) => language.id === languageId);
   const models = useMemo(
-    () => data.models.models.filter((model) => task === "all" || model.task === task),
-    [data.models.models, task],
+    () => data.models.models.filter(
+      (model) =>
+        (task === "all" || model.task === task) &&
+        (!selectedLanguage || model.languages.includes(selectedLanguage.iso639_3)),
+    ),
+    [data.models.models, selectedLanguage, task],
   );
   const translationCount = data.models.models.filter((model) => model.task === "translation").length;
   const asrCount = data.models.models.length - translationCount;
+  const evaluatedCount = data.models.models.filter((model) => model.evaluation_metrics.length > 0).length;
+  const licensedCount = data.models.models.filter((model) => model.license !== "unknown").length;
+  const availableServices = data.models.services.filter((service) => service.status === "available").length;
 
   return (
     <div className="page-wrap">
@@ -56,6 +74,12 @@ export function Models({data}: {data: AppData}) {
           )}
         </p>
       </div>
+      <dl className="model-coverage">
+        <div><dt>{tx("Registered models", "登錄模型")}</dt><dd>{number(data.models.models.length)}</dd></div>
+        <div><dt>{tx("Evaluation reported", "已提供評估")}</dt><dd>{number(evaluatedCount)}</dd></div>
+        <div><dt>{tx("License identified", "已辨識授權")}</dt><dd>{number(licensedCount)}</dd></div>
+        <div><dt>{tx("Services available now", "目前可用服務")}</dt><dd>{number(availableServices)}</dd></div>
+      </dl>
       <div className="model-toolbar">
         <div className="segmented">
           <button aria-pressed={task === "all"} onClick={() => setTask("all")}>
@@ -71,11 +95,22 @@ export function Models({data}: {data: AppData}) {
             ASR <span>{number(asrCount)}</span>
           </button>
         </div>
+        <label className="field field--compact">
+          {tx("Language coverage", "語言涵蓋")}
+          <select value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
+            <option value="">{tx("All registered languages", "所有登錄語言")}</option>
+            {data.languages.map((language) => <option key={language.id} value={language.id}>{language.name}</option>)}
+          </select>
+        </label>
         <span>{number(models.length)} {tx("models", "個模型")}</span>
       </div>
       <div className="model-grid">
         {models.map((model) => {
           const service = data.models.services.find((item) => item.id === model.browser_service_id);
+          const targetLanguage =
+            (selectedLanguage && model.languages.includes(selectedLanguage.iso639_3)
+              ? selectedLanguage
+              : targetLanguageForModel(model, data));
           return (
             <article key={model.id}>
               <div className="model-card__top">
@@ -107,6 +142,11 @@ export function Models({data}: {data: AppData}) {
                 <a href={model.url} target="_blank" rel="noreferrer">
                   {tx("Open model card", "開啟模型卡")}
                 </a>
+                {targetLanguage && (
+                    <Link to={`/learn?language=${encodeURIComponent(targetLanguage.id)}&tool=${model.task === "translation" ? "translation" : "practice"}`}>
+                      {model.task === "translation" ? tx("Use translation tool", "使用翻譯工具") : tx("Open ASR practice", "開啟語音辨識練習")}
+                    </Link>
+                )}
                 <details>
                   <summary>{tx("Metadata and limitations", "中繼資料與限制")}</summary>
                   <dl className="model-details">

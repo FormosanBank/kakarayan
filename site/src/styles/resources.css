@@ -334,9 +334,97 @@
 
 .code-samples {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
   padding: 40px 0;
+}
+
+.api-explorer,
+.data-contract {
+  padding: 40px 0;
+  border-top: 1px solid var(--line);
+}
+
+.api-explorer__controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.65fr) minmax(0, 1.35fr) auto auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.api-explorer__controls > code {
+  min-width: 0;
+  padding: 11px 13px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-explorer__response {
+  margin-top: 20px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.api-explorer__response > div {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.api-explorer__response span {
+  color: var(--muted);
+  font: 500 10px/1.4 var(--font-mono);
+}
+
+.api-explorer__response pre {
+  max-height: 520px;
+  padding: 18px;
+  margin: 0;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.data-contract__table {
+  max-height: 480px;
+}
+
+.data-contract__table th:first-child {
+  width: 180px;
+}
+
+.format-semantics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.format-semantics article {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.format-semantics h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.format-semantics p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .code-samples > div {
@@ -430,6 +518,36 @@
   gap: 16px;
   align-items: center;
   justify-content: space-between;
+}
+
+.model-coverage {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0 0 24px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--line);
+}
+
+.model-coverage div {
+  padding: 14px 16px;
+  background: white;
+}
+
+.model-coverage dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.model-coverage dd {
+  margin: 5px 0 0;
+  font: 600 18px/1.2 var(--font-mono);
+}
+
+.model-toolbar .field {
+  margin-left: auto;
 }
 
 .model-toolbar > span {

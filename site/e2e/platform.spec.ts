@@ -139,11 +139,23 @@ test("language and corpus catalogue entries have stable detail routes", async ({
 
 test("developer documentation links all maintained client libraries", async ({page}) => {
   await page.goto("#/developers");
+  await page.getByRole("button", {name: "Run request"}).click();
+  await expect(page.locator(".api-explorer__response")).toContainText("fb-");
+  await expect(page.locator(".api-explorer__response")).toContainText('"api_version": "v1"');
   const clients = page.locator(".client-grid");
   await expect(clients.getByRole("heading", {name: "JavaScript"})).toBeVisible();
   await expect(clients.getByRole("heading", {name: "Python"})).toBeVisible();
   await expect(clients.getByRole("heading", {name: "R", exact: true})).toBeVisible();
   await expect(clients.getByRole("link", {name: "Setup and source →"})).toHaveCount(3);
+});
+
+test("model language coverage links into the matching learner tool", async ({page}) => {
+  await page.goto("#/models");
+  await page.getByRole("combobox", {name: "Language coverage"}).selectOption({label: "Paiwan"});
+  await expect(page.locator(".model-grid > article")).toHaveCount(5);
+  await page.getByRole("link", {name: "Open ASR practice"}).click();
+  await expect(page.getByRole("combobox", {name: "Learning language"})).toHaveValue("lang_paiwan");
+  await expect(page.getByRole("tab", {name: "Pronunciation"})).toHaveAttribute("aria-selected", "true");
 });
 
 test("local corpus search reads a compressed shard", async ({page}) => {

@@ -8,17 +8,26 @@ import {Recorder} from "../components/Recorder";
 import {SearchTool, type LookupKind} from "../components/SearchTool";
 import {StudyDeck} from "../components/StudyDeck";
 import {useI18n} from "../i18n";
+import {useSearchParams} from "../routing";
 import type {AppData, SearchRecord} from "../types";
 
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
 export function Learn({data}: {data: AppData}) {
   const {t, tx} = useI18n();
+  const [params] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
-  const [languageId, setLanguageId] = useState(amis?.id ?? data.languages[0]?.id ?? "");
+  const requestedLanguage = params.get("language");
+  const initialLanguage = data.languages.find((language) => language.id === requestedLanguage) ?? amis ?? data.languages[0];
+  const [languageId, setLanguageId] = useState(initialLanguage?.id ?? "");
   const language = data.languages.find((item) => item.id === languageId) ?? data.languages[0];
   const [dialect, setDialect] = useState(language?.dialects[0] ?? "");
-  const [tab, setTab] = useState<StudioTab>("lookup");
+  const requestedTool = params.get("tool") as StudioTab | null;
+  const [tab, setTab] = useState<StudioTab>(
+    requestedTool && ["lookup", "deck", "practice", "translation", "orthography", "lessons"].includes(requestedTool)
+      ? requestedTool
+      : "lookup",
+  );
   const [lookupKind, setLookupKind] = useState<LookupKind>("dictionary");
   const [practiceTarget, setPracticeTarget] = useState("");
   const capability = useMemo(() => {

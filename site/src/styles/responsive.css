@@ -156,9 +156,19 @@
   .explore-toolbar,
   .download-toolbar,
   .deck-toolbar,
-  .results-heading {
+  .results-heading,
+  .model-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .model-toolbar .field {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .model-coverage {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .field--compact {
@@ -176,6 +186,16 @@
   .tool-grid,
   .asr-comparison {
     grid-template-columns: 1fr;
+  }
+
+  .api-explorer__controls,
+  .format-semantics {
+    grid-template-columns: 1fr;
+  }
+
+  .api-explorer__response > div {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .learner-scope__selectors,
