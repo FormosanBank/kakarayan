@@ -11,6 +11,14 @@ interface CorpusSummary {
   name: string;
 }
 
+interface ModelSummary {
+  languages: string[];
+}
+
+interface DownloadSummary {
+  artifacts: unknown[];
+}
+
 const routes = [
   ["", /FormosanBank, ready to use/],
   ["#/lookup", /Dictionary and sentences/],
@@ -41,6 +49,13 @@ async function selectSmallAmisScope(page: Page, fullCorpus = "Glosbe") {
   expect(labels).toContain(label);
   await corpus.selectOption({label});
   return label;
+}
+
+async function staticApiData<T>(page: Page, endpoint: string): Promise<T> {
+  const response = await page.request.get(`api/v1/${endpoint}.json`);
+  expect(response.ok()).toBe(true);
+  const envelope = (await response.json()) as StaticEnvelope<T>;
+  return envelope.data;
 }
 
 test("all primary routes load a consistent release", async ({page}) => {
@@ -150,6 +165,11 @@ test("developer documentation links all maintained client libraries", async ({pa
 });
 
 test("model language coverage links into the matching learner tool", async ({page}) => {
+  const {models} = await staticApiData<{models: ModelSummary[]}>(page, "models");
+  test.skip(
+    !models.some((model) => model.languages.includes("pwn")),
+    "Requires a release with the public Paiwan model catalog",
+  );
   await page.goto("#/models");
   await page.getByRole("combobox", {name: "Language coverage"}).selectOption({label: "Paiwan"});
   await expect(page.locator(".model-grid > article")).toHaveCount(5);
@@ -344,6 +364,11 @@ test("learning content fails closed when no reviewed lesson is published", async
 test("prepared downloads are readable, filterable, and hide internal blocker codes", async ({
   page,
 }) => {
+  const {artifacts} = await staticApiData<DownloadSummary>(page, "downloads");
+  test.skip(
+    artifacts.length === 0,
+    "Requires a release built with prepared download artifacts",
+  );
   await page.goto("#/downloads");
   const main = page.locator("#main");
   const cards = main.locator(".artifact-card");
@@ -364,6 +389,8 @@ test("prepared downloads are readable, filterable, and hide internal blocker cod
 });
 
 test("model catalogue keeps repeated caveats inside per-model details", async ({page}) => {
+  const {models} = await staticApiData<{models: ModelSummary[]}>(page, "models");
+  test.skip(models.length === 0, "Requires a release with the public model catalog");
   await page.goto("#/models");
   const cards = page.locator(".model-grid > article");
   await expect(cards).toHaveCount(20);
