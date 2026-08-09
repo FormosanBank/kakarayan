@@ -216,6 +216,10 @@ test("language and corpus catalogue entries have stable detail routes", async ({
     "href",
     /#\/lookup\?type=sentences&language=lang_amis/,
   );
+  await expect(page.getByRole("link", {name: "Build language dataset"})).toHaveAttribute(
+    "href",
+    "#/research?language=lang_amis",
+  );
 
   const response = await page.request.get("api/v1/corpora.json");
   expect(response.ok()).toBe(true);
@@ -226,6 +230,10 @@ test("language and corpus catalogue entries have stable detail routes", async ({
   await expect(page.getByRole("heading", {level: 1, name: corpus.name})).toBeVisible();
   await expect(page.getByRole("combobox", {name: "Search language"})).toBeVisible();
   await expect(page.getByRole("link", {name: "Search sentences"})).toHaveCount(1);
+  await expect(page.getByRole("link", {name: "Build corpus dataset"})).toHaveAttribute(
+    "href",
+    `#/research?corpus=${corpus.id}`,
+  );
   const guideLink = page.getByRole("link", {name: "Read corpus guide"});
   if (GITBOOK_CORPUS_PAGES[corpus.id]) {
     await expect(guideLink).toHaveAttribute(
@@ -240,6 +248,10 @@ test("language and corpus catalogue entries have stable detail routes", async ({
     /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\//,
   );
   await expect(page.getByText(/approved for Kakarayan's noncommercial distribution/)).toBeVisible();
+
+  await page.goto(`#/research?corpus=${corpus.id}`);
+  await expect(page.getByRole("combobox", {name: "Corpus"})).toHaveValue(corpus.id);
+  await expect(page.getByRole("combobox", {name: "Language"})).not.toHaveValue("");
 });
 
 test("developer documentation links all maintained client libraries", async ({page}) => {
@@ -461,7 +473,7 @@ test("learning content fails closed when no reviewed lesson is published", async
   await expect(page.getByText(/Community-authored notes will appear here after review/)).toBeVisible();
 });
 
-test("prepared downloads are readable, filterable, and hide internal blocker codes", async ({
+test("prepared downloads stay curated and hide internal blocker codes", async ({
   page,
 }) => {
   const {artifacts} = await staticApiData<DownloadSummary>(page, "downloads");
@@ -473,9 +485,14 @@ test("prepared downloads are readable, filterable, and hide internal blocker cod
   const main = page.locator("#main");
   const cards = main.locator(".artifact-card");
   await expect(cards.first()).toBeVisible();
-  expect(await cards.count()).toBeLessThanOrEqual(24);
+  expect(await cards.count()).toBeLessThanOrEqual(10);
   await expect(cards.first().getByRole("heading", {level: 2})).not.toHaveText(/\.gz$|\.zip$/);
   await expect(main).not.toContainText(/rights_[a-z0-9_]+/);
+  await expect(main.locator(".download-filters")).toHaveCount(0);
+  await expect(main.getByRole("link", {name: "Build a custom dataset"})).toHaveAttribute(
+    "href",
+    "#/research",
+  );
 
   const unavailable = cards.first().getByText("Why is this unavailable?");
   if ((await unavailable.count()) > 0) {
@@ -483,9 +500,7 @@ test("prepared downloads are readable, filterable, and hide internal blocker cod
     await expect(cards.first()).toContainText(/held from release/);
   }
 
-  await page.getByRole("combobox", {name: "Format"}).selectOption("xml");
-  await expect(main.getByRole("button", {name: "Clear filters"})).toBeVisible();
-  await expect(cards.first().locator(".file-mark")).toHaveText("XML");
+  await expect(main.locator(".file-mark").filter({hasText: "XML"})).toHaveCount(0);
 });
 
 test("model catalogue keeps repeated caveats inside per-model details", async ({page}) => {
@@ -528,7 +543,10 @@ test("Traditional Chinese navigation updates content and document language", asy
   await page.goto("#/downloads");
   const pendingRights = page.getByText("未完成權利審查的套件仍會列出，但不提供下載連結。");
   if ((await pendingRights.count()) > 0) await expect(pendingRights).toBeVisible();
-  await expect(page.getByRole("heading", {name: "選擇格式"})).toBeVisible();
+  await expect(page.getByRole("link", {name: "建立自訂資料集"})).toHaveAttribute(
+    "href",
+    "#/research",
+  );
 });
 
 test("primary navigation and research tabs are keyboard operable", async ({

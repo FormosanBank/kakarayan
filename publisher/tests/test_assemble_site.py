@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from publisher import PUBLIC_DOWNLOAD_PATHS
 from publisher.assemble_site import assemble
 from publisher.build import BuildError, build_release
 
@@ -42,7 +43,9 @@ def test_assemble_site_copies_api_and_release_data(public_repo: Path, tmp_path: 
     assert download_catalog["release_id"] == release.release_id
     assert download_catalog["kakarayan"]["commit"]
     assert download_catalog["canonical_url"].endswith("/api/v1/downloads.json")
-    assert download_catalog["data"]["artifacts"]
+    assert {artifact["path"] for artifact in download_catalog["data"]["artifacts"]} == set(
+        PUBLIC_DOWNLOAD_PATHS
+    )
     assert all(
         artifact["download_url"].startswith(
             "https://github.com/FormosanBank/kakarayan/releases/download/"

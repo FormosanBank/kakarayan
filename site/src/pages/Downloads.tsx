@@ -2,7 +2,7 @@ import {useEffect, useMemo, useState} from "react";
 
 import {PageIntro} from "../components/Layout";
 import {useI18n} from "../i18n";
-import {useSearchParams} from "../routing";
+import {Link} from "../routing";
 import type {AppData} from "../types";
 
 interface Artifact {
@@ -35,7 +35,23 @@ interface DownloadsEnvelope {
   data: DownloadsCatalog;
 }
 
-const PAGE_SIZE = 24;
+const CURATED_DOWNLOAD_PATHS = [
+  "formosanbank.sqlite.gz",
+  "prepared/csv-tables.zip",
+  "prepared/flat-jsonl-tables.zip",
+  "prepared/formosanbank-cldf.zip",
+  "prepared/formosanbank.xlsx",
+  "prepared/metadata-and-audio.zip",
+  "prepared/parquet-tables.zip",
+  "prepared/text-exports.zip",
+  "prepared/time-aligned.zip",
+  "prepared/tsv-tables.zip",
+] as const;
+
+const curatedOrder = new Map<string, number>(
+  CURATED_DOWNLOAD_PATHS.map((path, index) => [path, index]),
+);
+
 function size(bytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB"];
   let value = bytes;
@@ -52,15 +68,9 @@ function fileName(path: string): string {
 }
 
 export function Downloads({data}: {data: AppData}) {
-  const {languageName, number, t, tx} = useI18n();
-  const [params] = useSearchParams();
+  const {number, t, tx} = useI18n();
   const [manifest, setManifest] = useState<DownloadsCatalog | null>(null);
   const [error, setError] = useState("");
-  const [format, setFormat] = useState(params.get("format") ?? "all");
-  const [languageId, setLanguageId] = useState(params.get("language") ?? "all");
-  const [corpusId, setCorpusId] = useState(params.get("corpus") ?? "all");
-  const [tier, setTier] = useState(params.get("tier") ?? "all");
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -83,40 +93,20 @@ export function Downloads({data}: {data: AppData}) {
 
   const artifacts = useMemo(
     () =>
-      (manifest?.artifacts ?? []).filter((artifact) =>
-        (format === "all" || artifact.format === format) &&
-        (languageId === "all" || artifact.language_ids.includes(languageId)) &&
-        (corpusId === "all" || artifact.corpus_ids.includes(corpusId)) &&
-        (tier === "all" || artifact.tiers.includes(tier)),
-      ),
-    [corpusId, format, languageId, manifest?.artifacts, tier],
-  );
-  const tiers = useMemo(
-    () => [...new Set((manifest?.artifacts ?? []).flatMap((artifact) => artifact.tiers))].sort(),
+      (manifest?.artifacts ?? [])
+        .filter((artifact) => curatedOrder.has(artifact.path))
+        .sort(
+          (left, right) =>
+            (curatedOrder.get(left.path) ?? Number.MAX_SAFE_INTEGER) -
+            (curatedOrder.get(right.path) ?? Number.MAX_SAFE_INTEGER),
+        ),
     [manifest?.artifacts],
-  );
-  const formats = useMemo(
-    () => [...new Set((manifest?.artifacts ?? []).map((artifact) => artifact.format))].sort(),
-    [manifest?.artifacts],
-  );
-  const corpora = data.corpora.filter(
-    (corpus) => languageId === "all" || corpus.languages.includes(languageId),
-  );
-  const corpusById = useMemo(
-    () => new Map(data.corpora.map((corpus) => [corpus.id, corpus])),
-    [data.corpora],
-  );
-  const languageById = useMemo(
-    () => new Map(data.languages.map((language) => [language.id, language])),
-    [data.languages],
   );
   const rightsById = useMemo(
     () => new Map(data.rights.entries.map((entry) => [entry.id, entry])),
     [data.rights.entries],
   );
-  const visibleArtifacts = artifacts.slice(0, visibleCount);
   const unavailableCount = artifacts.filter((artifact) => !artifact.publishable).length;
-  const hasActiveFilters = [format, languageId, corpusId, tier].some((value) => value !== "all");
   const formatNames: Record<string, string> = {
     aligned: tx("time-aligned media", "時間對齊媒體"),
     cldf: tx("CLDF dataset", "CLDF 資料集"),
@@ -144,30 +134,16 @@ export function Downloads({data}: {data: AppData}) {
     token: tx("token", "詞元"),
   };
 
-  function localizedArtifactTitle(artifact: Artifact, corpusName?: string): string {
+  function localizedArtifactTitle(artifact: Artifact): string {
     const formatName = formatNames[artifact.format] ?? artifact.format.toUpperCase();
-    if (artifact.corpus_ids.length === 1 && corpusName) {
-      return tx(`${corpusName} ${formatName}`, `${corpusName}：${formatName}`);
-    }
     return tx(`Complete FormosanBank ${formatName}`, `完整 FormosanBank ${formatName}`);
   }
 
-  function localizedArtifactScope(artifact: Artifact, corpusName?: string, localLanguageName?: string): string {
-    if (artifact.corpus_ids.length === 1 && corpusName) {
-      return localLanguageName ? `${localLanguageName} · ${corpusName}` : corpusName;
-    }
+  function localizedArtifactScope(artifact: Artifact): string {
     return tx(
       `${number(artifact.language_ids.length)} languages · ${number(artifact.corpus_ids.length)} corpora`,
       `${number(artifact.language_ids.length)} 種語言 · ${number(artifact.corpus_ids.length)} 個語料庫`,
     );
-  }
-
-  function clearFilters() {
-    setFormat("all");
-    setLanguageId("all");
-    setCorpusId("all");
-    setTier("all");
-    setVisibleCount(PAGE_SIZE);
   }
 
   return (
@@ -188,73 +164,10 @@ export function Downloads({data}: {data: AppData}) {
         </div>
         <div className="download-results" aria-live="polite">
           <span><strong>{number(artifacts.length)}</strong> {tx("packages", "個套件")}</span>
-          {hasActiveFilters && (
-            <button className="text-button" type="button" onClick={clearFilters}>
-              {tx("Clear filters", "清除篩選")}
-            </button>
-          )}
+          <Link className="button button--quiet" to="/research">
+            {tx("Build a custom dataset", "建立自訂資料集")}
+          </Link>
         </div>
-      </div>
-      <div className="download-filters">
-        <label className="field">
-          {tx("Language", "語言")}
-          <select
-            value={languageId}
-            onChange={(event) => {
-              setLanguageId(event.target.value);
-              setCorpusId("all");
-              setVisibleCount(PAGE_SIZE);
-            }}
-          >
-            <option value="all">{tx("All languages", "所有語言")}</option>
-            {data.languages.map((language) => (
-              <option key={language.id} value={language.id}>{languageName(language)}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          {tx("Corpus", "語料庫")}
-          <select
-            value={corpusId}
-            onChange={(event) => {
-              setCorpusId(event.target.value);
-              setVisibleCount(PAGE_SIZE);
-            }}
-          >
-            <option value="all">{tx("All corpora", "所有語料庫")}</option>
-            {corpora.map((corpus) => (
-              <option key={corpus.id} value={corpus.id}>{corpus.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          {tx("Tier", "層級")}
-          <select
-            value={tier}
-            onChange={(event) => {
-              setTier(event.target.value);
-              setVisibleCount(PAGE_SIZE);
-            }}
-          >
-            <option value="all">{tx("All tiers", "所有層級")}</option>
-            {tiers.map((value) => <option key={value} value={value}>{tierNames[value] ?? value}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          {tx("Format", "格式")}
-          <select
-            value={format}
-            onChange={(event) => {
-              setFormat(event.target.value);
-              setVisibleCount(PAGE_SIZE);
-            }}
-          >
-            <option value="all">{tx("All formats", "所有格式")}</option>
-            {formats.map((value) => (
-              <option key={value} value={value}>{formatNames[value] ?? value}</option>
-            ))}
-          </select>
-        </label>
       </div>
       {error && (
         <p className="callout callout--error">
@@ -263,11 +176,7 @@ export function Downloads({data}: {data: AppData}) {
         </p>
       )}
       <div className="artifact-list">
-        {visibleArtifacts.map((artifact) => {
-          const onlyCorpusId = artifact.corpus_ids.length === 1 ? artifact.corpus_ids[0] : undefined;
-          const onlyLanguageId = artifact.language_ids.length === 1 ? artifact.language_ids[0] : undefined;
-          const corpus = onlyCorpusId ? corpusById.get(onlyCorpusId) : undefined;
-          const language = onlyLanguageId ? languageById.get(onlyLanguageId) : undefined;
+        {artifacts.map((artifact) => {
           const rightsEntries = artifact.rights_ids.flatMap((id) => {
             const entry = rightsById.get(id);
             return entry ? [entry] : [];
@@ -278,7 +187,7 @@ export function Downloads({data}: {data: AppData}) {
               <div className="artifact-card__body">
                 <header className="artifact-card__header">
                   <div>
-                    <h2>{localizedArtifactTitle(artifact, corpus?.name)}</h2>
+                    <h2>{localizedArtifactTitle(artifact)}</h2>
                     <code>{fileName(artifact.path)}</code>
                   </div>
                   <div className="artifact-card__status">
@@ -289,7 +198,7 @@ export function Downloads({data}: {data: AppData}) {
                   </div>
                 </header>
                 <p className="artifact-card__scope">
-                  {localizedArtifactScope(artifact, corpus?.name, language ? languageName(language) : undefined)}
+                  {localizedArtifactScope(artifact)}
                 </p>
                 <div className="tier-list" aria-label={tx("Included tiers", "所含層級")}>
                   {artifact.tiers.map((value) => <span key={value}>{tierNames[value] ?? value}</span>)}
@@ -354,43 +263,14 @@ export function Downloads({data}: {data: AppData}) {
           );
         })}
       </div>
-      {visibleCount < artifacts.length && (
-        <div className="download-more">
-          <button className="button" type="button" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
-            {tx("Show more packages", "顯示更多套件")}
-          </button>
-          <span>{number(visibleCount)} {tx("of", "／")} {number(artifacts.length)}</span>
-        </div>
-      )}
       {!error && manifest && artifacts.length === 0 && (
         <div className="empty-state">
           {tx(
-            "No prepared package matches every selected filter. Clear a filter or build a custom dataset in Research.",
-            "沒有預備套件符合所有篩選條件。請清除篩選條件，或在研究工具中建立自訂資料集。",
+            "Prepared packages are unavailable for this release. Build a custom dataset in Research.",
+            "此資料版本沒有可用的預備套件。請在研究工具中建立自訂資料集。",
           )}
         </div>
       )}
-      <section className="format-guide">
-        <h2>{tx("Choose a format", "選擇格式")}</h2>
-        <div>
-          <article>
-            <h3>{tx("Canonical XML", "權威 XML")}</h3>
-            <p>{tx("The authoritative hierarchy and exact source data.", "權威階層與完全相同的來源資料。")}</p>
-          </article>
-          <article>
-            <h3>SQLite</h3>
-            <p>{tx("A complete relational snapshot for SQL, R, Python, and Datasette.", "適用於 SQL、R、Python 與 Datasette 的完整關聯快照。")}</p>
-          </article>
-          <article>
-            <h3>{tx("CSV, TSV, and XLSX", "CSV、TSV 與 XLSX")}</h3>
-            <p>{tx("Flat tables for statistics and spreadsheet workflows.", "適用於統計與試算表工作流程的平面表格。")}</p>
-          </article>
-          <article>
-            <h3>{tx("JSON Lines and Parquet", "JSON Lines 與 Parquet")}</h3>
-            <p>{tx("Streaming records and efficient columnar research tables.", "串流記錄與高效的欄式研究表格。")}</p>
-          </article>
-        </div>
-      </section>
     </div>
   );
 }

@@ -23,7 +23,7 @@ from typing import Any, TextIO, cast
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
-from publisher import API_VERSION, APPLICATION_VERSION, SCHEMA_VERSION
+from publisher import API_VERSION, APPLICATION_VERSION, PUBLIC_DOWNLOAD_PATHS, SCHEMA_VERSION
 from publisher.languages import language_rows
 from publisher.model_catalog import configured_model_catalog
 from publisher.orthography import build_orthography_catalog
@@ -1296,16 +1296,7 @@ def build_release(
             ),
         }
         for artifact in artifacts
-        if (
-            str(artifact["path"]) == "formosanbank.sqlite.gz"
-            or (
-                str(artifact["path"]).startswith("prepared/")
-                and (
-                    str(artifact["path"]).endswith((".zip", ".xlsx"))
-                    or "/parquet/" in str(artifact["path"])
-                )
-            )
-        )
+        if str(artifact["path"]) in PUBLIC_DOWNLOAD_PATHS
     ]
     downloads: dict[str, object] = {
         "schema_version": SCHEMA_VERSION,

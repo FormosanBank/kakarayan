@@ -12,8 +12,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .code-samples,
-  .format-guide > div {
+  .code-samples {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -178,8 +177,6 @@
   .api-choice,
   .client-grid,
   .code-samples,
-  .format-guide > div,
-  .download-filters,
   .form-grid,
   .tool-grid,
   .asr-comparison {

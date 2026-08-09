@@ -21,7 +21,7 @@ import {
   projectRecordUnits,
   type RecordUnit,
 } from "../recordUnits";
-import {Link} from "../routing";
+import {Link, useSearchParams} from "../routing";
 import type {AppData, SearchRecord} from "../types";
 import {DatasetPreview} from "./DatasetPreview";
 
@@ -38,6 +38,21 @@ function size(bytes: number): string {
 
 export function DatasetBuilder({data}: {data: AppData}) {
   const {dialectName, languageName, number, tx} = useI18n();
+  const [params] = useSearchParams();
+  const requestedCorpus = data.corpora.find((corpus) => corpus.id === params.get("corpus"));
+  const requestedLanguageId = data.languages.some(
+    (language) => language.id === params.get("language"),
+  )
+    ? params.get("language") ?? ""
+    : "";
+  const initialLanguageId = requestedCorpus
+    ? requestedCorpus.languages.includes(requestedLanguageId)
+      ? requestedLanguageId
+      : requestedCorpus.languages[0] ?? ""
+    : requestedLanguageId;
+  const initialCorpusId = requestedCorpus?.languages.includes(initialLanguageId)
+    ? requestedCorpus.id
+    : "";
   const tierLabels: Record<TierRequirement, string> = {
     translation: tx("translation", "翻譯"),
     audio: tx("audio evidence", "音訊證據"),
@@ -45,9 +60,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
     interlinear: tx("word or morpheme analysis", "詞或語素分析"),
     unclear: tx("an unclear annotation", "不確定標註"),
   };
-  const [languageId, setLanguageId] = useState("");
+  const [languageId, setLanguageId] = useState(initialLanguageId);
   const [additionalLanguageIds, setAdditionalLanguageIds] = useState<string[]>([]);
-  const [corpusId, setCorpusId] = useState("");
+  const [corpusId, setCorpusId] = useState(initialCorpusId);
   const [additionalCorpusIds, setAdditionalCorpusIds] = useState<string[]>([]);
   const [dialects, setDialects] = useState<string[]>([]);
   const [requirements, setRequirements] = useState<TierRequirement[]>([]);

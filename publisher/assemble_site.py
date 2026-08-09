@@ -10,7 +10,7 @@ from typing import Any, cast
 
 from jsonschema.exceptions import ValidationError
 
-from publisher import SCHEMA_VERSION
+from publisher import PUBLIC_DOWNLOAD_PATHS, SCHEMA_VERSION
 from publisher.build import BuildError, validate_document
 
 _DOWNLOAD_FIELDS = {
@@ -51,9 +51,7 @@ def _download_catalog(
         if not isinstance(raw, dict):
             raise BuildError("Published release has a malformed artifact")
         path = str(raw.get("path", ""))
-        if path != "formosanbank.sqlite.gz" and not (
-            path.startswith("prepared/") and path.endswith((".zip", ".xlsx"))
-        ):
+        if path not in PUBLIC_DOWNLOAD_PATHS:
             continue
         asset_name = raw.get("asset_name")
         download_url = raw.get("download_url")
@@ -64,8 +62,10 @@ def _download_catalog(
         ):
             raise BuildError(f"Published artifact has an unsafe download mapping: {path}")
         artifacts.append({key: value for key, value in raw.items() if key in _DOWNLOAD_FIELDS})
-    if not artifacts:
-        raise BuildError("Published release has no prepared download artifacts")
+    found_paths = {str(artifact["path"]) for artifact in artifacts}
+    missing_paths = sorted(set(PUBLIC_DOWNLOAD_PATHS) - found_paths)
+    if missing_paths:
+        raise BuildError(f"Published release is missing curated downloads: {missing_paths}")
     return {
         "schema_version": SCHEMA_VERSION,
         "release_id": release_id,

@@ -142,7 +142,8 @@ It does not receive SQLite, normalized bulk tables, canonical XML archives, or p
 linguistic packages. The project budget is 900 MiB total and 50 MiB per file.
 
 GitHub Releases receive approved bulk packages and the SQLite snapshot. The generated
-download catalogue points to immutable `data-<release-id>` assets.
+public catalogue points to ten curated whole-release `data-<release-id>` assets; granular
+language and corpus selections are handled by the browser dataset builder.
 
 The indexed full-corpus rehearsal for public FormosanBank commit
 `40fd519cd82295bd7824e207990d277b871ad47f` produced about 319 MiB of Pages data across

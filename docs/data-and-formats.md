@@ -74,6 +74,11 @@ sizes for both the gzip asset and decompressed SQLite content.
 
 ## Prepared packages
 
+The public Downloads page lists ten whole-release packages. It does not expose every
+corpus-specific XML archive or language-and-corpus JSONL partition as a separate choice.
+Use the Research dataset builder for a specific language, corpus, tier, or row selection;
+use the pinned public FormosanBank repository when exact canonical XML is required.
+
 ### Canonical XML
 
 One deterministic ZIP per corpus contains the exact XML bytes under their original

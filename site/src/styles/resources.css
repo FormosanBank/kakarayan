@@ -29,17 +29,6 @@
   font: 600 12px/1.4 var(--font-body);
 }
 
-.download-filters {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  padding: 20px;
-  margin-bottom: 28px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
 .artifact-list {
   border-top: 1px solid var(--line);
 }
@@ -101,8 +90,7 @@
   margin-top: 8px;
 }
 
-.artifact-list p,
-.download-more span {
+.artifact-list p {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -226,14 +214,6 @@
   line-height: 1.6;
 }
 
-.download-more {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  justify-content: center;
-  padding: 28px 0 12px;
-}
-
 .file-mark,
 .task-mark {
   display: grid;
@@ -245,28 +225,6 @@
   background: white;
   place-items: center;
   font: 600 9px/1 var(--font-mono);
-}
-
-.format-guide > div {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
-  margin-top: 24px;
-}
-
-.format-guide article {
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-
-.format-guide h3 {
-  margin-bottom: 8px;
-  font-size: 16px;
-}
-
-.format-guide p {
-  color: var(--muted);
-  font-size: 13px;
 }
 
 .api-choice {

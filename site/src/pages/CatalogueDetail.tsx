@@ -82,8 +82,8 @@ export function LanguageDetail({
         <Link className="button button--quiet" to={`/lookup?type=sentences&language=${language.id}`}>
           {tx("Sentence search", "例句搜尋")}
         </Link>
-        <Link className="button button--quiet" to={`/downloads?language=${language.id}`}>
-          {tx("Filter prepared data", "篩選預備資料")}
+        <Link className="button button--quiet" to={`/research?language=${language.id}`}>
+          {tx("Build language dataset", "建立語言資料集")}
         </Link>
       </div>
       <section className="detail-section">
@@ -175,8 +175,8 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
             {tx("Search sentences", "搜尋例句")}
           </Link>
         )}
-        <Link className="button button--quiet" to={`/downloads?corpus=${corpus.id}`}>
-          {tx("Filter prepared data", "篩選預備資料")}
+        <Link className="button button--quiet" to={`/research?corpus=${corpus.id}`}>
+          {tx("Build corpus dataset", "建立語料庫資料集")}
         </Link>
         {GITBOOK_CORPUS_PAGES[corpus.id] && (
           <Link className="button button--quiet" to={`/guide?corpus=${corpus.id}`}>

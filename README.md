@@ -22,9 +22,9 @@ rebuildable projection of one exact public FormosanBank commit.
 - A bounded dataset builder, deterministic linguistic summaries in a Worker, and CSV, TSV,
   JSON, JSON Lines, Parquet, plain text, interlinear, audio-reference, and reproducible
   recipe exports for browser selections.
-- Prepared research packages in canonical XML, relational CSV/TSV/JSONL, hierarchical
-  JSONL, Parquet, XLSX, CLDF Generic, plain/interlinear text, EAF, TextGrid, WebVTT, and SRT
-  where the source supports a defensible mapping.
+- Ten curated whole-release downloads for common database, tabular, spreadsheet, CLDF,
+  text, metadata, and time-aligned workflows. Specific selections belong in the browser
+  dataset builder.
 - Learner tools with cited words and sentences, private local cards, deterministic spaced
   repetition, backup/restore, Anki TSV, local recording, and reviewed orthography tables.
   Cards can be saved only from dictionary or sentence results.

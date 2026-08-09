@@ -14,6 +14,7 @@ import pytest
 from jsonschema import ValidationError
 from openpyxl import load_workbook
 
+from publisher import PUBLIC_DOWNLOAD_PATHS
 from publisher.build import BuildError, build_release
 from publisher.cldf_export import write_cldf_package
 from publisher.verify_release import verify_release
@@ -126,16 +127,17 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         (first.output / "api" / "v1" / "downloads.json").read_text(encoding="utf-8")
     )["data"]
     assert downloads["release_id"] == first.release_id
-    assert any(item["path"].endswith("csv-tables.zip") for item in downloads["artifacts"])
+    assert {item["path"] for item in downloads["artifacts"]} == (
+        set(PUBLIC_DOWNLOAD_PATHS) - {"formosanbank.sqlite.gz"}
+    )
     assert all(item["publishable"] for item in downloads["artifacts"])
     assert all(not item["blocked_reasons"] for item in downloads["artifacts"])
     assert all(item["format"] for item in downloads["artifacts"])
     assert all(item["language_ids"] == ["lang_amis"] for item in downloads["artifacts"])
     assert all(item["corpus_ids"] == ["corpus_testcorpus"] for item in downloads["artifacts"])
     assert all(item["tiers"] for item in downloads["artifacts"])
-    hierarchical_jsonl = next(item for item in downloads["artifacts"] if "/jsonl/" in item["path"])
-    assert hierarchical_jsonl["format"] == "jsonl"
-    assert hierarchical_jsonl["rights_ids"] == ["rights_testcorpus"]
+    assert all("/canonical/" not in item["path"] for item in downloads["artifacts"])
+    assert all("/jsonl/" not in item["path"] for item in downloads["artifacts"])
 
     with zipfile.ZipFile(first.output / "prepared" / "parquet-tables.zip") as archive:
         assert pq.read_table(pa.BufferReader(archive.read("tokens.parquet"))).num_rows == 4
