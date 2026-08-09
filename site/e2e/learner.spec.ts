@@ -169,3 +169,29 @@ test("the learner shell and local cards remain available offline", async ({
   await page.getByRole("tab", {name: /Study deck/}).click();
   await expect(page.getByRole("heading", {name: "legacy front"})).toBeVisible();
 });
+
+test("learner tools share the full workspace width", async ({page}, testInfo) => {
+  test.skip(
+    !["desktop-chromium", "mobile-chromium"].includes(testInfo.project.name),
+    "Workspace geometry is checked at desktop and mobile widths in Chromium",
+  );
+  await page.goto("#/learn");
+  const panel = page.locator(".studio-panel");
+  const panelWidth = await panel.evaluate((element) => element.getBoundingClientRect().width);
+  const tools = [
+    [/Lookup/, "#lookup-results"],
+    [/Study deck/, ".study-deck"],
+    [/Pronunciation/, ".model-tool"],
+    [/Machine translation/, ".model-tool"],
+    [/Orthography/, ".model-tool"],
+    [/Notes/, ".reviewed-content, .empty-state"],
+  ] as const;
+
+  for (const [name, selector] of tools) {
+    await page.getByRole("tab", {name}).click();
+    const tool = panel.locator(selector).first();
+    await expect(tool).toBeVisible();
+    const width = await tool.evaluate((element) => element.getBoundingClientRect().width);
+    expect(Math.abs(width - panelWidth), `${String(name)} width`).toBeLessThanOrEqual(1);
+  }
+});
