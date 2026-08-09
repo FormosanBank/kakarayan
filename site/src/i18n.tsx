@@ -160,6 +160,7 @@ interface I18nContextValue {
   number: (value: number) => string;
   date: (value: string | Date) => string;
   languageName: (language: Pick<Language, "name" | "names">) => string;
+  dialectName: (dialect: string) => string;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -194,6 +195,8 @@ export function I18nProvider({children}: PropsWithChildren) {
         const local = language.names["zh-Hant"];
         return local && local !== language.name ? `${local} · ${language.name}` : language.name;
       },
+      dialectName: (dialect) =>
+        locale === "zh-Hant" && dialect.toLocaleLowerCase() === "unknown" ? "未知" : dialect,
     }),
     [locale, setLocale],
   );

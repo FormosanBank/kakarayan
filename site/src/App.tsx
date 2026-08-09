@@ -152,6 +152,9 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
         `${["/lookup", "/dictionary", "/sentences", "/search"].includes(path) ? "noindex" : "index"},follow,noai,noimageai`,
       );
   }, [locale, path, routeDescription, routeTitle]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [path]);
   const page = (() => {
     if (path.startsWith("/languages/")) {
       const id = decodeURIComponent(path.slice("/languages/".length));

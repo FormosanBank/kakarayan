@@ -61,7 +61,7 @@ export function LanguageDetail({
   data: AppData;
   language: Language;
 }) {
-  const {languageName, number, tx} = useI18n();
+  const {dialectName, languageName, number, tx} = useI18n();
   const corpora = data.corpora.filter((corpus) => corpus.languages.includes(language.id));
   const identity = [
     language.names["zh-Hant"],
@@ -95,7 +95,7 @@ export function LanguageDetail({
         </div>
         <p>
           <strong>{tx("Published dialect labels:", "已發布的方言標籤：")}</strong>{" "}
-          {language.dialects.join(", ") || tx("none supplied in this release", "此版本未提供")}
+          {language.dialects.map(dialectName).join(", ") || tx("none supplied in this release", "此版本未提供")}
           {tx(".", "。")}
         </p>
         <p>

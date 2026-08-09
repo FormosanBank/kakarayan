@@ -102,6 +102,12 @@
   margin-bottom: 32px;
 }
 
+.catalog-result-count {
+  margin: -20px 0 24px;
+  color: var(--body);
+  font-size: 13px;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -146,6 +152,11 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
+}
+
+.catalog-grid > .empty-state,
+.corpus-list > .empty-state {
+  grid-column: 1 / -1;
 }
 
 .catalog-card,

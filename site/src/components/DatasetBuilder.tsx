@@ -37,7 +37,7 @@ function size(bytes: number): string {
 }
 
 export function DatasetBuilder({data}: {data: AppData}) {
-  const {languageName, number, tx} = useI18n();
+  const {dialectName, languageName, number, tx} = useI18n();
   const tierLabels: Record<TierRequirement, string> = {
     translation: tx("translation", "翻譯"),
     audio: tx("audio evidence", "音訊證據"),
@@ -582,8 +582,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
           </dl>
           {(dialects.length > 0 || requirements.length > 0) && (
             <div className="builder__active-filters">
-              {dialects.map((value) => <span key={`dialect-${value}`}>{tx("dialect", "方言")}: {value}</span>)}
-              {requirements.map((value) => <span key={`tier-${value}`}>{tx("has", "包含")}: {value}</span>)}
+              {dialects.map((value) => <span key={`dialect-${value}`}>{tx("dialect", "方言")}: {dialectName(value)}</span>)}
+              {requirements.map((value) => <span key={`tier-${value}`}>{tx("has", "包含")}: {tierLabels[value]}</span>)}
             </div>
           )}
           <details className="builder__workload">

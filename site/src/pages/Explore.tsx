@@ -6,7 +6,7 @@ import {Link} from "../routing";
 import type {AppData} from "../types";
 
 export function Explore({data}: {data: AppData}) {
-  const {languageName, locale, number, t, tx} = useI18n();
+  const {dialectName, languageName, locale, number, t, tx} = useI18n();
   const [view, setView] = useState<"languages" | "corpora">("languages");
   const [filter, setFilter] = useState("");
   const rights = useMemo(
@@ -20,15 +20,36 @@ export function Explore({data}: {data: AppData}) {
     examples: tx("examples", "例句"),
     audio: tx("audio", "音訊"),
   };
+  const visibleLanguages = data.languages.filter((language) =>
+    `${language.name} ${language.names["zh-Hant"]} ${language.names.autonym ?? ""} ${language.iso639_3}`
+      .toLocaleLowerCase()
+      .includes(needle),
+  );
+  const visibleCorpora = data.corpora.filter((corpus) => {
+    const languageTerms = corpus.languages.map((id) => {
+      const language = data.languages.find((item) => item.id === id);
+      return language ? `${language.name} ${language.names["zh-Hant"]}` : "";
+    }).join(" ");
+    return `${corpus.name} ${corpus.source_path} ${languageTerms}`
+      .toLocaleLowerCase()
+      .includes(needle);
+  });
+  const resultCount = view === "languages" ? visibleLanguages.length : visibleCorpora.length;
+
+  function changeView(nextView: "languages" | "corpora") {
+    setView(nextView);
+    setFilter("");
+  }
+
   return (
     <div className="page-wrap">
       <PageIntro title={t("explore.title")} />
       <div className="explore-toolbar">
         <div className="segmented">
-          <button aria-pressed={view === "languages"} onClick={() => setView("languages")}>
+          <button aria-pressed={view === "languages"} onClick={() => changeView("languages")}>
             {tx("Languages", "語言")} <span>{number(data.languages.length)}</span>
           </button>
-          <button aria-pressed={view === "corpora"} onClick={() => setView("corpora")}>
+          <button aria-pressed={view === "corpora"} onClick={() => changeView("corpora")}>
             {tx("Corpora", "語料庫")} <span>{number(data.corpora.length)}</span>
           </button>
         </div>
@@ -46,21 +67,20 @@ export function Explore({data}: {data: AppData}) {
           />
         </label>
       </div>
+      {needle && (
+        <p className="catalog-result-count" aria-live="polite">
+          {number(resultCount)} {view === "languages" ? tx("languages", "種語言") : tx("corpora", "個語料庫")}
+        </p>
+      )}
 
       {view === "languages" ? (
         <div className="catalog-grid">
-          {data.languages
-            .filter((language) =>
-              `${language.name} ${language.names["zh-Hant"]} ${language.iso639_3}`
-                .toLocaleLowerCase()
-                .includes(needle),
-            )
-            .map((language) => {
-              const localName = locale === "zh-Hant"
-                ? language.names["zh-Hant"]
-                : language.names.autonym;
-              return (
-                <article className="catalog-card" key={language.id}>
+          {visibleLanguages.map((language) => {
+            const localName = locale === "zh-Hant"
+              ? language.names["zh-Hant"]
+              : language.names.autonym;
+            return (
+              <article className="catalog-card" key={language.id}>
                 {localName && localName !== language.name && (
                   <p className="catalog-card__local">{localName}</p>
                 )}
@@ -70,7 +90,7 @@ export function Explore({data}: {data: AppData}) {
                 </p>
                 <p>
                   {language.dialects.length
-                    ? language.dialects.slice(0, 4).join(" · ")
+                    ? language.dialects.slice(0, 4).map(dialectName).join(" · ")
                     : tx("No dialect label supplied", "未提供方言標籤")}
                 </p>
                 <div className="capabilities">
@@ -92,17 +112,20 @@ export function Explore({data}: {data: AppData}) {
                   {tx("Language details →", "語言詳細資料 →")}
                 </Link>
               </article>
-              );
-            })}
+            );
+          })}
+          {!visibleLanguages.length && (
+            <div className="empty-state">
+              {tx("No languages match this filter.", "沒有符合此篩選條件的語言。")}
+            </div>
+          )}
         </div>
       ) : (
         <div className="corpus-list">
-          {data.corpora
-            .filter((corpus) => corpus.name.toLocaleLowerCase().includes(needle))
-            .map((corpus) => {
-              const policy = rights.get(corpus.rights_id);
-              return (
-                <article key={corpus.id}>
+          {visibleCorpora.map((corpus) => {
+            const policy = rights.get(corpus.rights_id);
+            return (
+              <article key={corpus.id}>
                   <div>
                     <p className="eyebrow">{corpus.source_path}</p>
                     <h2>{corpus.name}</h2>
@@ -141,9 +164,14 @@ export function Explore({data}: {data: AppData}) {
                       {tx("Source", "來源")}
                     </a>
                   </div>
-                </article>
-              );
-            })}
+              </article>
+            );
+          })}
+          {!visibleCorpora.length && (
+            <div className="empty-state">
+              {tx("No corpora match this filter.", "沒有符合此篩選條件的語料庫。")}
+            </div>
+          )}
         </div>
       )}
     </div>

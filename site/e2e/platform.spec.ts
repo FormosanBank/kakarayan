@@ -108,6 +108,31 @@ test("landing page does not use decorative animation", async ({page}) => {
   expect(animatedElements).toBe(0);
 });
 
+test("mobile navigation closes after selecting a route", async ({page}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "Mobile navigation is tested once");
+  await page.goto("");
+  const menu = page.locator(".mobile-menu");
+  await menu.locator("summary").click();
+  await expect(menu).toHaveAttribute("open", "");
+  await menu.getByRole("link", {name: "Explore", exact: true}).click();
+  await expect(page.getByRole("heading", {level: 1, name: "Languages and corpora"})).toBeVisible();
+  await expect(menu).not.toHaveAttribute("open", "");
+});
+
+test("catalogue filters names, source paths, and linked languages", async ({page}) => {
+  await page.goto("#/explore");
+  const filter = page.getByPlaceholder("Filter languages…");
+  await filter.fill("no-match-value");
+  await expect(page.getByText("0 languages", {exact: true})).toBeVisible();
+  await expect(page.getByText("No languages match this filter.")).toBeVisible();
+
+  await page.getByRole("button", {name: /Corpora/}).click();
+  const corpusFilter = page.getByPlaceholder("Filter corpora…");
+  await corpusFilter.fill("Truku");
+  await expect(page.locator(".corpus-list > article")).not.toHaveCount(0);
+  await expect(page.locator(".catalog-result-count")).toContainText(/\d+ corpora/);
+});
+
 test("legacy lookup routes open the matching mode on the unified page", async ({page}) => {
   await page.goto("#/dictionary");
   await expect(page.getByRole("button", {name: "Dictionary lookup"})).toHaveAttribute(
@@ -436,7 +461,7 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByRole("heading", {name: "發音錄音工具"})).toBeVisible();
 
   await page.goto("#/downloads");
-  const pendingRights = page.getByText("部分套件尚未發布。");
+  const pendingRights = page.getByText("未完成權利審查的套件仍會列出，但不提供下載連結。");
   if ((await pendingRights.count()) > 0) await expect(pendingRights).toBeVisible();
   await expect(page.getByRole("heading", {name: "選擇格式"})).toBeVisible();
 });

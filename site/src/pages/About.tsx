@@ -10,7 +10,7 @@ export function About({data}: {data: AppData}) {
       <section>
         <h2>{tx("Source and releases", "來源與版本")}</h2>
         <p>
-          {tx("The FormosanBank XML in each public corpus ", "每個公開語料庫內的 FormosanBank XML ")}
+          {tx("The FormosanBank XML in each public corpus ", "每個公開語料庫內的 FormosanBank ")}
           <code>XML/</code>
           {tx(
             " directory is the source. Each Kakarayan release pins one commit and records source paths and checksums for its search data, tables, downloads, and APIs.",

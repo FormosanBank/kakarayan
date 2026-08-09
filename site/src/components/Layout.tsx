@@ -1,4 +1,4 @@
-import type {ReactNode} from "react";
+import {useRef, type ReactNode} from "react";
 
 import {useI18n} from "../i18n";
 import {NavLink} from "../routing";
@@ -20,6 +20,8 @@ const resourceNavigation = [
 
 export function Layout({data, children}: {data: AppData; children: ReactNode}) {
   const {locale, setLocale, t, tx} = useI18n();
+  const mobileMenu = useRef<HTMLDetailsElement>(null);
+  const closeMobileMenu = () => mobileMenu.current?.removeAttribute("open");
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main">
@@ -63,19 +65,19 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
               GitHub
             </a>
           </div>
-          <details className="mobile-menu">
+          <details className="mobile-menu" ref={mobileMenu}>
             <summary aria-label={tx("Open navigation", "開啟導覽")}>
               <span aria-hidden="true" />
               <span aria-hidden="true" />
             </summary>
             <nav aria-label={tx("Primary", "主要導覽")}>
               {navigation.map(([to, key]) => (
-                <NavLink key={to} to={to}>{t(key)}</NavLink>
+                <NavLink key={to} to={to} onClick={closeMobileMenu}>{t(key)}</NavLink>
               ))}
               {resourceNavigation.map(([to, key]) => (
-                <NavLink key={to} to={to}>{t(key)}</NavLink>
+                <NavLink key={to} to={to} onClick={closeMobileMenu}>{t(key)}</NavLink>
               ))}
-              <NavLink to="/about">{t("nav.about")}</NavLink>
+              <NavLink to="/about" onClick={closeMobileMenu}>{t("nav.about")}</NavLink>
             </nav>
           </details>
         </div>

@@ -139,6 +139,8 @@ export function Downloads({data}: {data: AppData}) {
     phonology: tx("phonology", "音韻"),
     translation: tx("translation", "翻譯"),
     audio: tx("audio", "音訊"),
+    language: tx("language", "語言"),
+    metadata: tx("metadata", "詮釋資料"),
     token: tx("token", "詞元"),
   };
 
@@ -235,7 +237,7 @@ export function Downloads({data}: {data: AppData}) {
             }}
           >
             <option value="all">{tx("All tiers", "所有層級")}</option>
-            {tiers.map((value) => <option key={value}>{value}</option>)}
+            {tiers.map((value) => <option key={value} value={value}>{tierNames[value] ?? value}</option>)}
           </select>
         </label>
         <label className="field">

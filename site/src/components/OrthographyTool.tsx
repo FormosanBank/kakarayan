@@ -15,7 +15,7 @@ export function OrthographyTool({
   languageName?: string;
   selectedDialect?: string;
 }) {
-  const {number, tx} = useI18n();
+  const {dialectName, number, tx} = useI18n();
   const languageTables = useMemo(
     () => catalog.tables.filter((table) => table.language === languageName),
     [catalog.tables, languageName],
@@ -70,7 +70,7 @@ export function OrthographyTool({
           {tx("Target dialect", "目標方言")}
           <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
             {table.dialects.map((value) => (
-              <option key={value}>{value}</option>
+              <option key={value} value={value}>{dialectName(value)}</option>
             ))}
           </select>
         </label>

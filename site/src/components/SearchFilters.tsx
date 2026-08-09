@@ -22,14 +22,14 @@ export function SearchFilters({
   requiredTiers: ResultTier[];
   resultSort: ResultSort;
 }) {
-  const {tx} = useI18n();
+  const {dialectName, tx} = useI18n();
   return (
     <>
       <label className="field">
         {tx("Dialect", "方言")}
         <select value={dialectFilter} onChange={(event) => onDialectChange(event.target.value)}>
           <option value="">{tx("All dialect labels", "所有方言標籤")}</option>
-          {dialects.map((value) => <option key={value}>{value}</option>)}
+          {dialects.map((value) => <option key={value} value={value}>{dialectName(value)}</option>)}
         </select>
       </label>
       <label className="field">

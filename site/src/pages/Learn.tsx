@@ -14,7 +14,7 @@ import type {AppData, SearchRecord} from "../types";
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
 export function Learn({data}: {data: AppData}) {
-  const {languageName, number, t, tx} = useI18n();
+  const {dialectName, languageName, number, t, tx} = useI18n();
   const [params] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const requestedLanguage = params.get("language");
@@ -72,7 +72,7 @@ export function Learn({data}: {data: AppData}) {
             <label className="field">
               {tx("Dialect context", "方言脈絡")}
               <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
-                {language.dialects.map((value) => <option key={value}>{value}</option>)}
+                {language.dialects.map((value) => <option key={value} value={value}>{dialectName(value)}</option>)}
               </select>
             </label>
           </div>
