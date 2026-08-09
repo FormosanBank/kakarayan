@@ -297,6 +297,10 @@
   color: #c8c8c8;
 }
 
+.api-choice__primary h2 {
+  color: white;
+}
+
 .api-choice h2 {
   font-size: 22px;
 }

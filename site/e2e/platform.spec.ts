@@ -154,6 +154,8 @@ test("language and corpus catalogue entries have stable detail routes", async ({
 
 test("developer documentation links all maintained client libraries", async ({page}) => {
   await page.goto("#/developers");
+  const staticApiHeading = page.getByRole("heading", {name: "Static API v1"});
+  await expect(staticApiHeading).toHaveCSS("color", "rgb(255, 255, 255)");
   await page.getByRole("button", {name: "Run request"}).click();
   await expect(page.locator(".api-explorer__response")).toContainText("fb-");
   await expect(page.locator(".api-explorer__response")).toContainText('"api_version": "v1"');
