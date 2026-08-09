@@ -105,7 +105,7 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
   await expect(main.locator(".home-tools__grid > a")).toHaveCount(8);
   const wovenBand = page.locator(".topbar > .woven-band");
   await expect(wovenBand).toHaveCount(1);
-  await expect(wovenBand).toHaveCSS("height", "10px");
+  await expect(wovenBand).toHaveCSS("height", "20px");
   const geometry = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
