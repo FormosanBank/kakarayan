@@ -4,8 +4,8 @@
   "description": "Explore, study, and download public FormosanBank language resources.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#f4efe4",
-  "theme_color": "#153f46",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
   "lang": "en",
   "icons": [
     {

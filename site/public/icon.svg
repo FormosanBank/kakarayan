@@ -1,8 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title id="title">Kakarayan</title>
-  <rect width="512" height="512" rx="104" fill="#173f46"/>
-  <circle cx="256" cy="256" r="176" fill="none" stroke="#f4efe4" stroke-width="18"/>
-  <circle cx="256" cy="256" r="142" fill="none" stroke="#d6a83e" stroke-width="8" stroke-dasharray="28 18"/>
-  <path d="M164 132v248h49V274l96 106h66L258 252l108-120h-63l-90 103V132z" fill="#fcfaf5"/>
-  <circle cx="374" cy="138" r="22" fill="#c95e48"/>
+  <circle cx="256" cy="256" r="208" fill="#000"/>
+  <path d="M171 133h52v99l87-99h68L270 253l118 126h-70l-95-104v104h-52z" fill="#fff"/>
 </svg>
