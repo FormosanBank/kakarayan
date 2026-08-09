@@ -24,6 +24,7 @@ const routes = [
   ["#/lookup", /Dictionary and sentences/],
   ["#/learn", /Learn from corpus examples/],
   ["#/research", /Research tools/],
+  ["#/guide", /FormosanBank guide/],
   ["#/explore", /Languages and corpora/],
   ["#/downloads", /Download public data/],
   ["#/developers", /Build with FormosanBank/],
@@ -92,7 +93,7 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
   );
   await expect(main.locator(".corpus-signal")).toHaveCount(0);
   await expect(main.locator(".home-stat")).toHaveCount(5);
-  await expect(main.locator(".home-tools__grid > a")).toHaveCount(7);
+  await expect(main.locator(".home-tools__grid > a")).toHaveCount(8);
   const geometry = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
@@ -133,6 +134,26 @@ test("catalogue filters names, source paths, and linked languages", async ({page
   await expect(page.locator(".catalog-result-count")).toContainText(/\d+ corpora/);
 });
 
+test("the guide provides curated bilingual GitBook browsing with a local fallback", async ({
+  page,
+}) => {
+  await page.goto("#/guide");
+  await expect(page.getByRole("heading", {level: 1, name: "FormosanBank guide"})).toBeVisible();
+  await expect(page.getByRole("button", {name: "Overview"})).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", {name: "XML format"}).click();
+  await expect(page).toHaveURL(/#\/guide\?topic=xml$/);
+  await expect(page.locator(".guide-browser__bar").getByRole("link", {name: "Open separately ↗"}))
+    .toHaveAttribute("href", /the-bank-architecture\/formosanbank-xml-format$/);
+  await expect(page.getByRole("heading", {name: "Embedded reader available on the public site"}))
+    .toBeVisible();
+
+  await page.getByRole("button", {name: "Traditional Chinese"}).click();
+  await expect(page.getByRole("heading", {level: 1, name: "FormosanBank 使用指南"})).toBeVisible();
+  await expect(page.locator(".guide-browser__bar").getByRole("link", {name: "另開頁面 ↗"}))
+    .toHaveAttribute("href", /the-bank-architecture\/formosanbank-xml-format$/);
+  await expect(page.locator(".guide-browser__language")).toHaveText("EN");
+});
+
 test("legacy lookup routes open the matching mode on the unified page", async ({page}) => {
   await page.goto("#/dictionary");
   await expect(page.getByRole("button", {name: "Dictionary lookup"})).toHaveAttribute(
@@ -170,6 +191,10 @@ test("language and corpus catalogue entries have stable detail routes", async ({
   await expect(page.getByRole("heading", {level: 1, name: corpus.name})).toBeVisible();
   await expect(page.getByRole("combobox", {name: "Search language"})).toBeVisible();
   await expect(page.getByRole("link", {name: "Search sentences"})).toHaveCount(1);
+  await expect(page.getByRole("link", {name: "Read corpus guide"})).toHaveAttribute(
+    "href",
+    new RegExp(`#\\/guide\\?corpus=${corpus.id}$`),
+  );
   await expect(page.getByRole("link", {name: "Pinned public source"})).toHaveAttribute(
     "href",
     /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\//,

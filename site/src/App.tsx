@@ -9,6 +9,7 @@ import {CorpusDetail, LanguageDetail} from "./pages/CatalogueDetail";
 import {Developers} from "./pages/Developers";
 import {Downloads} from "./pages/Downloads";
 import {Explore} from "./pages/Explore";
+import {Guide} from "./pages/Guide";
 import {Home} from "./pages/Home";
 import {Learn} from "./pages/Learn";
 import {Lookup} from "./pages/Lookup";
@@ -118,6 +119,7 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       "/sentences": tx("Dictionary and sentences", "單詞釋義與語境例句"),
       "/search": tx("Dictionary and sentences", "單詞釋義與語境例句"),
       "/research": tx("Research tools", "研究工具"),
+      "/guide": tx("FormosanBank guide", "FormosanBank 使用指南"),
       "/downloads": t("download.title"),
       "/developers": t("developers.title"),
       "/models": t("models.title"),
@@ -132,6 +134,11 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
         )
       : path === "/learn"
         ? t("learn.lede")
+        : path === "/guide"
+          ? tx(
+              "Browse FormosanBank corpus, format, rights, and developer documentation.",
+              "瀏覽 FormosanBank 語料、格式、權利與開發者文件。",
+            )
         : path === "/downloads"
           ? t("download.lede")
           : t("home.lede");
@@ -182,6 +189,8 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
         return <Lookup data={data} initialKind="sentences" />;
       case "/research":
         return <Research data={data} />;
+      case "/guide":
+        return <Guide data={data} />;
       case "/downloads":
         return <Downloads data={data} />;
       case "/developers":

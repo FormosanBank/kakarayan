@@ -2,6 +2,7 @@ import {useState} from "react";
 
 import {PageIntro, StatusBadge} from "../components/Layout";
 import {useI18n} from "../i18n";
+import {GITBOOK_CORPUS_PAGES} from "../gitbook";
 import {Link} from "../routing";
 import type {AppData, Corpus, Counts, Language} from "../types";
 
@@ -177,6 +178,11 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         <Link className="button button--quiet" to={`/downloads?corpus=${corpus.id}`}>
           {tx("Filter prepared data", "篩選預備資料")}
         </Link>
+        {GITBOOK_CORPUS_PAGES[corpus.id] && (
+          <Link className="button button--quiet" to={`/guide?corpus=${corpus.id}`}>
+            {tx("Read corpus guide", "閱讀語料庫指南")}
+          </Link>
+        )}
         <a
           className="button button--quiet"
           href={`https://github.com/FormosanBank/FormosanBank/tree/${data.meta.source.commit}/${corpus.source_path}`}
