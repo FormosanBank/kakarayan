@@ -2,11 +2,20 @@ import AxeBuilder from "@axe-core/playwright";
 import {expect, test, type Page} from "@playwright/test";
 import {readFile} from "node:fs/promises";
 
+import {GITBOOK_CORPUS_PAGES} from "../src/gitbook";
+
 interface StaticEnvelope<T> {
   data: T;
 }
 
 interface CorpusSummary {
+  id: string;
+  name: string;
+  source_path: string;
+  languages: string[];
+}
+
+interface LanguageSummary {
   id: string;
   name: string;
 }
@@ -134,6 +143,13 @@ test("navigation remains compact at tablet widths", async ({page}, testInfo) => 
 });
 
 test("catalogue filters names, source paths, and linked languages", async ({page}) => {
+  const corpora = await staticApiData<CorpusSummary[]>(page, "corpora");
+  const languages = await staticApiData<LanguageSummary[]>(page, "languages");
+  const corpus = corpora[0];
+  if (!corpus) throw new Error("The static API returned no corpora");
+  const language = languages.find((item) => corpus.languages.includes(item.id));
+  if (!language) throw new Error("The first corpus has no linked display language");
+
   await page.goto("#/explore");
   const filter = page.getByPlaceholder("Filter languages…");
   await filter.fill("no-match-value");
@@ -142,9 +158,12 @@ test("catalogue filters names, source paths, and linked languages", async ({page
 
   await page.getByRole("button", {name: /Corpora/}).click();
   const corpusFilter = page.getByPlaceholder("Filter corpora…");
-  await corpusFilter.fill("Truku");
-  await expect(page.locator(".corpus-list > article")).not.toHaveCount(0);
-  await expect(page.locator(".catalog-result-count")).toContainText(/\d+ corpora/);
+  for (const query of [corpus.name, corpus.source_path, language.name]) {
+    await corpusFilter.fill(query);
+    await expect(page.locator(".corpus-list").getByRole("heading", {name: corpus.name}))
+      .toBeVisible();
+    await expect(page.locator(".catalog-result-count")).toContainText(/\d+ corpora/);
+  }
 });
 
 test("the guide provides curated bilingual GitBook browsing with a local fallback", async ({
@@ -204,10 +223,15 @@ test("language and corpus catalogue entries have stable detail routes", async ({
   await expect(page.getByRole("heading", {level: 1, name: corpus.name})).toBeVisible();
   await expect(page.getByRole("combobox", {name: "Search language"})).toBeVisible();
   await expect(page.getByRole("link", {name: "Search sentences"})).toHaveCount(1);
-  await expect(page.getByRole("link", {name: "Read corpus guide"})).toHaveAttribute(
-    "href",
-    new RegExp(`#\\/guide\\?corpus=${corpus.id}$`),
-  );
+  const guideLink = page.getByRole("link", {name: "Read corpus guide"});
+  if (GITBOOK_CORPUS_PAGES[corpus.id]) {
+    await expect(guideLink).toHaveAttribute(
+      "href",
+      new RegExp(`#\\/guide\\?corpus=${corpus.id}$`),
+    );
+  } else {
+    await expect(guideLink).toHaveCount(0);
+  }
   await expect(page.getByRole("link", {name: "Pinned public source"})).toHaveAttribute(
     "href",
     /FormosanBank\/tree\/[0-9a-f]{40}\/Corpora\//,
