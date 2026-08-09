@@ -72,15 +72,31 @@
   align-items: center;
 }
 
-.locale-picker select {
-  min-height: 36px;
-  padding: 7px 30px 7px 13px;
+.locale-switch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--hairline-strong);
   border-radius: 9999px;
-  color: var(--ink);
   background: var(--canvas);
+}
+
+.locale-switch button {
+  min-width: 42px;
+  min-height: 30px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 9999px;
+  color: var(--body);
+  background: transparent;
+  cursor: pointer;
   font-size: 13px;
   font-weight: 500;
+}
+
+.locale-switch button[aria-pressed="true"] {
+  color: var(--ink);
+  background: var(--surface-soft);
 }
 
 .topbar-github {

@@ -53,7 +53,7 @@ export function Learn({data}: {data: AppData}) {
     ["lookup", tx("Lookup", "查詢")],
     ["deck", t("learn.deck")],
     ["practice", t("learn.practice")],
-    ["translation", t("learn.translate")],
+    ["translation", tx("Translation", "機器翻譯")],
     ["orthography", t("learn.orthography")],
     ["lessons", tx("Notes", "筆記")],
   ];

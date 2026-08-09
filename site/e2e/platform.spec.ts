@@ -92,7 +92,7 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
   );
   await expect(main.locator(".corpus-signal")).toHaveCount(0);
   await expect(main.locator(".home-stat")).toHaveCount(5);
-  await expect(main.locator(".home-tools__grid > a")).toHaveCount(5);
+  await expect(main.locator(".home-tools__grid > a")).toHaveCount(7);
   const geometry = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
@@ -415,7 +415,7 @@ test("model catalogue keeps repeated caveats inside per-model details", async ({
 
 test("Traditional Chinese navigation updates content and document language", async ({page}) => {
   await page.goto("");
-  await page.getByLabel("Interface language").selectOption("zh-Hant");
+  await page.getByRole("button", {name: "Traditional Chinese"}).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hant");
   await expect(page.getByRole("heading", {level: 1})).toContainText(
     "FormosanBank，開箱即用",
@@ -471,7 +471,9 @@ test("primary navigation and research tabs are keyboard operable", async ({
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", {name: "Kakarayan home"})).toBeFocused();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("combobox", {name: "Interface language"})).toBeFocused();
+    await expect(page.getByRole("button", {name: "English"})).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", {name: "Traditional Chinese"})).toBeFocused();
     await page.keyboard.press("Tab");
     const menu = page.locator(".mobile-menu > summary");
     await expect(menu).toBeFocused();

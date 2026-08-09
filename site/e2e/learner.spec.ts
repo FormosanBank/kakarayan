@@ -182,7 +182,7 @@ test("learner tools share the full workspace width", async ({page}, testInfo) =>
     [/Lookup/, "#lookup-results"],
     [/Study deck/, ".study-deck"],
     [/Pronunciation/, ".model-tool"],
-    [/Machine translation/, ".model-tool"],
+    [/Translation/, ".model-tool"],
     [/Orthography/, ".model-tool"],
     [/Notes/, ".reviewed-content, .empty-state"],
   ] as const;

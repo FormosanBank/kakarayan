@@ -13,6 +13,11 @@ const navigation = [
   ["/developers", "nav.developers"],
 ] as const;
 
+const resourceNavigation = [
+  ["/explore", "nav.explore"],
+  ["/models", "nav.models"],
+] as const;
+
 export function Layout({data, children}: {data: AppData; children: ReactNode}) {
   const {locale, setLocale, t, tx} = useI18n();
   return (
@@ -32,16 +37,28 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             ))}
           </nav>
           <div className="topbar-tools">
-            <label className="locale-picker">
-              <span className="sr-only">{tx("Interface language", "介面語言")}</span>
-              <select
-                value={locale}
-                onChange={(event) => setLocale(event.target.value as "en" | "zh-Hant")}
+            <div
+              className="locale-switch"
+              role="group"
+              aria-label={tx("Interface language", "介面語言")}
+            >
+              <button
+                type="button"
+                aria-label={tx("English", "英文")}
+                aria-pressed={locale === "en"}
+                onClick={() => setLocale("en")}
               >
-                <option value="en">EN</option>
-                <option value="zh-Hant">繁中</option>
-              </select>
-            </label>
+                EN
+              </button>
+              <button
+                type="button"
+                aria-label={tx("Traditional Chinese", "繁體中文")}
+                aria-pressed={locale === "zh-Hant"}
+                onClick={() => setLocale("zh-Hant")}
+              >
+                繁中
+              </button>
+            </div>
             <a className="button button--primary topbar-github" href="https://github.com/FormosanBank/FormosanBank">
               GitHub
             </a>
@@ -53,6 +70,9 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             </summary>
             <nav aria-label={tx("Primary", "主要導覽")}>
               {navigation.map(([to, key]) => (
+                <NavLink key={to} to={to}>{t(key)}</NavLink>
+              ))}
+              {resourceNavigation.map(([to, key]) => (
                 <NavLink key={to} to={to}>{t(key)}</NavLink>
               ))}
               <NavLink to="/about">{t("nav.about")}</NavLink>
@@ -70,6 +90,10 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             <span className="release-pill">{data.meta.release_id}</span>
           </div>
           <nav aria-label={tx("Footer", "頁尾")}>
+            <NavLink to="/explore">{t("nav.explore")}</NavLink>
+            <NavLink to="/models">{t("nav.models")}</NavLink>
+            <NavLink to="/downloads">{t("nav.download")}</NavLink>
+            <NavLink to="/developers">{t("nav.developers")}</NavLink>
             <NavLink to="/about">{t("nav.about")}</NavLink>
             <a href="https://github.com/FormosanBank/kakarayan">GitHub</a>
             <a href={`https://github.com/FormosanBank/FormosanBank/commit/${data.meta.source.commit}`}>

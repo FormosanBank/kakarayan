@@ -4,7 +4,7 @@
   }
 
   .learner-scope__coverage {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .catalog-grid,
@@ -103,10 +103,6 @@
   .mobile-menu nav a[aria-current="page"] {
     background: var(--surface);
     font-weight: 600;
-  }
-
-  .locale-picker select {
-    max-width: 72px;
   }
 
   .page-wrap,
@@ -343,7 +339,25 @@
   }
 
   .studio-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
     border-radius: 12px;
+  }
+
+  .studio-tabs button {
+    min-width: 0;
+    padding: 9px 8px;
+    line-height: 1.2;
+    white-space: normal;
+  }
+
+  .learner-scope__coverage {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .learner-scope__coverage > div:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 
   .tool-heading {
