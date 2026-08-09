@@ -418,16 +418,41 @@ export function DatasetBuilder({data}: {data: AppData}) {
               ))}
             </fieldset>
           </div>}
-          <h2 className="builder__section-title">
-            {tx("Choose the columns and file", "選擇欄位與檔案")}
-          </h2>
-          <div className="builder__field-actions">
-            <button className="text-button" onClick={() => setFields(ESSENTIAL_DATASET_FIELDS)}>{tx("Essential", "基本欄位")}</button>
-            <button className="text-button" onClick={() => setFields([...DATASET_FIELDS])}>{tx("Select all", "全選")}</button>
-            <button className="text-button" onClick={() => setFields([])}>{tx("Clear", "清除")}</button>
+          <div className="builder__field-heading">
+            <h2>{tx("Columns", "欄位")}</h2>
+            <div
+              className="builder__field-actions"
+              role="group"
+              aria-label={tx("Column presets", "欄位預設")}
+            >
+              <button
+                className="text-button"
+                aria-pressed={
+                  fields.length === ESSENTIAL_DATASET_FIELDS.length &&
+                  fields.every((field) => ESSENTIAL_DATASET_FIELDS.includes(field))
+                }
+                onClick={() => setFields(ESSENTIAL_DATASET_FIELDS)}
+              >
+                {tx("Essential", "基本欄位")}
+              </button>
+              <button
+                className="text-button"
+                aria-pressed={fields.length === DATASET_FIELDS.length}
+                onClick={() => setFields([...DATASET_FIELDS])}
+              >
+                {tx("Select all", "全選")}
+              </button>
+              <button
+                className="text-button"
+                aria-pressed={fields.length === 0}
+                onClick={() => setFields([])}
+              >
+                {tx("Clear", "清除")}
+              </button>
+            </div>
           </div>
-          <fieldset className="field-checks">
-            <legend>{tx("Included fields", "包含欄位")}</legend>
+          <fieldset className="dataset-fields">
+            <legend className="sr-only">{tx("Included fields", "包含欄位")}</legend>
             {DATASET_FIELD_INFO.map(([field, description]) => (
               <label key={field}>
                 <input
@@ -445,6 +470,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               </label>
             ))}
           </fieldset>
+          <h2 className="builder__file-title">{tx("File", "檔案")}</h2>
           <div className="form-grid">
             <label className="field">
               {tx("Output row cap", "輸出列數上限")}

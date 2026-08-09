@@ -291,6 +291,14 @@ test("dataset recipes and worker summaries are available without a backend", asy
   await page.goto("#/research");
   await page.getByRole("tab", {name: "Dataset builder"}).click();
   await selectSmallAmisScope(page, "MontgomeryTexts");
+  const datasetFields = page.locator(".dataset-fields");
+  await expect(datasetFields.getByRole("checkbox")).toHaveCount(13);
+  await page.getByRole("button", {name: "Select all"}).click();
+  await expect(datasetFields.getByRole("checkbox", {checked: true})).toHaveCount(13);
+  await page.getByRole("button", {name: "Clear"}).click();
+  await expect(datasetFields.getByRole("checkbox", {checked: true})).toHaveCount(0);
+  await page.getByRole("button", {name: "Essential"}).click();
+  await expect(page.getByRole("button", {name: "Essential"})).toHaveAttribute("aria-pressed", "true");
   await page.getByLabel("Record unit").selectOption("word");
   await page.getByRole("button", {name: "Refresh preview"}).click();
   await expect(

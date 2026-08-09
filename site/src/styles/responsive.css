@@ -323,8 +323,14 @@
 
   .builder__scope-options,
   .builder__filters,
-  .builder__schema dl {
+  .builder__schema dl,
+  .dataset-fields {
     grid-template-columns: 1fr;
+  }
+
+  .builder__field-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .builder__estimate {
