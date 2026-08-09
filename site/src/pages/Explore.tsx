@@ -6,7 +6,7 @@ import {Link} from "../routing";
 import type {AppData} from "../types";
 
 export function Explore({data}: {data: AppData}) {
-  const {locale, number, t, tx} = useI18n();
+  const {languageName, locale, number, t, tx} = useI18n();
   const [view, setView] = useState<"languages" | "corpora">("languages");
   const [filter, setFilter] = useState("");
   const rights = useMemo(
@@ -14,6 +14,12 @@ export function Explore({data}: {data: AppData}) {
     [data.rights.entries],
   );
   const needle = filter.trim().toLocaleLowerCase();
+  const capabilityLabels: Record<string, string> = {
+    corpus: tx("corpus", "語料"),
+    dictionary: tx("dictionary", "詞典"),
+    examples: tx("examples", "例句"),
+    audio: tx("audio", "音訊"),
+  };
   return (
     <div className="page-wrap">
       <PageIntro title={t("explore.title")} />
@@ -69,7 +75,7 @@ export function Explore({data}: {data: AppData}) {
                 </p>
                 <div className="capabilities">
                   {language.capabilities.map((capability) => (
-                    <span key={capability}>{capability}</span>
+                    <span key={capability}>{capabilityLabels[capability] ?? capability}</span>
                   ))}
                 </div>
                 <dl className="mini-stats">
@@ -102,7 +108,10 @@ export function Explore({data}: {data: AppData}) {
                     <h2>{corpus.name}</h2>
                     <p>
                       {corpus.languages
-                        .map((id) => data.languages.find((language) => language.id === id)?.name)
+                        .map((id) => {
+                          const language = data.languages.find((item) => item.id === id);
+                          return language ? languageName(language) : undefined;
+                        })
                         .filter(Boolean)
                         .join(" · ")}
                     </p>

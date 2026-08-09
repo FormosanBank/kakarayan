@@ -68,7 +68,7 @@ export function SearchTool({
   onLanguageChange?: (languageId: string) => void;
   onPractice?: (record: SearchRecord, targetLanguage: string) => void;
 }) {
-  const {locale, number, t, tx} = useI18n();
+  const {languageName, locale, number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const initialLanguage =
@@ -320,7 +320,7 @@ export function SearchTool({
             {([
               {
                 value: "formosan" as const,
-                label: selectedLanguage?.name ?? tx("Formosan", "臺灣南島語"),
+                label: selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語"),
                 detail: tx("Formosan text", "臺灣南島語文本"),
               },
               {
@@ -355,8 +355,8 @@ export function SearchTool({
           <label htmlFor={`query-${kind}-${learner ? "learn" : "research"}`}>
             {direction === "formosan"
               ? kind === "dictionary"
-                ? tx(`Word in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage?.name ?? "臺灣南島語"}單詞`)
-                : tx(`Word or phrase in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage?.name ?? "臺灣南島語"}單詞或片語`)
+                ? tx(`Word in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage ? languageName(selectedLanguage) : "臺灣南島語"}單詞`)
+                : tx(`Word or phrase in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage ? languageName(selectedLanguage) : "臺灣南島語"}單詞或片語`)
               : kind === "dictionary"
                 ? tx(`Meaning in ${targetLanguageLabel}`, `${targetLanguageLabel}釋義`)
                 : tx(`Word or phrase in ${targetLanguageLabel}`, `${targetLanguageLabel}單詞或片語`)}
@@ -385,7 +385,7 @@ export function SearchTool({
             }}
           >
             {data.languages.map((language) => (
-              <option key={language.id} value={language.id}>{language.name}</option>
+              <option key={language.id} value={language.id}>{languageName(language)}</option>
             ))}
           </select>
         </div>

@@ -462,6 +462,24 @@
   margin-bottom: 8px;
 }
 
+.source-policy {
+  margin-top: 20px;
+}
+
+.source-policy summary {
+  width: fit-content;
+  color: var(--body);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.source-policy p {
+  padding-top: 12px;
+  color: var(--body);
+  font-size: 14px;
+}
+
 .client-section {
   padding: 40px 0;
   border-top: 1px solid var(--line);

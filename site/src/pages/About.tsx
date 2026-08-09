@@ -49,14 +49,23 @@ export function About({data}: {data: AppData}) {
           </a>
           {tx(". Corpus materials keep their FormosanBank, source, and community terms.", "。語料保留其 FormosanBank、來源與社群條款。")}
         </p>
-        <p>{data.rights.central_terms.use_summary}</p>
-        <ul>
-          {data.rights.central_terms.evidence.map((url) => (
-            <li key={url}>
-              <a href={url}>{url.split("/").pop()}</a>
-            </li>
-          ))}
-        </ul>
+        <p>
+          {tx(
+            "Public FormosanBank resources may be reused for noncommercial research, education, documentation, cultural work, and revitalization. Preserve each corpus citation and source terms.",
+            "公開 FormosanBank 資源可用於非商業研究、教育、語言記錄、文化工作與復振。請保留各語料庫的引用與來源條款。",
+          )}
+        </p>
+        <details className="source-policy">
+          <summary>{tx("Source policy and evidence", "來源政策與證據")}</summary>
+          <p lang="en">{data.rights.central_terms.use_summary}</p>
+          <ul>
+            {data.rights.central_terms.evidence.map((url) => (
+              <li key={url}>
+                <a href={url}>{url.split("/").pop()}</a>
+              </li>
+            ))}
+          </ul>
+        </details>
       </section>
       <section>
         <h2>{tx("Contributors and attribution", "貢獻者與署名")}</h2>

@@ -4,6 +4,7 @@ import {transcribe, type ServiceStage} from "../modelServices";
 import {useI18n} from "../i18n";
 import {wordError} from "../recorderMetrics";
 import type {ModelCatalog} from "../types";
+import {StatusBadge} from "./Layout";
 
 const ASR_LANGUAGES = [
   "Amis",
@@ -283,9 +284,7 @@ export function Recorder({
         <div className="asr-panel">
           <div className="tool-heading">
             <h4>{tx("Automatic transcript", "自動轉錄")}</h4>
-            <span className={`status status--${service?.status ?? "unavailable"}`}>
-              {service?.status ?? "unavailable"}
-            </span>
+            <StatusBadge value={service?.status ?? "unavailable"} />
           </div>
           <label className="field">
             {tx("Model language", "模型語言")}

@@ -143,7 +143,7 @@ export function SearchResultCard({
   onNotice: (notice: string) => void;
   onPractice?: (record: SearchRecord) => void;
 }) {
-  const {locale, number, t, tx} = useI18n();
+  const {languageName, locale, number, t, tx} = useI18n();
   const language = data.languages.find((item) => item.id === record.language_id);
   const corpus = data.corpora.find((item) => item.id === record.corpus_id);
   const stablePath = `/lookup?type=sentences&q=${encodeURIComponent(query)}&language=${encodeURIComponent(
@@ -164,7 +164,7 @@ export function SearchResultCard({
   return (
     <article className="result-card" id={`record-${record.id}`}>
       <div className="result-card__scope">
-        <span>{language?.name}</span>
+        <span>{language ? languageName(language) : record.language_id}</span>
         {record.dialect && <span>{record.dialect}</span>}
         <span>{corpus?.name}</span>
       </div>

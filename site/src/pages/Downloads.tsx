@@ -36,20 +36,6 @@ interface DownloadsEnvelope {
 }
 
 const PAGE_SIZE = 24;
-const FORMAT_NAMES: Record<string, string> = {
-  aligned: "time-aligned media",
-  cldf: "CLDF dataset",
-  csv: "CSV tables",
-  jsonl: "JSON Lines",
-  metadata: "metadata package",
-  parquet: "Parquet tables",
-  sqlite: "SQLite database",
-  text: "plain-text exports",
-  tsv: "TSV tables",
-  xlsx: "Excel workbook",
-  xml: "canonical XML",
-};
-
 function size(bytes: number): string {
   const units = ["B", "KiB", "MiB", "GiB"];
   let value = bytes;
@@ -65,22 +51,8 @@ function fileName(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
-function artifactTitle(artifact: Artifact, corpusName?: string): string {
-  const formatName = FORMAT_NAMES[artifact.format] ?? artifact.format.toUpperCase();
-  if (artifact.corpus_ids.length === 1 && corpusName) return `${corpusName} ${formatName}`;
-  if (artifact.path === "formosanbank.sqlite.gz") return "Complete FormosanBank SQLite database";
-  return `Complete FormosanBank ${formatName}`;
-}
-
-function artifactScope(artifact: Artifact, corpusName?: string, languageName?: string): string {
-  if (artifact.corpus_ids.length === 1 && corpusName) {
-    return languageName ? `${languageName} · ${corpusName}` : corpusName;
-  }
-  return `${artifact.language_ids.length} languages · ${artifact.corpus_ids.length} corpora`;
-}
-
 export function Downloads({data}: {data: AppData}) {
-  const {t, tx} = useI18n();
+  const {languageName, number, t, tx} = useI18n();
   const [params] = useSearchParams();
   const [manifest, setManifest] = useState<DownloadsCatalog | null>(null);
   const [error, setError] = useState("");
@@ -145,6 +117,48 @@ export function Downloads({data}: {data: AppData}) {
   const visibleArtifacts = artifacts.slice(0, visibleCount);
   const unavailableCount = artifacts.filter((artifact) => !artifact.publishable).length;
   const hasActiveFilters = [format, languageId, corpusId, tier].some((value) => value !== "all");
+  const formatNames: Record<string, string> = {
+    aligned: tx("time-aligned media", "時間對齊媒體"),
+    cldf: tx("CLDF dataset", "CLDF 資料集"),
+    csv: tx("CSV tables", "CSV 表格"),
+    jsonl: tx("JSON Lines", "JSON Lines"),
+    metadata: tx("metadata package", "詮釋資料套件"),
+    parquet: tx("Parquet tables", "Parquet 表格"),
+    sqlite: tx("SQLite database", "SQLite 資料庫"),
+    text: tx("plain-text exports", "純文字匯出"),
+    tsv: tx("TSV tables", "TSV 表格"),
+    xlsx: tx("Excel workbook", "Excel 活頁簿"),
+    xml: tx("canonical XML", "權威 XML"),
+  };
+  const tierNames: Record<string, string> = {
+    text: tx("text", "文本"),
+    sentence: tx("sentence", "句子"),
+    word: tx("word", "詞"),
+    morpheme: tx("morpheme", "語素"),
+    form: tx("form", "形式"),
+    phonology: tx("phonology", "音韻"),
+    translation: tx("translation", "翻譯"),
+    audio: tx("audio", "音訊"),
+    token: tx("token", "詞元"),
+  };
+
+  function localizedArtifactTitle(artifact: Artifact, corpusName?: string): string {
+    const formatName = formatNames[artifact.format] ?? artifact.format.toUpperCase();
+    if (artifact.corpus_ids.length === 1 && corpusName) {
+      return tx(`${corpusName} ${formatName}`, `${corpusName}：${formatName}`);
+    }
+    return tx(`Complete FormosanBank ${formatName}`, `完整 FormosanBank ${formatName}`);
+  }
+
+  function localizedArtifactScope(artifact: Artifact, corpusName?: string, localLanguageName?: string): string {
+    if (artifact.corpus_ids.length === 1 && corpusName) {
+      return localLanguageName ? `${localLanguageName} · ${corpusName}` : corpusName;
+    }
+    return tx(
+      `${number(artifact.language_ids.length)} languages · ${number(artifact.corpus_ids.length)} corpora`,
+      `${number(artifact.language_ids.length)} 種語言 · ${number(artifact.corpus_ids.length)} 個語料庫`,
+    );
+  }
 
   function clearFilters() {
     setFormat("all");
@@ -159,10 +173,9 @@ export function Downloads({data}: {data: AppData}) {
       <PageIntro title={t("download.title")} />
       {manifest && unavailableCount > 0 && (
         <p className="callout callout--warning">
-          <strong>{tx("Some packages are not published yet.", "部分套件尚未發布。")}</strong>{" "}
           {tx(
-            "Their metadata remains visible, but download links stay disabled until the release records a reviewed redistribution decision for every included corpus.",
-            "其詮釋資料仍可查看，但在版本記錄所含各語料庫的再散布決定均經審查前，下載連結會維持停用。",
+            "Unavailable packages remain listed without download links until rights review is complete.",
+            "未完成權利審查的套件仍會列出，但不提供下載連結。",
           )}
         </p>
       )}
@@ -172,7 +185,7 @@ export function Downloads({data}: {data: AppData}) {
           <code>{data.meta.source.commit.slice(0, 12)}</code>
         </div>
         <div className="download-results" aria-live="polite">
-          <span><strong>{artifacts.length.toLocaleString()}</strong> {tx("packages", "個套件")}</span>
+          <span><strong>{number(artifacts.length)}</strong> {tx("packages", "個套件")}</span>
           {hasActiveFilters && (
             <button className="text-button" type="button" onClick={clearFilters}>
               {tx("Clear filters", "清除篩選")}
@@ -193,7 +206,7 @@ export function Downloads({data}: {data: AppData}) {
           >
             <option value="all">{tx("All languages", "所有語言")}</option>
             {data.languages.map((language) => (
-              <option key={language.id} value={language.id}>{language.name}</option>
+              <option key={language.id} value={language.id}>{languageName(language)}</option>
             ))}
           </select>
         </label>
@@ -236,7 +249,7 @@ export function Downloads({data}: {data: AppData}) {
           >
             <option value="all">{tx("All formats", "所有格式")}</option>
             {formats.map((value) => (
-              <option key={value} value={value}>{FORMAT_NAMES[value] ?? value}</option>
+              <option key={value} value={value}>{formatNames[value] ?? value}</option>
             ))}
           </select>
         </label>
@@ -263,7 +276,7 @@ export function Downloads({data}: {data: AppData}) {
               <div className="artifact-card__body">
                 <header className="artifact-card__header">
                   <div>
-                    <h2>{artifactTitle(artifact, corpus?.name)}</h2>
+                    <h2>{localizedArtifactTitle(artifact, corpus?.name)}</h2>
                     <code>{fileName(artifact.path)}</code>
                   </div>
                   <div className="artifact-card__status">
@@ -274,10 +287,10 @@ export function Downloads({data}: {data: AppData}) {
                   </div>
                 </header>
                 <p className="artifact-card__scope">
-                  {artifactScope(artifact, corpus?.name, language?.name)}
+                  {localizedArtifactScope(artifact, corpus?.name, language ? languageName(language) : undefined)}
                 </p>
                 <div className="tier-list" aria-label={tx("Included tiers", "所含層級")}>
-                  {artifact.tiers.map((value) => <span key={value}>{value}</span>)}
+                  {artifact.tiers.map((value) => <span key={value}>{tierNames[value] ?? value}</span>)}
                 </div>
                 <div className="artifact-card__actions">
                   {artifact.publishable ? (
@@ -344,7 +357,7 @@ export function Downloads({data}: {data: AppData}) {
           <button className="button" type="button" onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}>
             {tx("Show more packages", "顯示更多套件")}
           </button>
-          <span>{visibleCount.toLocaleString()} {tx("of", "／")} {artifacts.length.toLocaleString()}</span>
+          <span>{number(visibleCount)} {tx("of", "／")} {number(artifacts.length)}</span>
         </div>
       )}
       {!error && manifest && artifacts.length === 0 && (

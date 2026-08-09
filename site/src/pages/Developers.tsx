@@ -110,7 +110,7 @@ languages[, c("id", "name", "iso639_3")]`}</code>
           <table>
             <thead><tr><th>{tx("Field", "欄位")}</th><th>{tx("Meaning", "含義")}</th></tr></thead>
             <tbody>
-              {DATASET_FIELD_INFO.map(([field, description]) => <tr key={field}><th scope="row"><code>{field}</code></th><td>{description}</td></tr>)}
+              {DATASET_FIELD_INFO.map(([field, description, descriptionZh]) => <tr key={field}><th scope="row"><code>{field}</code></th><td>{tx(description, descriptionZh)}</td></tr>)}
             </tbody>
           </table>
         </div>

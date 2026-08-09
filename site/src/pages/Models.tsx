@@ -5,8 +5,8 @@ import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData, ModelEntry} from "../types";
 
-function size(bytes: number | null): string {
-  if (bytes === null) return "not reported";
+function size(bytes: number | null, missing: string): string {
+  if (bytes === null) return missing;
   const units = ["B", "KiB", "MiB", "GiB"];
   let value = bytes;
   let unit = 0;
@@ -17,14 +17,18 @@ function size(bytes: number | null): string {
   return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
 }
 
-function languageNames(model: ModelEntry, data: AppData): string {
+function languageNames(
+  model: ModelEntry,
+  data: AppData,
+  displayName: (language: AppData["languages"][number]) => string,
+): string {
   const repository = model.repository.toLowerCase();
   return model.languages.map((iso) => {
     const matches = data.languages.filter((language) => language.iso639_3 === iso);
-    if (matches.length < 2) return matches[0]?.name ?? iso;
+    if (matches.length < 2) return matches[0] ? displayName(matches[0]) : iso;
     if (repository.includes("taroko")) return "Truku";
     if (repository.includes("seediq")) return "Seediq";
-    return matches.map((language) => language.name).join(" / ");
+    return matches.map(displayName).join(" / ");
   }).join(" · ");
 }
 
@@ -37,7 +41,7 @@ function targetLanguageForModel(model: ModelEntry, data: AppData) {
 }
 
 export function Models({data}: {data: AppData}) {
-  const {number, t, tx} = useI18n();
+  const {languageName, number, t, tx} = useI18n();
   const [task, setTask] = useState<"all" | "translation" | "automatic-speech-recognition">(
     "all",
   );
@@ -56,6 +60,21 @@ export function Models({data}: {data: AppData}) {
   const evaluatedCount = data.models.models.filter((model) => model.evaluation_metrics.length > 0).length;
   const licensedCount = data.models.models.filter((model) => model.license !== "unknown").length;
   const availableServices = data.models.services.filter((service) => service.status === "available").length;
+  const statusLabels: Record<string, string> = {
+    available: tx("available", "可用"),
+    unavailable: tx("unavailable", "不可用"),
+    unchecked: tx("unchecked", "未檢查"),
+    sleeping: tx("sleeping", "休眠中"),
+  };
+
+  function directionLabel(direction: string | null): string | null {
+    if (!direction) return null;
+    return direction.split(" → ").map((part) => {
+      if (part === "Mandarin" || part === "Chinese") return tx(part, "中文");
+      const language = data.languages.find((item) => item.name === part);
+      return language ? languageName(language) : part;
+    }).join(" → ");
+  }
 
   return (
     <div className="page-wrap">
@@ -85,7 +104,7 @@ export function Models({data}: {data: AppData}) {
           {tx("Language coverage", "語言涵蓋")}
           <select value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
             <option value="">{tx("All registered languages", "所有登錄語言")}</option>
-            {data.languages.map((language) => <option key={language.id} value={language.id}>{language.name}</option>)}
+            {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
           </select>
         </label>
         <span>{number(models.length)} {tx("models", "個模型")}</span>
@@ -105,15 +124,15 @@ export function Models({data}: {data: AppData}) {
               </div>
               <h2>{model.repository.split("/")[1]}</h2>
               <p className="model-direction">
-                {model.direction ?? languageNames(model, data)}
+                {directionLabel(model.direction) ?? languageNames(model, data, languageName)}
               </p>
               {model.direction && (
-                <p className="model-languages">{languageNames(model, data)}</p>
+                <p className="model-languages">{languageNames(model, data, languageName)}</p>
               )}
               <dl className="model-summary">
                 <div>
                   <dt>{tx("License", "授權")}</dt>
-                  <dd>{model.license}</dd>
+                  <dd>{model.license === "unknown" ? tx("unknown", "未知") : model.license}</dd>
                 </div>
                 <div>
                   <dt>{tx("Updated", "更新日期")}</dt>
@@ -137,8 +156,8 @@ export function Models({data}: {data: AppData}) {
                   <summary>{tx("Metadata and limitations", "中繼資料與限制")}</summary>
                   <dl className="model-details">
                     <div><dt>{tx("Model family", "模型系列")}</dt><dd>{model.model_family}</dd></div>
-                    <div><dt>{tx("Repository size", "儲存庫大小")}</dt><dd>{size(model.artifact_bytes)}</dd></div>
-                    <div><dt>{tx("Browser service", "瀏覽器服務")}</dt><dd>{service?.status ?? tx("not registered", "未登錄")}</dd></div>
+                    <div><dt>{tx("Repository size", "儲存庫大小")}</dt><dd>{size(model.artifact_bytes, tx("not reported", "未報告"))}</dd></div>
+                    <div><dt>{tx("Browser service", "瀏覽器服務")}</dt><dd>{service ? statusLabels[service.status] ?? service.status : tx("not registered", "未登錄")}</dd></div>
                     <div><dt>{tx("Service checked", "服務檢查時間")}</dt><dd>{service?.checked_at ?? tx("not checked", "未檢查")}</dd></div>
                   </dl>
                   <p><strong>{tx("Intended use:", "預定用途：")}</strong> {model.intended_use}</p>

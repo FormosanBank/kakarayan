@@ -148,6 +148,7 @@ export function StatusBadge({value}: {value: string}) {
     available: tx("available", "可用"),
     unavailable: tx("unavailable", "不可用"),
     unchecked: tx("unchecked", "未檢查"),
+    sleeping: tx("sleeping", "休眠中"),
     review_required: tx("review required", "需要審查"),
     denied: tx("denied", "不允許"),
     unknown: tx("unknown", "未知"),

@@ -73,8 +73,8 @@ export function DatasetPreview({
         </p>
         <dl>
           {DATASET_FIELD_INFO.filter(([field]) => fields.includes(field)).map(
-            ([field, description]) => (
-              <div key={field}><dt><code>{field}</code></dt><dd>{description}</dd></div>
+            ([field, description, descriptionZh]) => (
+              <div key={field}><dt><code>{field}</code></dt><dd>{tx(description, descriptionZh)}</dd></div>
             ),
           )}
         </dl>

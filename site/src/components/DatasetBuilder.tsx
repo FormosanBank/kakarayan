@@ -37,7 +37,14 @@ function size(bytes: number): string {
 }
 
 export function DatasetBuilder({data}: {data: AppData}) {
-  const {number, tx} = useI18n();
+  const {languageName, number, tx} = useI18n();
+  const tierLabels: Record<TierRequirement, string> = {
+    translation: tx("translation", "翻譯"),
+    audio: tx("audio evidence", "音訊證據"),
+    phonology: tx("phonology", "音韻"),
+    interlinear: tx("word or morpheme analysis", "詞或語素分析"),
+    unclear: tx("an unclear annotation", "不確定標註"),
+  };
   const [languageId, setLanguageId] = useState("");
   const [additionalLanguageIds, setAdditionalLanguageIds] = useState<string[]>([]);
   const [corpusId, setCorpusId] = useState("");
@@ -267,7 +274,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                 <option value="">{tx("Choose a display language…", "選擇顯示語言…")}</option>
                 {data.languages.map((language) => (
                   <option value={language.id} key={language.id}>
-                    {language.name}
+                    {languageName(language)}
                   </option>
                 ))}
               </select>
@@ -357,7 +364,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                         setDialects([]);
                       }}
                     />
-                    <span>{language.name}</span>
+                    <span>{languageName(language)}</span>
                   </label>
                 ))}
               </fieldset>
@@ -413,7 +420,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                         : [...current, value]
                     )}
                   />
-                  <span>{tx(label, label)}</span>
+                  <span>{tierLabels[value] ?? label}</span>
                 </label>
               ))}
             </fieldset>
@@ -453,7 +460,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
           </div>
           <fieldset className="dataset-fields">
             <legend className="sr-only">{tx("Included fields", "包含欄位")}</legend>
-            {DATASET_FIELD_INFO.map(([field, description]) => (
+            {DATASET_FIELD_INFO.map(([field, description, descriptionZh]) => (
               <label key={field}>
                 <input
                   type="checkbox"
@@ -466,7 +473,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                     )
                   }
                 />
-                <span><code>{field}</code><small aria-hidden="true">{description}</small></span>
+                <span><code>{field}</code><small>{tx(description, descriptionZh)}</small></span>
               </label>
             ))}
           </fieldset>

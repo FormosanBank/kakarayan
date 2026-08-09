@@ -7,6 +7,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
+import type {Language} from "./types";
 
 export type Locale = "en" | "zh-Hant";
 
@@ -30,7 +31,7 @@ const messages = {
     "home.eyebrow": "PUBLIC FORMOSAN LANGUAGE DATA",
     "home.title": "FormosanBank, ready to use.",
     "home.lede": "Search, study, download, or build.",
-    "explore.title": "Explore the bank",
+    "explore.title": "Languages and corpora",
     "explore.lede": "Browse languages, corpora, counts, source links, and usage terms.",
     "search.title": "Sentence search",
     "search.lede":
@@ -101,7 +102,7 @@ const messages = {
     "home.eyebrow": "公開臺灣南島語資料",
     "home.title": "FormosanBank，開箱即用。",
     "home.lede": "查詢、學習、下載或開發。",
-    "explore.title": "探索語料庫",
+    "explore.title": "語言與語料庫",
     "explore.lede": "瀏覽語言、語料庫、數量、來源連結與使用條款。",
     "search.title": "例句搜尋",
     "search.lede": "尋找包含單詞、片語、翻譯或語言層級的句子。",
@@ -158,6 +159,7 @@ interface I18nContextValue {
   tx: (english: string, traditionalChinese: string) => string;
   number: (value: number) => string;
   date: (value: string | Date) => string;
+  languageName: (language: Pick<Language, "name" | "names">) => string;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -187,6 +189,11 @@ export function I18nProvider({children}: PropsWithChildren) {
       number: (input) => new Intl.NumberFormat(locale).format(input),
       date: (input) =>
         new Intl.DateTimeFormat(locale, {dateStyle: "medium"}).format(new Date(input)),
+      languageName: (language) => {
+        if (locale === "en") return language.name;
+        const local = language.names["zh-Hant"];
+        return local && local !== language.name ? `${local} · ${language.name}` : language.name;
+      },
     }),
     [locale, setLocale],
   );

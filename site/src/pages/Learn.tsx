@@ -14,7 +14,7 @@ import type {AppData, SearchRecord} from "../types";
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
 export function Learn({data}: {data: AppData}) {
-  const {t, tx} = useI18n();
+  const {languageName, number, t, tx} = useI18n();
   const [params] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const requestedLanguage = params.get("language");
@@ -66,7 +66,7 @@ export function Learn({data}: {data: AppData}) {
             <label className="field">
               {tx("Learning language", "學習語言")}
               <select value={language.id} onChange={(event) => changeLanguage(event.target.value)}>
-                {data.languages.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {data.languages.map((item) => <option key={item.id} value={item.id}>{languageName(item)}</option>)}
               </select>
             </label>
             <label className="field">
@@ -77,8 +77,8 @@ export function Learn({data}: {data: AppData}) {
             </label>
           </div>
           <dl className="learner-scope__coverage">
-            <div><dt>{tx("Corpus sentences", "語料句子")}</dt><dd>{(language.counts.sentences ?? 0).toLocaleString()}</dd></div>
-            <div><dt>{tx("Audio references", "音訊參照")}</dt><dd>{(language.counts.audio ?? 0).toLocaleString()}</dd></div>
+            <div><dt>{tx("Corpus sentences", "語料句子")}</dt><dd>{number(language.counts.sentences ?? 0)}</dd></div>
+            <div><dt>{tx("Audio references", "音訊參照")}</dt><dd>{number(language.counts.audio ?? 0)}</dd></div>
             <div><dt>MT</dt><dd>{capability.mt ? tx("model", "模型") : tx("corpus only", "僅語料")}</dd></div>
             <div><dt>ASR</dt><dd>{capability.asr ? tx("model", "模型") : tx("not registered", "未登錄")}</dd></div>
             <div><dt>{tx("Orthography", "正寫法")}</dt><dd>{capability.orthography ? tx("table", "轉換表") : tx("not registered", "未登錄")}</dd></div>

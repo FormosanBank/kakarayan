@@ -60,7 +60,7 @@ function downloadRows(result: AnalysisResult, kind: TableKind, format: "csv" | "
 }
 
 export function Summaries({data}: {data: AppData}) {
-  const {number, tx} = useI18n();
+  const {languageName, number, tx} = useI18n();
   const [languageId, setLanguageId] = useState("");
   const [corpusId, setCorpusId] = useState("");
   const [ngramSize, setNgramSize] = useState(2);
@@ -137,7 +137,7 @@ export function Summaries({data}: {data: AppData}) {
               <option value="">{tx("Choose…", "請選擇…")}</option>
               {data.languages.map((language) => (
                 <option key={language.id} value={language.id}>
-                  {language.name}
+                  {languageName(language)}
                 </option>
               ))}
             </select>

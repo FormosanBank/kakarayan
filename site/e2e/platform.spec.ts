@@ -24,7 +24,7 @@ const routes = [
   ["#/lookup", /Dictionary and sentences/],
   ["#/learn", /Learn from corpus examples/],
   ["#/research", /Research tools/],
-  ["#/explore", /Explore the bank/],
+  ["#/explore", /Languages and corpora/],
   ["#/downloads", /Download public data/],
   ["#/developers", /Build with FormosanBank/],
   ["#/models", /Public language models/],
@@ -421,11 +421,11 @@ test("Traditional Chinese navigation updates content and document language", asy
     "FormosanBank，開箱即用",
   );
   await page.goto("#/explore");
-  await expect(page.getByRole("heading", {level: 1})).toContainText("探索語料庫");
+  await expect(page.getByRole("heading", {level: 1})).toContainText("語言與語料庫");
   await expect(page.getByPlaceholder("篩選語言…")).toBeVisible();
 
   await page.goto("#/lookup?type=sentences");
-  await expect(page.getByLabel("Amis單詞或片語")).toBeVisible();
+  await expect(page.getByLabel("阿美語 · Amis單詞或片語")).toBeVisible();
   await page.goto("#/research");
   await page.getByRole("tab", {name: "資料集產生器"}).click();
   await expect(page.getByRole("heading", {name: "選擇記錄"})).toBeVisible();

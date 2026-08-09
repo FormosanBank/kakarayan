@@ -42,7 +42,7 @@ export function StudyDeck({
   const [filter, setFilter] = useState("");
   const [manualFront, setManualFront] = useState("");
   const [manualBack, setManualBack] = useState("");
-  const [manualDeck, setManualDeck] = useState("My cards");
+  const [manualDeck, setManualDeck] = useState(() => tx("My cards", "我的字卡"));
   const [manualTags, setManualTags] = useState("");
   const [manualDirection, setManualDirection] = useState<StudyCard["direction"]>("recognition");
   const reload = useCallback(() => {

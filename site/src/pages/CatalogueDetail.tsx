@@ -61,7 +61,7 @@ export function LanguageDetail({
   data: AppData;
   language: Language;
 }) {
-  const {number, tx} = useI18n();
+  const {languageName, number, tx} = useI18n();
   const corpora = data.corpora.filter((corpus) => corpus.languages.includes(language.id));
   const identity = [
     language.names["zh-Hant"],
@@ -71,7 +71,7 @@ export function LanguageDetail({
   return (
     <div className="page-wrap">
       <PageIntro
-        title={language.name}
+        title={languageName(language)}
         lede={identity.join(" · ")}
       />
       <div className="detail-actions">
@@ -134,7 +134,7 @@ export function LanguageDetail({
 }
 
 export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
-  const {number, tx} = useI18n();
+  const {languageName, number, tx} = useI18n();
   const rights = data.rights.entries.find((entry) => entry.id === corpus.rights_id);
   const languages = corpus.languages
     .map((id) => data.languages.find((language) => language.id === id))
@@ -161,7 +161,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
               onChange={(event) => setSelectedLanguageId(event.target.value)}
             >
               {languages.map((language) => (
-                <option key={language.id} value={language.id}>{language.name}</option>
+                <option key={language.id} value={language.id}>{languageName(language)}</option>
               ))}
             </select>
           </label>
@@ -189,7 +189,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         <CountsGrid counts={corpus.counts} />
         <p>
           {tx("Display languages:", "顯示語言：")}{" "}
-          {languages.map((language) => language.name).join(", ") || tx("not resolved", "無法判定")}
+          {languages.map(languageName).join(", ") || tx("not resolved", "無法判定")}
           {tx(".", "。")}
         </p>
         <p>
@@ -253,7 +253,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         <dl className="detail-metadata">
           <div>
             <dt>{tx("Review", "審查")}</dt>
-            <dd>{rights?.review_status ?? "review_required"}</dd>
+            <dd><StatusBadge value={rights?.review_status ?? "review_required"} /></dd>
           </div>
           <div>
             <dt>{tx("License expression", "授權表示式")}</dt>
@@ -261,7 +261,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           </div>
           <div>
             <dt>{tx("Commercial use", "商業使用")}</dt>
-            <dd>{rights?.commercial_use ?? tx("unknown", "未知")}</dd>
+            <dd><StatusBadge value={rights?.commercial_use ?? "unknown"} /></dd>
           </div>
         </dl>
         {rights?.evidence.length ? (

@@ -5,6 +5,7 @@ import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import {manualStudyCard, saveCard} from "../study";
 import type {Language, ModelCatalog} from "../types";
+import {StatusBadge} from "./Layout";
 
 const directions: TranslationRequest["direction"][] = [
   "Formosan → English",
@@ -33,7 +34,7 @@ export function TranslationTool({
   selectedDialect: string;
   onLanguageChange: (languageId: string) => void;
 }) {
-  const {number, tx} = useI18n();
+  const {languageName, number, tx} = useI18n();
   const [text, setText] = useState("");
   const [direction, setDirection] =
     useState<TranslationRequest["direction"]>("English → Formosan");
@@ -123,7 +124,7 @@ export function TranslationTool({
       front: sourceIsFormosan ? text : result,
       back: sourceIsFormosan ? result : text,
       languageId: language.id,
-      deck: "Machine translation drafts",
+      deck: tx("Machine translation drafts", "機器翻譯草稿"),
       tags: ["machine-draft", selectedDialect, model?.id ?? ""].filter(Boolean),
     }));
     setStatus(tx("Draft saved to the local deck and labelled as machine output.", "草稿已儲存到本機牌組，並標示為機器輸出。"));
@@ -133,9 +134,7 @@ export function TranslationTool({
     <section className="model-tool" aria-labelledby="translation-heading">
       <div className="tool-heading">
         <h3 id="translation-heading">{tx("Machine translation", "機器翻譯")}</h3>
-        <span className={`status status--${service?.status ?? "unavailable"}`}>
-          {service?.status ?? "unavailable"}
-        </span>
+        <StatusBadge value={service?.status ?? "unavailable"} />
       </div>
       <form onSubmit={submit}>
         <div className="tool-grid">
@@ -163,7 +162,7 @@ export function TranslationTool({
             {tx("Formosan language", "臺灣南島語")}
             <select value={language?.id ?? ""} onChange={(event) => onLanguageChange(event.target.value)}>
               {languages.map((value) => (
-                <option key={value.id} value={value.id}>{value.name}</option>
+                <option key={value.id} value={value.id}>{languageName(value)}</option>
               ))}
             </select>
           </label>
