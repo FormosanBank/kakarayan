@@ -551,6 +551,26 @@ test("primary pages have no serious accessibility violations", async ({page}, te
   }
 });
 
+test("Traditional Chinese pages have no serious accessibility violations", async ({page}, testInfo) => {
+  test.skip(
+    !["desktop-chromium", "mobile-chromium"].includes(testInfo.project.name),
+    "The localized interface is audited at desktop and mobile widths",
+  );
+  await page.goto("");
+  await page.getByRole("button", {name: "Traditional Chinese"}).click();
+  for (const [route] of routes) {
+    await page.goto(route);
+    await expect(page.locator("#main h1")).toBeVisible();
+    const result = await new AxeBuilder({page})
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    const violations = result.violations.filter(
+      (violation) => violation.impact === "critical" || violation.impact === "serious",
+    );
+    expect(violations, `${testInfo.project.name} zh-Hant ${route || "home"}`).toEqual([]);
+  }
+});
+
 test("browser transfer, search latency, and memory stay within release budgets", async ({
   page,
 }, testInfo) => {
