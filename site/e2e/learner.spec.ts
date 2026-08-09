@@ -59,7 +59,7 @@ test("local study data migrates, backs up, restores, and remains private", async
     : "NTUFormosanCorpus";
   expect(corpusLabels).toContain(corpusLabel);
   await corpus.selectOption({label: corpusLabel});
-  await dictionary.getByLabel("Word", {exact: true}).fill("lima");
+  await dictionary.getByLabel("Word in Amis", {exact: true}).fill("lima");
   await dictionary.getByRole("button", {name: "Search"}).click();
   await dictionary.getByRole("button", {name: "Save word"}).click();
   await expect(dictionary.getByText("lima saved.")).toBeVisible();

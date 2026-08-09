@@ -237,6 +237,8 @@ export type SearchMode =
   | "fuzzy"
   | "regex";
 
+export type SearchDirection = "formosan" | "translation";
+
 const edgePunctuation = new Set([
   ..." \t\n\r!\"#$%&()*+,-./:;<=>?@[\\]^_`{|}~…—–“”‘’„‚«»「」『』，。！？、；：（）〈〉《》【】",
 ]);
@@ -293,6 +295,48 @@ function editDistance(left: string, right: string, maximum: number): number {
   return previous[b.length] ?? maximum + 1;
 }
 
+function normalizedTextUnits(value: string): string[] {
+  const normalized = normalizeSearch(value);
+  if (!normalized) return [];
+  const units = normalized
+    .split(/[^\p{L}\p{M}\p{N}'\u2019\u02bc-]+/u)
+    .filter(Boolean);
+  return [...new Set([normalized, ...units])];
+}
+
+function textDistance(value: string, query: string): number {
+  const needle = normalizeSearch(query);
+  const maximum = needle.length <= 4 ? 1 : 2;
+  let best = maximum + 1;
+  for (const unit of normalizedTextUnits(value)) {
+    if (unit.length > 80) continue;
+    best = Math.min(best, editDistance(unit, needle, maximum));
+    if (best === 0) break;
+  }
+  return best;
+}
+
+type RegexMatcher = {test(value: string): boolean};
+
+export function translationTextMatches(
+  value: string,
+  query: string,
+  mode: SearchMode,
+  regex: RegexMatcher | null = null,
+): boolean {
+  const needle = normalizeSearch(query);
+  if (!needle) return false;
+  if (mode === "regex") {
+    if (!regex) throw new Error("A compiled RE2 expression is required");
+    return regex.test(value.normalize("NFC"));
+  }
+  const units = normalizedTextUnits(value);
+  if (mode === "exact") return units.some((unit) => unit === needle);
+  if (mode === "prefix") return units.some((unit) => unit.startsWith(needle));
+  if (mode === "fuzzy") return textDistance(value, query) <= (needle.length <= 4 ? 1 : 2);
+  return normalizeSearch(value).includes(needle);
+}
+
 function fuzzyDistance(record: SearchRecord, query: string): number {
   const needle = normalizeSearch(query);
   const maximum = needle.length <= 4 ? 1 : 2;
@@ -305,31 +349,39 @@ function fuzzyDistance(record: SearchRecord, query: string): number {
   return best;
 }
 
-type RegexMatcher = {test(value: string): boolean};
-
 export function indexCandidateParts(
   index: SearchIndexDocument,
   query: string,
   mode: SearchMode,
   regex: RegexMatcher | null = null,
+  direction: SearchDirection = "formosan",
+  targetTier: "sentence" | "any" = "sentence",
 ): Set<number> {
   const parts = new Set<number>();
   const needle = normalizeSearch(query);
-  let vocabulary: Record<string, number[]>;
+  let vocabularies: Array<Record<string, number[]>>;
   let matches: (term: string) => boolean;
   if (mode === "source") {
-    vocabulary = index.terms.source_exact;
+    vocabularies = [index.terms.source_exact];
     const source = query.normalize("NFC").trim();
     matches = (term) => term === source;
   } else if (mode === "regex") {
     if (!regex) throw new Error("A compiled RE2 expression is required");
-    vocabulary = index.terms.regex;
-    matches = (term) => regex.test(term);
+    vocabularies = direction === "translation"
+      ? [index.terms.translation, ...(targetTier === "any" ? [index.terms.gloss] : [])]
+      : [index.terms.regex];
+    matches = (term) => translationTextMatches(term, query, mode, regex);
   } else if (mode === "translation" || mode === "phonology" || mode === "gloss") {
-    vocabulary = index.terms[mode];
+    vocabularies = [index.terms[mode]];
     matches = (term) => term.includes(needle);
+  } else if (direction === "translation") {
+    vocabularies = [
+      index.terms.translation,
+      ...(targetTier === "any" ? [index.terms.gloss] : []),
+    ];
+    matches = (term) => translationTextMatches(term, query, mode);
   } else {
-    vocabulary = index.terms.source;
+    vocabularies = [index.terms.source];
     if (mode === "exact") matches = (term) => term === needle;
     else if (mode === "prefix") matches = (term) => term.startsWith(needle);
     else if (mode === "contains") matches = (term) => term.includes(needle);
@@ -339,11 +391,40 @@ export function indexCandidateParts(
         term.length <= 80 && editDistance(term, needle, maximum) <= maximum;
     }
   }
-  for (const [term, postings] of Object.entries(vocabulary)) {
-    if (!matches(term)) continue;
-    for (const part of postings) parts.add(part);
+  for (const vocabulary of vocabularies) {
+    for (const [term, postings] of Object.entries(vocabulary)) {
+      if (!matches(term)) continue;
+      for (const part of postings) parts.add(part);
+    }
   }
   return parts;
+}
+
+function scopedTranslations(
+  record: SearchRecord,
+  targetLanguage: string,
+  targetTier: "sentence" | "any",
+) {
+  const translations = targetTier === "any" ? record.tier_translations : record.translations;
+  return targetLanguage
+    ? translations.filter((item) => item.xml_lang === targetLanguage)
+    : translations;
+}
+
+function translationFuzzyDistance(
+  record: SearchRecord,
+  query: string,
+  targetLanguage: string,
+  targetTier: "sentence" | "any",
+): number {
+  const needle = normalizeSearch(query);
+  const maximum = needle.length <= 4 ? 1 : 2;
+  let best = maximum + 1;
+  for (const item of scopedTranslations(record, targetLanguage, targetTier)) {
+    best = Math.min(best, textDistance(item.text, query));
+    if (best === 0) break;
+  }
+  return best;
 }
 
 export function recordMatches(
@@ -352,18 +433,12 @@ export function recordMatches(
   mode: SearchMode,
   targetLanguage = "",
   targetTier: "sentence" | "any" = "sentence",
+  direction: SearchDirection = "formosan",
 ): boolean {
   const needle = normalizeSearch(query);
   if (!needle) return false;
-  const targetTranslations =
-    targetTier === "any" ? record.tier_translations : record.translations;
-  const translations = targetLanguage
-    ? record.translations.filter((item) => item.xml_lang === targetLanguage)
-    : record.translations;
-  if (
-    targetLanguage &&
-    !targetTranslations.some((item) => item.xml_lang === targetLanguage)
-  ) {
+  const translations = scopedTranslations(record, targetLanguage, targetTier);
+  if (targetLanguage && translations.length === 0) {
     return false;
   }
   if (mode === "source") {
@@ -383,6 +458,12 @@ export function recordMatches(
         (normalizeSearch(item.text).includes(needle) ||
           normalizeSearch(item.normalized).includes(needle)),
     );
+  }
+  if (direction === "translation") {
+    if (mode === "regex") {
+      throw new Error("Regular expressions are compiled through RE2 during scoped search");
+    }
+    return translations.some((item) => translationTextMatches(item.text, query, mode));
   }
   if (mode === "fuzzy") return fuzzyDistance(record, query) <= (needle.length <= 4 ? 1 : 2);
   if (mode === "regex") {
@@ -411,6 +492,7 @@ export async function searchRecords(
   targetLanguage = "",
   targetTier: "sentence" | "any" = "sentence",
   recordFilter?: (record: SearchRecord) => boolean,
+  direction: SearchDirection = "formosan",
 ): Promise<SearchResult> {
   if (query.length > (mode === "regex" ? 128 : 256)) {
     throw new Error(`${mode === "regex" ? "Regular expression" : "Query"} is too long`);
@@ -441,7 +523,7 @@ export async function searchRecords(
       const document = await loadIndex(index, signal);
       candidateParts.set(
         `${index.language_id}\0${index.corpus_id}`,
-        indexCandidateParts(document, query, mode, regex),
+        indexCandidateParts(document, query, mode, regex, direction, targetTier),
       );
     }
     selectedShards = shards.filter((shard) =>
@@ -461,22 +543,22 @@ export async function searchRecords(
     for (const record of shardRecords) {
       scanned += 1;
       const matches = regex
-        ? [
-            ...sourceForms(record),
-            ...record.translations
-              .filter((item) => !targetLanguage || item.xml_lang === targetLanguage)
-              .map((item) => item.text),
-            ...record.tier_translations.map((item) => item.text),
-            ...record.phonology.map((item) => item.text),
-          ].some((value) => regex?.test(value.normalize("NFC"))) &&
-          (!targetLanguage ||
-            (targetTier === "any" ? record.tier_translations : record.translations).some(
-              (item) => item.xml_lang === targetLanguage,
-            ))
-        : recordMatches(record, query, mode, targetLanguage, targetTier);
+        ? (direction === "translation"
+            ? scopedTranslations(record, targetLanguage, targetTier).map((item) => item.text)
+            : sourceForms(record)
+          ).some((value) => regex?.test(value.normalize("NFC"))) &&
+          (!targetLanguage || scopedTranslations(record, targetLanguage, targetTier).length > 0)
+        : recordMatches(record, query, mode, targetLanguage, targetTier, direction);
       if (matches && (!recordFilter || recordFilter(record))) {
         matchesCount += 1;
-        if (mode === "fuzzy") fuzzyScores.set(record.id, fuzzyDistance(record, query));
+        if (mode === "fuzzy") {
+          fuzzyScores.set(
+            record.id,
+            direction === "translation"
+              ? translationFuzzyDistance(record, query, targetLanguage, targetTier)
+              : fuzzyDistance(record, query),
+          );
+        }
         if (mode === "fuzzy" || records.length < limit) records.push(record);
         else truncated = true;
       }

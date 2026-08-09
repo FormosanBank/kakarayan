@@ -50,11 +50,49 @@ def _edit_distance(left: str, right: str, maximum: int) -> int:
     return previous[-1]
 
 
+def _text_units(value: str) -> list[str]:
+    normalized = regex.sub(r"^[\s\p{P}\p{S}]+|[\s\p{P}\p{S}]+$", "", _normalize(value))
+    if not normalized:
+        return []
+    units = [item for item in regex.split(r"[^\p{L}\p{M}\p{N}'’ʼ-]+", normalized) if item]
+    return list(dict.fromkeys([normalized, *units]))
+
+
+def _translation_matches(
+    value: str,
+    query: str,
+    match: str,
+    pattern: regex.Pattern[str] | None,
+) -> bool:
+    query_units = _text_units(query)
+    needle = query_units[0] if query_units else ""
+    units = _text_units(value)
+    if match == "regex":
+        if pattern is None:
+            raise BuildError("Recipe regular expression was not compiled")
+        try:
+            return pattern.search(value, timeout=0.05) is not None
+        except TimeoutError as error:
+            raise BuildError("Recipe regular expression exceeded its work limit") from error
+    if match == "exact":
+        return needle in units
+    if match == "prefix":
+        return any(unit.startswith(needle) for unit in units)
+    if match == "fuzzy":
+        maximum = 1 if len(needle) <= 4 else 2
+        return any(
+            len(unit) <= 80 and _edit_distance(unit, needle, maximum) <= maximum for unit in units
+        )
+    return needle in _normalize(value)
+
+
 def _matches(
     record: dict[str, Any],
     query: str,
     match: str,
     pattern: regex.Pattern[str] | None = None,
+    query_field: str = "formosan",
+    translation_language: str = "",
 ) -> bool:
     needle = _normalize(query)
     if match == "translation":
@@ -65,6 +103,15 @@ def _matches(
         return any(
             item["owner_type"] != "sentence" and needle in _normalize(item["text"])
             for item in record["tier_translations"]
+        )
+    if query_field == "translation":
+        translations = [
+            item
+            for item in record["translations"]
+            if not translation_language or item["xml_lang"] == translation_language
+        ]
+        return any(
+            _translation_matches(str(item["text"]), query, match, pattern) for item in translations
         )
     source_forms = [
         record["standard"],
@@ -300,6 +347,8 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
     languages = set(selection["language_ids"])
     corpora = set(selection["corpus_ids"])
     match = str(selection["match"])
+    query_field = str(selection.get("query_field", "formosan"))
+    translation_language = str(selection.get("translation_language", ""))
     record_unit = str(selection.get("record_unit", "sentence"))
     pattern: regex.Pattern[str] | None = None
     if match == "regex":
@@ -329,7 +378,14 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
             selected = (
                 text_id in record_ids
                 if record_ids
-                else _matches(record, selection["query"], match, pattern)
+                else _matches(
+                    record,
+                    selection["query"],
+                    match,
+                    pattern,
+                    query_field,
+                    translation_language,
+                )
             )
             if not selected:
                 continue
@@ -353,7 +409,14 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
         projected = _project_record(record, record_unit)
         if record_ids:
             result.extend(item for item in projected if item["id"] in record_ids)
-        elif _matches(record, selection["query"], match, pattern):
+        elif _matches(
+            record,
+            selection["query"],
+            match,
+            pattern,
+            query_field,
+            translation_language,
+        ):
             result.extend(projected)
         if len(result) >= selection["max_rows"] or (
             record_ids and {item["id"] for item in result} == record_ids

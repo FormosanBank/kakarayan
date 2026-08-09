@@ -15,8 +15,9 @@ rebuildable projection of one exact public FormosanBank commit.
 ## What is included
 
 - Separate word dictionary and sentence search across original and FormosanBank standard
-  forms, tokens, phonology, translations, and morpheme glosses. Users choose the source
-  Formosan language and any translation language present in that corpus scope.
+  forms, tokens, phonology, translations, and morpheme glosses. Users can search in either
+  the selected Formosan language or an available translation language and follow matches
+  in either direction.
 - Corpus and language catalogues that keep Seediq and Truku as separate display identities.
 - A bounded dataset builder, deterministic linguistic summaries in a Worker, and CSV, TSV,
   JSON, JSON Lines, Parquet, plain text, interlinear, audio-reference, and reproducible

@@ -165,7 +165,7 @@ test("local corpus search reads a compressed shard", async ({page}) => {
   });
   await page.goto("#/lookup?type=sentences");
   await selectSmallAmisScope(page);
-  await page.getByLabel("Word, phrase, or translation").fill("lima");
+  await page.getByLabel("Word or phrase in Amis").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
   const firstResult = page.locator(".result-card").first();
   await expect(firstResult).toBeVisible();
@@ -193,7 +193,7 @@ test("dictionary lookup returns cited word meanings separately from sentence sea
     "true",
   );
   await selectSmallAmisScope(page, "NTUFormosanCorpus");
-  await page.getByLabel("Word", {exact: true}).fill("lima");
+  await page.getByLabel("Word in Amis", {exact: true}).fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
   const entry = page.locator(".dictionary-entry").first();
   await expect(entry).toBeVisible();
@@ -212,6 +212,30 @@ test("dictionary lookup returns cited word meanings separately from sentence sea
   await expect(page.locator(".result-card").first()).toBeVisible();
 });
 
+test("dictionary and sentence lookup search from translations back to Formosan", async ({
+  page,
+}) => {
+  await page.goto("#/lookup?type=dictionary");
+  const corpus = await selectSmallAmisScope(page);
+  test.skip(corpus !== "TestCorpus", "Reverse lookup fixture is tested in the bounded CI corpus");
+  await page.getByRole("radio", {name: /English Translations and meanings/}).check();
+  await page.getByLabel("Meaning in English").fill("five");
+  await page.getByRole("button", {name: "Search"}).click();
+  const entry = page.locator(".dictionary-entry").first();
+  await expect(entry.getByRole("heading", {name: "lima"})).toBeVisible();
+  await expect(entry).toContainText("FIVE");
+  await expect(page).toHaveURL(/direction=translation/);
+
+  await page.goto("#/lookup?type=sentences");
+  await selectSmallAmisScope(page);
+  await page.getByRole("radio", {name: /English Translations and meanings/}).check();
+  await page.getByLabel("Word or phrase in English").fill("fictional");
+  await page.getByRole("button", {name: "Search"}).click();
+  const sentence = page.locator(".result-card").first();
+  await expect(sentence.locator(".kwic")).toContainText("lima waco");
+  await expect(sentence.locator(".translation-match mark")).toHaveText("fictional");
+});
+
 test("scoped RE2 search runs without weakening the content security policy", async ({
   page,
 }) => {
@@ -220,7 +244,7 @@ test("scoped RE2 search runs without weakening the content security policy", asy
   await page.goto("#/lookup?type=sentences");
   await selectSmallAmisScope(page);
   await page.getByRole("radio", {name: "Scoped RE2"}).check();
-  await page.getByLabel("Word, phrase, or translation").fill("li.a");
+  await page.getByLabel("Word or phrase in Amis").fill("li.a");
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".result-card").first()).toBeVisible();
   await expect(page.locator(".callout--error")).toHaveCount(0);
@@ -234,7 +258,7 @@ test("concordance filters apply dialect and evidence requirements before countin
   const corpus = await selectSmallAmisScope(page, "ePark");
   test.skip(corpus === "TestCorpus", "The generated fixture has no stable dialect mix");
   await page.getByRole("combobox", {name: "Dialect", exact: true}).selectOption("Coastal");
-  await page.getByLabel("Word, phrase, or translation").fill("fangcalay");
+  await page.getByLabel("Word or phrase in Amis").fill("fangcalay");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".result-card")).toHaveCount(1);
   await expect(page.locator(".result-summary")).toContainText("1 sentence");
@@ -286,7 +310,7 @@ test("lazy DuckDB-Wasm export creates a real Parquet file", async ({page}, testI
   test.setTimeout(120_000);
   await page.goto("#/lookup?type=sentences");
   await selectSmallAmisScope(page);
-  await page.getByLabel("Word, phrase, or translation").fill("lima");
+  await page.getByLabel("Word or phrase in Amis").fill("lima");
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".result-card").first()).toBeVisible({timeout: 10_000});
   await page.getByLabel("Export").selectOption("parquet");
@@ -364,7 +388,7 @@ test("Traditional Chinese navigation updates content and document language", asy
   await expect(page.getByPlaceholder("篩選語言…")).toBeVisible();
 
   await page.goto("#/lookup?type=sentences");
-  await expect(page.getByLabel("單詞、片語或翻譯")).toBeVisible();
+  await expect(page.getByLabel("Amis單詞或片語")).toBeVisible();
   await page.goto("#/research");
   await page.getByRole("tab", {name: "資料集產生器"}).click();
   await expect(page.getByRole("heading", {name: "選擇記錄"})).toBeVisible();
@@ -494,14 +518,14 @@ test("browser transfer, search latency, and memory stay within release budgets",
   expect(catalogueBytes).toBeLessThan(1024 * 1024);
 
   const corpus = await selectSmallAmisScope(page);
-  await page.getByLabel("Word, phrase, or translation").fill("lima");
+  await page.getByLabel("Word or phrase in Amis").fill("lima");
   const coldStart = Date.now();
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".kwic mark").first()).toContainText(/lima/i);
   const coldSearchMs = Date.now() - coldStart;
 
   const warmQuery = corpus === "TestCorpus" ? "waco" : "fangcalay";
-  await page.getByLabel("Word, phrase, or translation").fill(warmQuery);
+  await page.getByLabel("Word or phrase in Amis").fill(warmQuery);
   const warmStart = Date.now();
   await page.getByRole("button", {name: "Search"}).click();
   await expect(page.locator(".kwic mark").first()).toContainText(

@@ -1,4 +1,9 @@
-import {normalizeSearch, type SearchMode} from "../data";
+import {
+  normalizeSearch,
+  translationTextMatches,
+  type SearchDirection,
+  type SearchMode,
+} from "../data";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import {translationLanguageName} from "../translationLanguages";
@@ -67,14 +72,76 @@ function candidateFor(
   return null;
 }
 
-function groups(records: SearchRecord[], query: string, mode: SearchMode): Candidate[] {
+function reverseCandidatesFor(
+  record: SearchRecord,
+  query: string,
+  mode: SearchMode,
+  targetLanguage: string,
+): Array<{key: string; label: string}> {
+  const candidates = new Map<string, {key: string; label: string}>();
+  const matchingLexicalTranslations = record.tier_translations.filter(
+    (item) =>
+      item.owner_type !== "sentence" &&
+      (!targetLanguage || item.xml_lang === targetLanguage) &&
+      translationTextMatches(item.text, query, mode),
+  );
+  for (const translation of matchingLexicalTranslations) {
+    for (const form of record.forms) {
+      if (form.owner_id !== translation.owner_id || !form.normalized) continue;
+      candidates.set(form.normalized, {key: form.normalized, label: form.text});
+    }
+    if (translation.owner_type === "word") {
+      for (const token of record.tokens) {
+        if (token.word_id === translation.owner_id && token.normalized) {
+          candidates.set(token.normalized, {key: token.normalized, label: token.surface});
+        }
+      }
+    }
+  }
+
+  const sentenceMeaningMatches = record.translations.some(
+    (item) =>
+      (!targetLanguage || item.xml_lang === targetLanguage) &&
+      translationTextMatches(item.text, query, mode),
+  );
+  if (sentenceMeaningMatches && record.tokens.length === 1) {
+    const token = record.tokens[0];
+    if (token?.normalized) {
+      candidates.set(token.normalized, {key: token.normalized, label: token.surface});
+    }
+  }
+  if (sentenceMeaningMatches && record.tokens.length === 0) {
+    const label = record.standard || record.original;
+    const key = normalizeSearch(label);
+    if (key && !/\s/u.test(key)) candidates.set(key, {key, label});
+  }
+  return [...candidates.values()];
+}
+
+function groups(
+  records: SearchRecord[],
+  query: string,
+  mode: SearchMode,
+  direction: SearchDirection,
+  targetLanguage: string,
+): Candidate[] {
   const values = new Map<string, Candidate>();
   for (const record of records) {
-    const candidate = candidateFor(record, query, mode);
-    if (!candidate) continue;
-    const existing = values.get(candidate.key);
-    if (existing) existing.records.push(record);
-    else values.set(candidate.key, {...candidate, records: [record]});
+    const candidates = direction === "translation"
+      ? reverseCandidatesFor(record, query, mode, targetLanguage)
+      : [candidateFor(record, query, mode)].filter(
+          (candidate): candidate is {key: string; label: string} => candidate !== null,
+        );
+    for (const candidate of candidates) {
+      const existing = values.get(candidate.key);
+      if (existing) {
+        if (!existing.records.some((item) => item.id === record.id)) {
+          existing.records.push(record);
+        }
+      } else {
+        values.set(candidate.key, {...candidate, records: [record]});
+      }
+    }
   }
   return [...values.values()].sort(
     (left, right) =>
@@ -158,6 +225,7 @@ export function CandidateGroups({
   records,
   query,
   mode,
+  direction,
   targetLanguage,
   corpusId,
   onSave,
@@ -166,6 +234,7 @@ export function CandidateGroups({
   records: SearchRecord[];
   query: string;
   mode: SearchMode;
+  direction: SearchDirection;
   targetLanguage: string;
   corpusId: string;
   onSave: (record: SearchRecord, front: string, meanings: string[]) => void;
@@ -173,7 +242,7 @@ export function CandidateGroups({
   const {locale, number, tx} = useI18n();
   return (
     <div className="candidate-groups">
-      {groups(records, query, mode).map((candidate) => {
+      {groups(records, query, mode, direction, targetLanguage).map((candidate) => {
         const {meanings, cardEvidence} = evidenceFor(candidate, targetLanguage);
         const firstRecord = candidate.records[0];
         if (!firstRecord) return null;
@@ -203,7 +272,7 @@ export function CandidateGroups({
         );
         const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(candidate.label)}&language=${encodeURIComponent(
           firstRecord.language_id,
-        )}&target=${encodeURIComponent(targetLanguage)}&mode=exact${
+        )}&target=${encodeURIComponent(targetLanguage)}&direction=formosan&mode=exact${
           corpusId ? `&corpus=${encodeURIComponent(corpusId)}` : ""
         }`;
         return (

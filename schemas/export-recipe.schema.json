@@ -40,6 +40,8 @@
             "regex"
           ]
         },
+        "query_field": {"enum": ["formosan", "translation"]},
+        "translation_language": {"type": "string", "maxLength": 35},
         "language_ids": {
           "type": "array",
           "items": {"type": "string", "maxLength": 128},

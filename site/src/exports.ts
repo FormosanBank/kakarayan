@@ -1,4 +1,4 @@
-import type {SearchMode} from "./data";
+import type {SearchDirection, SearchMode} from "./data";
 import type {RecordUnit} from "./recordUnits";
 import type {SearchRecord} from "./types";
 
@@ -19,6 +19,8 @@ export interface ExportRecipe {
   selection: {
     query: string;
     match: SearchMode;
+    query_field: SearchDirection;
+    translation_language: string;
     language_ids: string[];
     corpus_ids: string[];
     dialects: string[];
@@ -36,6 +38,8 @@ export interface ExportContext {
   releaseId: string;
   query: string;
   mode: SearchMode;
+  direction?: SearchDirection;
+  targetLanguage?: string;
   languageId: string;
   corpusId: string;
   languageIds?: string[];
@@ -110,6 +114,8 @@ export function makeRecipe(
     selection: {
       query: context.query,
       match: context.mode,
+      query_field: context.direction ?? "formosan",
+      translation_language: context.targetLanguage ?? "",
       language_ids: context.languageIds ?? [context.languageId],
       corpus_ids: context.corpusIds ?? (context.corpusId ? [context.corpusId] : []),
       dialects: context.dialects ?? [],

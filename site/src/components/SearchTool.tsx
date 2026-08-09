@@ -7,7 +7,13 @@ import {
   type FormEvent,
 } from "react";
 
-import {matchingIndexes, matchingShards, searchRecords, type SearchMode} from "../data";
+import {
+  matchingIndexes,
+  matchingShards,
+  searchRecords,
+  type SearchDirection,
+  type SearchMode,
+} from "../data";
 import {downloadExport, type ExportFormat} from "../exports";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
@@ -28,17 +34,24 @@ import {SearchFilters} from "./SearchFilters";
 
 export type LookupKind = "dictionary" | "sentences";
 
-const DICTIONARY_MODES: SearchMode[] = ["exact", "prefix", "fuzzy"];
-const SENTENCE_MODES: SearchMode[] = [
+const DICTIONARY_SOURCE_MODES: SearchMode[] = ["exact", "prefix", "fuzzy"];
+const DICTIONARY_TRANSLATION_MODES: SearchMode[] = ["exact", "prefix", "contains", "fuzzy"];
+const SENTENCE_SOURCE_MODES: SearchMode[] = [
   "exact",
   "contains",
-  "translation",
   "phonology",
   "gloss",
   "regex",
   "source",
 ];
+const SENTENCE_TRANSLATION_MODES: SearchMode[] = ["exact", "prefix", "contains", "fuzzy", "regex"];
 
+function modesFor(kind: LookupKind, direction: SearchDirection): SearchMode[] {
+  if (kind === "dictionary") {
+    return direction === "formosan" ? DICTIONARY_SOURCE_MODES : DICTIONARY_TRANSLATION_MODES;
+  }
+  return direction === "formosan" ? SENTENCE_SOURCE_MODES : SENTENCE_TRANSLATION_MODES;
+}
 
 export function SearchTool({
   data,
@@ -60,14 +73,21 @@ export function SearchTool({
   const amis = data.languages.find((language) => language.name === "Amis");
   const initialLanguage =
     selectedLanguageId ?? params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "";
-  const modes = kind === "dictionary" ? DICTIONARY_MODES : SENTENCE_MODES;
   const requestedMode = params.get("mode") as SearchMode | null;
+  const requestedDirection = params.get("direction");
+  const initialDirection: SearchDirection =
+    requestedDirection === "translation" || requestedMode === "translation"
+      ? "translation"
+      : "formosan";
+  const [direction, setDirection] = useState<SearchDirection>(initialDirection);
+  const modes = modesFor(kind, direction);
+  const initialMode = requestedMode === "translation" ? "contains" : requestedMode;
   const [query, setQuery] = useState(params.get("q") ?? "");
   const [languageId, setLanguageId] = useState(initialLanguage);
   const [corpusId, setCorpusId] = useState(params.get("corpus") ?? "");
   const [selectedTarget, setSelectedTarget] = useState(params.get("target") ?? "");
   const [mode, setMode] = useState<SearchMode>(
-    requestedMode && modes.includes(requestedMode) ? requestedMode : "exact",
+    initialMode && modesFor(kind, initialDirection).includes(initialMode) ? initialMode : "exact",
   );
   const [records, setRecords] = useState<SearchRecord[]>([]);
   const [scanned, setScanned] = useState(0);
@@ -149,6 +169,9 @@ export function SearchTool({
     });
   }, [data.corpora, data.rights.entries, records]);
   const selectedLanguage = data.languages.find((language) => language.id === languageId);
+  const targetLanguageLabel = targetLanguage
+    ? translationLanguageName(targetLanguage, locale)
+    : tx("Translation", "翻譯語言");
   const hasResultFilters = Boolean(dialectFilter || requiredTiers.length || resultSort !== "source");
 
   useEffect(
@@ -174,6 +197,7 @@ export function SearchTool({
           q: query.trim(),
           language: languageId,
           target: targetLanguage,
+          direction,
           ...(corpusId && {corpus: corpusId}),
           ...(kind === "sentences" && dialectFilter && {dialect: dialectFilter}),
           ...(kind === "sentences" && requiredTiers.length && {tiers: requiredTiers.join(",")}),
@@ -196,6 +220,7 @@ export function SearchTool({
                 (!dialectFilter || (record.dialect || "unknown") === dialectFilter) &&
                 requiredTiers.every((tier) => recordHasTier(record, tier))
             : undefined,
+          direction,
         );
         setRecords(sortResultRecords(result.records, resultSort));
         setScanned(result.scanned);
@@ -210,7 +235,30 @@ export function SearchTool({
         if (controller.current === nextController) setBusy(false);
       }
     },
-    [corpusId, dialectFilter, indexes, kind, languageId, mode, query, requiredTiers, resultSort, setParams, shards, targetLanguage],
+    [
+      corpusId,
+      dialectFilter,
+      direction,
+      indexes,
+      kind,
+      languageId,
+      mode,
+      query,
+      requiredTiers,
+      resultSort,
+      setBusy,
+      setError,
+      setMatches,
+      setNotice,
+      setParams,
+      setRecords,
+      setScanned,
+      setSearched,
+      setTruncated,
+      setVisibleLimit,
+      shards,
+      targetLanguage,
+    ],
   );
 
   useEffect(() => {
@@ -266,16 +314,61 @@ export function SearchTool({
   return (
     <section className={`search-tool search-tool--${kind} ${learner ? "search-tool--learner" : ""}`}>
       <form className="search-form" onSubmit={runSearch}>
+        <fieldset className="lookup-direction">
+          <legend>{tx("Search in", "搜尋語言")}</legend>
+          <div className="lookup-direction__options">
+            {([
+              {
+                value: "formosan" as const,
+                label: selectedLanguage?.name ?? tx("Formosan", "臺灣南島語"),
+                detail: tx("Formosan text", "臺灣南島語文本"),
+              },
+              {
+                value: "translation" as const,
+                label: targetLanguageLabel,
+                detail: tx("Translations and meanings", "翻譯與釋義"),
+              },
+            ]).map((option) => (
+              <label key={option.value}>
+                <input
+                  type="radio"
+                  name={`direction-${kind}-${learner ? "learn" : "research"}`}
+                  value={option.value}
+                  checked={direction === option.value}
+                  disabled={option.value === "translation" && !targetLanguage}
+                  onChange={() => {
+                    setDirection(option.value);
+                    if (!modesFor(kind, option.value).includes(mode)) setMode("exact");
+                    setRecords([]);
+                    setSearched(false);
+                  }}
+                />
+                <span>
+                  <strong>{option.label}</strong>
+                  <small>{option.detail}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
         <div className="field field--query">
           <label htmlFor={`query-${kind}-${learner ? "learn" : "research"}`}>
-            {kind === "dictionary" ? tx("Word", "單詞") : tx("Word, phrase, or translation", "單詞、片語或翻譯")}
+            {direction === "formosan"
+              ? kind === "dictionary"
+                ? tx(`Word in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage?.name ?? "臺灣南島語"}單詞`)
+                : tx(`Word or phrase in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage?.name ?? "臺灣南島語"}單詞或片語`)
+              : kind === "dictionary"
+                ? tx(`Meaning in ${targetLanguageLabel}`, `${targetLanguageLabel}釋義`)
+                : tx(`Word or phrase in ${targetLanguageLabel}`, `${targetLanguageLabel}單詞或片語`)}
           </label>
           <input
             id={`query-${kind}-${learner ? "learn" : "research"}`}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             autoComplete="off"
-            placeholder={kind === "dictionary" ? "fangcalay" : tx("word in a sentence", "句子中的單詞")}
+            placeholder={direction === "formosan"
+              ? kind === "dictionary" ? "fangcalay" : tx("word in a Formosan sentence", "臺灣南島語句中的單詞")
+              : kind === "dictionary" ? tx("good", "美麗") : tx("word in a translation", "翻譯句中的單詞")}
           />
         </div>
         <div className="field">
@@ -431,6 +524,8 @@ export function SearchTool({
                         releaseId: data.meta.release_id,
                         query: query.trim(),
                         mode,
+                        direction,
+                        targetLanguage,
                         languageId,
                         corpusId,
                       },
@@ -463,6 +558,7 @@ export function SearchTool({
           records={records}
           query={query}
           mode={mode}
+          direction={direction}
           targetLanguage={targetLanguage}
           corpusId={corpusId}
           onSave={(record, front, meanings) => void addWord(record, front, meanings)}
@@ -476,6 +572,7 @@ export function SearchTool({
               record={record}
               query={query}
               mode={mode}
+              direction={direction}
               targetLanguage={targetLanguage}
               learner={learner}
               onSave={(value) => void addSentence(value)}

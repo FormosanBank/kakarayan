@@ -21,8 +21,11 @@ toggle over the same immutable shards. Dictionary mode matches a word or morphem
 word-level glosses or single-word record translations. Sentences mode returns records
 containing the selected word or matching another chosen tier. Both modes let the user
 choose a Formosan source language and an available translation language for that exact
-scope. Legacy dictionary and sentence URLs remain compatible, but new links use the unified
-lookup route.
+scope, then explicitly choose which side to search. Translation-to-Formosan dictionary
+queries trace matching word and morpheme meanings back to their attested Formosan forms.
+Sentence queries match whole words, prefixes, substrings, bounded fuzzy forms, or scoped
+regular expressions in the selected sentence translation. Legacy dictionary and sentence
+URLs remain compatible, but new links use the unified lookup route.
 
 Results show:
 

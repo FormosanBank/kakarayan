@@ -78,6 +78,15 @@ describe("transparent static search", () => {
     expect(recordMatches(record, "ugly", "translation")).toBe(false);
   });
 
+  it("matches words and phrases from a selected translation back to Formosan records", () => {
+    expect(recordMatches(record, "beautiful", "exact", "eng", "sentence", "translation")).toBe(true);
+    expect(recordMatches(record, "beautiful!", "exact", "eng", "sentence", "translation")).toBe(true);
+    expect(recordMatches(record, "beau", "prefix", "eng", "sentence", "translation")).toBe(true);
+    expect(recordMatches(record, "eauti", "contains", "eng", "sentence", "translation")).toBe(true);
+    expect(recordMatches(record, "beautful", "fuzzy", "eng", "sentence", "translation")).toBe(true);
+    expect(recordMatches(record, "beautiful", "exact", "zho", "sentence", "translation")).toBe(false);
+  });
+
   it("keeps sentence targets separate while allowing lexical dictionary targets", () => {
     const lexicalOnly: SearchRecord = {
       ...record,
@@ -90,6 +99,7 @@ describe("transparent static search", () => {
     expect(recordMatches(lexicalOnly, "fangcalay", "exact", "fra")).toBe(false);
     expect(recordMatches(lexicalOnly, "fangcalay", "exact", "fra", "any")).toBe(true);
     expect(recordMatches(lexicalOnly, "fangcalay", "exact", "eng", "any")).toBe(false);
+    expect(recordMatches(lexicalOnly, "beautiful", "exact", "fra", "any", "translation")).toBe(true);
   });
 
   it("uses vocabulary postings to select only candidate record shards", () => {
@@ -111,6 +121,9 @@ describe("transparent static search", () => {
     expect([...indexCandidateParts(index, "lima", "exact")]).toEqual([1]);
     expect([...indexCandidateParts(index, "fan", "prefix")]).toEqual([0]);
     expect([...indexCandidateParts(index, "eaut", "translation")]).toEqual([0]);
+    expect([...indexCandidateParts(index, "beautiful", "exact", null, "translation")]).toEqual([0]);
+    expect([...indexCandidateParts(index, "beautful", "fuzzy", null, "translation")]).toEqual([0]);
+    expect([...indexCandidateParts(index, "beautiful", "exact", null, "translation", "any")]).toEqual([0]);
     expect([...indexCandidateParts(index, "limx", "fuzzy")]).toEqual([1]);
   });
 });

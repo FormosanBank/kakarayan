@@ -260,6 +260,14 @@
     width: 100%;
   }
 
+  .lookup-direction {
+    grid-column: 1;
+  }
+
+  .lookup-direction__options {
+    width: 100%;
+  }
+
   .lookup-kind-toggle,
   .research-tabs,
   .summary-tabs {
@@ -373,6 +381,15 @@
   .summary-tabs button,
   .studio-tabs button {
     padding-inline: 11px;
+  }
+
+  .lookup-direction__options {
+    grid-template-columns: 1fr;
+  }
+
+  .lookup-direction__options label + label {
+    border-top: 1px solid var(--line-strong);
+    border-left: 0;
   }
 
   .button-row,

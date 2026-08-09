@@ -300,6 +300,87 @@
   min-height: 42px;
 }
 
+.lookup-direction {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  padding: 0;
+  margin: 0 0 4px;
+  border: 0;
+}
+
+.lookup-direction legend {
+  padding: 0;
+  color: var(--body);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lookup-direction__options {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  width: fit-content;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: white;
+}
+
+.lookup-direction__options label {
+  cursor: pointer;
+}
+
+.lookup-direction__options label + label {
+  border-left: 1px solid var(--line-strong);
+}
+
+.lookup-direction__options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.lookup-direction__options span {
+  display: grid;
+  gap: 3px;
+  min-height: 52px;
+  align-content: center;
+  padding: 8px 14px;
+  color: var(--body);
+  background: white;
+}
+
+.lookup-direction__options strong {
+  color: inherit;
+  font-size: 14px;
+}
+
+.lookup-direction__options small {
+  color: var(--muted);
+  font: 500 10px/1.2 var(--font-mono);
+}
+
+.lookup-direction__options input:checked + span {
+  color: white;
+  background: var(--ink);
+}
+
+.lookup-direction__options input:checked + span small {
+  color: rgb(255 255 255 / 70%);
+}
+
+.lookup-direction__options input:focus-visible + span {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -3px;
+}
+
+.lookup-direction__options input:disabled + span {
+  color: var(--muted);
+  background: var(--surface);
+  cursor: not-allowed;
+}
+
 .lookup-options {
   grid-column: 1 / -1;
   margin-top: 4px;
@@ -598,6 +679,28 @@
   margin: 0;
   border-top: 1px solid var(--line);
   line-height: 1.55;
+}
+
+.translations p.translation-match {
+  padding-inline: 12px;
+  border-left: 3px solid var(--ink);
+  background: var(--surface);
+}
+
+.translations span small {
+  display: block;
+  margin-top: 3px;
+  color: var(--charcoal);
+  font: 600 9px/1 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.translations mark {
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: var(--ink);
+  background: #fff1b8;
 }
 
 .result-card__details {

@@ -219,6 +219,9 @@ environment condition, not a reason to skip the new static, publisher, API, or c
   selected schema and rights, and preserve the complete selection in recipes.
 - [x] Add concordance dialect and evidence-tier filters before match counting, stable
   result ordering, shareable filter state, and focused end-to-end coverage.
+- [x] Add explicit Formosan-to-translation and translation-to-Formosan direction controls
+  to dictionary and sentence lookup, with lexical owner tracing, translation matching,
+  highlighted evidence, stable links, and reproducible recipe metadata.
 - [x] Add an executable static API explorer, curl example, export field contract, format
   semantics, model metadata-completeness counts, language coverage filtering, and direct
   model-to-learner links.
@@ -257,11 +260,16 @@ repositories or corpus sources were used.
 - Mypy: pass across 78 source files
 - Publisher tests: 23 pass
 - API and Python client tests: 11 pass
-- Frontend unit and component tests: 48 pass across 10 files
+- Frontend unit and component tests: 50 pass across 10 files
 - Full fixture browser matrix: 79 pass and 13 intentional project-specific skips across
   desktop Chromium, mobile Chromium, Firefox, and WebKit
 - Full-data desktop Chromium: 14 pass, including measured budgets, offline local study,
   migration/backup/restore, microphone denial, deletion, keyboard, and accessibility
+- Bidirectional lookup: 4 executable-recipe tests pass; the focused reverse dictionary and
+  sentence flow passes in all four browser projects; the complete pinned public-data browser
+  matrix passes 79 checks with 17 intentional platform or fixture-specific skips. A live
+  full-data smoke for English `good` returned 15 Amis dictionary groups and 25 displayed
+  sentence matches with highlighted translation evidence.
 - Actual DuckDB-Wasm Parquet signatures: pass in Chromium, Firefox, and WebKit using the
   rights-approved invented fixture
 - Model adapters: success, cold start, cancellation, timeout, malformed output, provider

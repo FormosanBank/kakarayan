@@ -83,6 +83,37 @@ def test_recipe_runs_against_release_only_hierarchical_packages(
     assert records[0]["translations"][0]["text"] == "A fictional translated line."
 
 
+def test_recipe_matches_from_translation_back_to_formosan(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    document = _recipe(release.release_id)
+    selection = cast(dict[str, object], document["selection"])
+    selection.update(
+        {
+            "query": "fictional",
+            "match": "exact",
+            "query_field": "translation",
+            "translation_language": "eng",
+        }
+    )
+    records = resolve_recipe(release.output, document)
+    assert [record["xml_id"] for record in records] == ["s-one"]
+
+    selection["query"] = "fictional!"
+    records = resolve_recipe(release.output, document)
+    assert [record["xml_id"] for record in records] == ["s-one"]
+
+    selection["query"] = "fictonal"
+    selection["match"] = "fuzzy"
+    records = resolve_recipe(release.output, document)
+    assert [record["xml_id"] for record in records] == ["s-one"]
+
+    selection["translation_language"] = "zho"
+    assert resolve_recipe(release.output, document) == []
+
+
 def test_recipe_rejects_unknown_fields(tmp_path: Path) -> None:
     document = _recipe("fb-20240102-deadbeef")
     document["executable"] = "print('no')"

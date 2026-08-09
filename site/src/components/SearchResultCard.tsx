@@ -1,4 +1,8 @@
-import type {SearchMode} from "../data";
+import {
+  translationTextMatches,
+  type SearchDirection,
+  type SearchMode,
+} from "../data";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import {translationLanguageName} from "../translationLanguages";
@@ -18,20 +22,42 @@ function playableUrl(record: SearchRecord, index: number): string {
   return "";
 }
 
-function SentenceText({record, query}: {record: SearchRecord; query: string}) {
-  const {tx} = useI18n();
-  const text = record.standard || record.original || tx("Untranscribed sentence", "未轉錄句子");
+function HighlightedText({
+  text,
+  query,
+  active,
+}: {
+  text: string;
+  query: string;
+  active: boolean;
+}) {
+  if (!active) return text;
   const needle = query.trim();
   const match = needle ? text.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase()) : -1;
+  if (match < 0) return text;
+  return (
+    <>
+      {text.slice(0, match)}
+      <mark>{text.slice(match, match + needle.length)}</mark>
+      {text.slice(match + needle.length)}
+    </>
+  );
+}
+
+function SentenceText({
+  record,
+  query,
+  highlight,
+}: {
+  record: SearchRecord;
+  query: string;
+  highlight: boolean;
+}) {
+  const {tx} = useI18n();
+  const text = record.standard || record.original || tx("Untranscribed sentence", "未轉錄句子");
   return (
     <h3 className="kwic">
-      {match < 0 ? text : (
-        <>
-          {text.slice(0, match)}
-          <mark>{text.slice(match, match + needle.length)}</mark>
-          {text.slice(match + needle.length)}
-        </>
-      )}
+      <HighlightedText text={text} query={query} active={highlight} />
     </h3>
   );
 }
@@ -99,6 +125,7 @@ export function SearchResultCard({
   record,
   query,
   mode,
+  direction,
   targetLanguage,
   learner,
   onSave,
@@ -109,6 +136,7 @@ export function SearchResultCard({
   record: SearchRecord;
   query: string;
   mode: SearchMode;
+  direction: SearchDirection;
   targetLanguage: string;
   learner: boolean;
   onSave: (record: SearchRecord) => void;
@@ -120,7 +148,7 @@ export function SearchResultCard({
   const corpus = data.corpora.find((item) => item.id === record.corpus_id);
   const stablePath = `/lookup?type=sentences&q=${encodeURIComponent(query)}&language=${encodeURIComponent(
     record.language_id,
-  )}&corpus=${encodeURIComponent(record.corpus_id)}&target=${encodeURIComponent(targetLanguage)}&mode=${mode}&record=${encodeURIComponent(
+  )}&corpus=${encodeURIComponent(record.corpus_id)}&target=${encodeURIComponent(targetLanguage)}&direction=${direction}&mode=${mode}&record=${encodeURIComponent(
     record.id,
   )}`;
   const citation = [
@@ -141,7 +169,7 @@ export function SearchResultCard({
         <span>{corpus?.name}</span>
       </div>
       <div lang={language?.iso639_3}>
-        <SentenceText record={record} query={query} />
+        <SentenceText record={record} query={query} highlight={direction === "formosan"} />
       </div>
       {record.original && record.original !== record.standard && (
         <dl className="tier-pair">
@@ -158,12 +186,23 @@ export function SearchResultCard({
       <div className="translations">
         {record.translations
           .filter((translation) => !targetLanguage || translation.xml_lang === targetLanguage)
-          .map((translation, index) => (
-            <p key={`${translation.xml_lang}-${index}`} lang={translation.xml_lang}>
-              <span>{translationLanguageName(translation.xml_lang, locale)}</span>
-              {translation.text}
-            </p>
-          ))}
+          .map((translation, index) => {
+            const isMatch = direction === "translation" &&
+              translationTextMatches(translation.text, query, mode);
+            return (
+              <p
+                key={`${translation.xml_lang}-${index}`}
+                lang={translation.xml_lang}
+                className={isMatch ? "translation-match" : undefined}
+              >
+                <span>
+                  {translationLanguageName(translation.xml_lang, locale)}
+                  {isMatch && <small>{tx("match", "相符")}</small>}
+                </span>
+                <HighlightedText text={translation.text} query={query} active={isMatch} />
+              </p>
+            );
+          })}
       </div>
       <div className="result-card__details">
       {hasAnalysis && (
@@ -229,7 +268,7 @@ export function SearchResultCard({
           {learner && (
             <Link
               className="button button--quiet"
-              to={`/lookup?type=sentences&q=${encodeURIComponent(query)}&language=${record.language_id}&target=${targetLanguage}`}
+              to={`/lookup?type=sentences&q=${encodeURIComponent(query)}&language=${record.language_id}&target=${targetLanguage}&direction=${direction}&mode=${mode}`}
             >
               {t("search.research")}
             </Link>

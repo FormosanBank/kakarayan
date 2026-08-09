@@ -53,7 +53,19 @@ describe("browser exports", () => {
     const recipe = makeRecipe([record], context, "jsonl");
     expect(recipe.selection.record_ids).toEqual(["sentence_fixture"]);
     expect(recipe.selection.max_rows).toBe(1);
+    expect(recipe.selection.query_field).toBe("formosan");
+    expect(recipe.selection.translation_language).toBe("");
     expect(recipe).not.toHaveProperty("code");
+  });
+
+  it("records reverse translation searches in reproducible recipes", () => {
+    const recipe = makeRecipe(
+      [record],
+      {...context, query: "invented", direction: "translation", targetLanguage: "eng"},
+      "jsonl",
+    );
+    expect(recipe.selection.query_field).toBe("translation");
+    expect(recipe.selection.translation_language).toBe("eng");
   });
 
   it("keeps audio as references with timing", () => {
