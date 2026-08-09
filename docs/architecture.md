@@ -91,6 +91,14 @@ The service worker is additive. Network access remains authoritative, successful
 are cached, and the shell may be used offline after a prior visit. Failure to register the
 service worker does not prevent normal use.
 
+The Guide route frames the published FormosanBank GitBook only from its canonical HTTPS
+origin. Kakarayan keeps a reviewed list of guide and corpus paths, but does not scrape,
+cache, translate, or treat GitBook prose as release-pinned corpus data. The live GitBook is
+currently English; Traditional Chinese Kakarayan controls label that fallback explicitly.
+GitBook permits framing from HTTPS parents, so GitHub Pages shows the reader while local
+HTTP previews show a direct-link fallback. The content security policy allows frames only
+from the canonical GitBook host.
+
 ## Browser storage
 
 IndexedDB stores saved study cards and review state. Recordings remain in the active tab

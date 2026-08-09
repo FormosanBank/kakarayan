@@ -120,6 +120,19 @@ test("mobile navigation closes after selecting a route", async ({page}, testInfo
   await expect(menu).not.toHaveAttribute("open", "");
 });
 
+test("navigation remains compact at tablet widths", async ({page}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "Tablet geometry is tested once");
+  await page.setViewportSize({width: 820, height: 900});
+  await page.goto("#/guide");
+  await expect(page.locator(".mobile-menu > summary")).toBeVisible();
+  await expect(page.locator(".primary-nav")).toBeHidden();
+  const geometry = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    document: document.documentElement.scrollWidth,
+  }));
+  expect(geometry.document).toBe(geometry.viewport);
+});
+
 test("catalogue filters names, source paths, and linked languages", async ({page}) => {
   await page.goto("#/explore");
   const filter = page.getByPlaceholder("Filter languages…");

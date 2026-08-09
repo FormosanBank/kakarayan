@@ -32,6 +32,8 @@ rebuildable projection of one exact public FormosanBank commit.
   third-party boundaries.
 - A versioned static JSON API, optional read-only live API, and JavaScript, Python, and R
   clients.
+- An embedded FormosanBank documentation reader on the public HTTPS site, with curated
+  guide sections, corpus-specific deep links, and an external fallback for local previews.
 - Public-repository noncommercial distribution policy, stricter corpus overrides, source
   locators, checksums, release pinning, and deterministic synthetic-fixture tests.
 
@@ -92,6 +94,10 @@ npm --prefix site run preview -- --host 127.0.0.1
 
 Open `http://127.0.0.1:4173/kakarayan/`. The `/kakarayan/` subpath matches the production
 GitHub Pages project path.
+
+The Guide route opens the canonical GitBook in a new tab during this HTTP preview. GitBook
+allows the embedded reader only when Kakarayan is served over HTTPS, as it is on GitHub
+Pages.
 
 This fixture is intentionally tiny. It contains two invented Amis sentences in
 `TestCorpus`. Try `lima`, `waco`, `toki`, or `rima` in Lookup or Learn. In Research, choose

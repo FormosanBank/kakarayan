@@ -31,15 +31,7 @@
   }
 }
 
-@media (max-width: 768px) {
-  h1 {
-    font-size: 28px;
-  }
-
-  h2 {
-    font-size: 22px;
-  }
-
+@media (max-width: 900px) {
   .topbar__inner {
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 10px;
@@ -103,6 +95,16 @@
   .mobile-menu nav a[aria-current="page"] {
     background: var(--surface);
     font-weight: 600;
+  }
+}
+
+@media (max-width: 768px) {
+  h1 {
+    font-size: 28px;
+  }
+
+  h2 {
+    font-size: 22px;
   }
 
   .page-wrap,
