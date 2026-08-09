@@ -82,6 +82,27 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             </nav>
           </details>
         </div>
+        <div className="woven-band" aria-hidden="true">
+          <svg width="100%" height="10" focusable="false">
+            <defs>
+              <pattern
+                id="woven-headband-pattern"
+                width="32"
+                height="10"
+                patternUnits="userSpaceOnUse"
+              >
+                <rect width="32" height="10" fill="#b82436" />
+                <rect width="32" height="1" fill="#741625" />
+                <rect y="1" width="32" height="1" fill="#e99f2f" />
+                <path d="M0 5 8 2l8 3-8 3Zm16 0 8-3 8 3-8 3Z" fill="#d9862c" />
+                <path d="M4 5 8 3.5 12 5 8 6.5Zm16 0 4-1.5L28 5l-4 1.5Z" fill="#f3dfad" />
+                <rect y="8" width="32" height="1" fill="#2b8fa0" />
+                <rect y="9" width="32" height="1" fill="#741625" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="10" fill="url(#woven-headband-pattern)" />
+          </svg>
+        </div>
       </header>
       <main id="main" tabIndex={-1}>
         {children}

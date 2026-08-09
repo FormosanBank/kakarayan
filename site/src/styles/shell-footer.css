@@ -6,8 +6,7 @@
   position: sticky;
   top: 0;
   z-index: 30;
-  height: 56px;
-  border-bottom: 1px solid var(--hairline);
+  height: 66px;
   background: rgb(255 255 255 / 96%);
 }
 
@@ -16,9 +15,22 @@
   grid-template-columns: auto 1fr auto;
   gap: 24px;
   width: min(calc(100% - 48px), var(--wide));
-  height: 100%;
+  height: 56px;
   margin: 0 auto;
   align-items: center;
+}
+
+.woven-band {
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  background: #b82436;
+}
+
+.woven-band svg {
+  display: block;
+  width: 100%;
+  height: 10px;
 }
 
 .brand {

@@ -103,6 +103,9 @@ test("landing page foregrounds audiences, project stats, and direct tool access"
   await expect(main.locator(".corpus-signal")).toHaveCount(0);
   await expect(main.locator(".home-stat")).toHaveCount(5);
   await expect(main.locator(".home-tools__grid > a")).toHaveCount(8);
+  const wovenBand = page.locator(".topbar > .woven-band");
+  await expect(wovenBand).toHaveCount(1);
+  await expect(wovenBand).toHaveCSS("height", "10px");
   const geometry = await page.evaluate(() => ({
     viewport: window.innerWidth,
     document: document.documentElement.scrollWidth,
