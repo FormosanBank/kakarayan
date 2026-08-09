@@ -45,18 +45,8 @@ export function OrthographyTool({
   return (
     <section className="model-tool" aria-labelledby="orthography-heading">
       <div className="tool-heading">
-        <div>
-          <p className="eyebrow">{tx("Deterministic public table", "可重現的公開表格")}</p>
-          <h3 id="orthography-heading">{tx("Orthography assistant", "正寫法輔助工具")}</h3>
-        </div>
-        <span className="status status--local">{tx("no AI", "不使用 AI")}</span>
+        <h3 id="orthography-heading">{tx("Orthography assistant", "正寫法輔助工具")}</h3>
       </div>
-      <p>
-        {tx(
-          "Apply a named FormosanBank conversion table and inspect every change. Empty or ambiguous mappings are preserved and flagged.",
-          "套用具名的 FormosanBank 轉換表，並檢查每一項變更。空白或有歧義的對應會保留並加以標示。",
-        )}
-      </p>
       <div className="tool-grid">
         <label className="field">
           {tx("Source table", "來源表")}

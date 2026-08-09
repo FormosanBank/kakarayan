@@ -89,12 +89,12 @@ export function PageIntro({
 }: {
   eyebrow?: string;
   title: string;
-  lede: string;
+  lede?: string;
 }) {
   return (
-    <header className="page-intro">
+    <header className={`page-intro${lede ? "" : " page-intro--title-only"}`}>
       <h1>{title}</h1>
-      <p>{lede}</p>
+      {lede && <p>{lede}</p>}
     </header>
   );
 }

@@ -497,22 +497,6 @@
   margin-top: 28px;
 }
 
-.model-notes {
-  display: grid;
-  gap: 8px;
-  padding: 16px 18px;
-  margin-bottom: 24px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.model-notes p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
 .model-toolbar {
   display: flex;
   gap: 16px;
@@ -658,11 +642,6 @@
   margin: 0;
   color: var(--muted);
   font-size: 13px;
-}
-
-.service-register > p {
-  max-width: 68ch;
-  margin-bottom: 16px;
 }
 
 .release-note {

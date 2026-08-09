@@ -6,7 +6,7 @@ export function About({data}: {data: AppData}) {
   const {t, tx} = useI18n();
   return (
     <div className="page-wrap page-wrap--prose">
-      <PageIntro title={t("about.title")} lede={t("about.lede")} />
+      <PageIntro title={t("about.title")} />
       <section>
         <h2>{tx("Source and releases", "來源與版本")}</h2>
         <p>

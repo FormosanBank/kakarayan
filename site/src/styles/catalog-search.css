@@ -18,6 +18,10 @@
   margin-bottom: 48px;
 }
 
+.page-wrap > .page-intro--title-only {
+  margin-bottom: 32px;
+}
+
 .page-wrap--prose > section,
 .detail-section,
 .format-guide,

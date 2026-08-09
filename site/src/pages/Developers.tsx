@@ -20,7 +20,7 @@ export function Developers({data}: {data: AppData}) {
   const liveApi = import.meta.env.VITE_LIVE_API_URL as string | undefined;
   return (
     <div className="page-wrap">
-      <PageIntro title={t("developers.title")} lede={t("developers.lede")} />
+      <PageIntro title={t("developers.title")} />
       <section className="api-choice">
         <article className="api-choice__primary">
           <p className="eyebrow">{tx("Always available with the site", "隨網站一併提供")}</p>

@@ -49,28 +49,6 @@
   font: 600 11px/1.3 var(--font-mono);
 }
 
-.privacy-banner {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 11px 14px;
-  margin-bottom: 20px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--body);
-  background: var(--surface);
-}
-
-.privacy-banner > span {
-  color: #245c37;
-  font-size: 10px;
-}
-
-.privacy-banner p {
-  margin: 0;
-  font-size: 13px;
-}
-
 .studio-tabs {
   display: flex;
   gap: 4px;
@@ -114,13 +92,6 @@
 
 .studio-panel > .lookup-kind-toggle {
   margin-bottom: 24px;
-}
-
-.learning-note {
-  padding-top: 18px;
-  color: var(--muted);
-  border-top: 1px solid var(--line);
-  font-size: 12px;
 }
 
 .model-tool,

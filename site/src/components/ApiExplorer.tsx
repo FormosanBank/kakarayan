@@ -57,9 +57,7 @@ export function ApiExplorer({base, endpoints}: {base: string; endpoints: ApiEndp
   return (
     <section className="api-explorer">
       <div className="section-heading">
-        <p className="eyebrow">{tx("Executable documentation", "可執行文件")}</p>
         <h2>{tx("Inspect a release endpoint", "檢視版本端點")}</h2>
-        <p>{tx("Fetch the same static JSON your application will receive. No token or backend is involved.", "取得應用程式會收到的相同靜態 JSON。不需要權杖或後端。")}</p>
       </div>
       <div className="api-explorer__controls">
         <label className="field">

@@ -13,7 +13,6 @@ export function Research({data}: {data: AppData}) {
     <div className="page-wrap page-wrap--wide">
       <PageIntro
         title={tx("Research tools", "研究工具")}
-        lede={tx("Build a dataset or summarize a bounded corpus selection.", "建立資料集或彙整限定範圍的語料。")}
       />
       <div className="research-tabs" role="tablist" aria-label={tx("Research tools", "研究工具")}>
         <button

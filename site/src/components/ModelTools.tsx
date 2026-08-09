@@ -132,20 +132,11 @@ export function TranslationTool({
   return (
     <section className="model-tool" aria-labelledby="translation-heading">
       <div className="tool-heading">
-        <div>
-          <p className="eyebrow">{tx("Optional public service", "選用公開服務")}</p>
-          <h3 id="translation-heading">{tx("Machine translation", "機器翻譯")}</h3>
-        </div>
+        <h3 id="translation-heading">{tx("Machine translation", "機器翻譯")}</h3>
         <span className={`status status--${service?.status ?? "unavailable"}`}>
           {service?.status ?? "unavailable"}
         </span>
       </div>
-      <p>
-        {tx(
-          "Results are machine-generated drafts. Use sentence search for translations found in the corpus.",
-          "結果是機器產生的草稿。請使用例句搜尋查看語料庫中的翻譯。",
-        )}
-      </p>
       <form onSubmit={submit}>
         <div className="tool-grid">
           <label className="field">
@@ -199,8 +190,8 @@ export function TranslationTool({
           />
           <span>
             {tx(
-              "Send this text directly to the public FormosanBank Space on Hugging Face. Hugging Face may process infrastructure logs under its terms.",
-              "將此文字直接傳送到 Hugging Face 上公開的 FormosanBank Space。Hugging Face 可能依其條款處理基礎設施日誌。",
+              "Send this text to FormosanBank MT on Hugging Face.",
+              "將此文字傳送到 Hugging Face 上的 FormosanBank 機器翻譯服務。",
             )}
           </span>
         </label>
@@ -255,7 +246,7 @@ export function TranslationTool({
         <div className="model-disclosure model-disclosure--summary">
           <strong>{tx("Selected capability", "所選功能")}</strong>
           <span>{model ? model.repository : tx("No language-specific MT model is registered.", "沒有登錄此語言專用的機器翻譯模型。")}</span>
-          {model && <span>{tx("License", "授權")} {model.license} · {model.limitations}</span>}
+          {model && <span>{tx("License", "授權")} {model.license}</span>}
           <Link to={`/lookup?type=sentences&language=${encodeURIComponent(language.id)}&mode=translation`}>
             {tx("Search human corpus translations", "搜尋人工語料翻譯")}
           </Link>

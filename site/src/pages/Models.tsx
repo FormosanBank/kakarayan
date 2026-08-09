@@ -59,21 +59,7 @@ export function Models({data}: {data: AppData}) {
 
   return (
     <div className="page-wrap">
-      <PageIntro title={t("models.title")} lede={t("models.lede")} />
-      <div className="model-notes">
-        <p>
-          {tx(
-            "Metadata is read from public Hugging Face model cards. Unknown means the card did not provide a structured value.",
-            "中繼資料取自公開的 Hugging Face 模型卡。未知表示模型卡未提供結構化值。",
-          )}
-        </p>
-        <p>
-          {tx(
-            "Machine output is a draft, not expert review or evidence of community endorsement.",
-            "機器輸出僅為草稿，不是專家審查，也不代表社群認可。",
-          )}
-        </p>
-      </div>
+      <PageIntro title={t("models.title")} />
       <dl className="model-coverage">
         <div><dt>{tx("Registered models", "登錄模型")}</dt><dd>{number(data.models.models.length)}</dd></div>
         <div><dt>{tx("Evaluation reported", "已提供評估")}</dt><dd>{number(evaluatedCount)}</dd></div>
@@ -186,12 +172,6 @@ export function Models({data}: {data: AppData}) {
       )}
       <section className="service-register">
         <h2>{tx("Optional public services", "選用公開服務")}</h2>
-        <p>
-          {tx(
-            "Opening a Space leaves Kakarayan. Text or audio submitted there is processed by Hugging Face under its terms.",
-            "開啟 Space 後會離開 Kakarayan。提交的文字或音訊將由 Hugging Face 依其條款處理。",
-          )}
-        </p>
         {data.models.services.map((service) => (
           <article key={service.id}>
             <div>

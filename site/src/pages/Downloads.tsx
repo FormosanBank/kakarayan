@@ -156,7 +156,7 @@ export function Downloads({data}: {data: AppData}) {
 
   return (
     <div className="page-wrap">
-      <PageIntro title={t("download.title")} lede={t("download.lede")} />
+      <PageIntro title={t("download.title")} />
       {manifest && unavailableCount > 0 && (
         <p className="callout callout--warning">
           <strong>{tx("Some packages are not published yet.", "部分套件尚未發布。")}</strong>{" "}

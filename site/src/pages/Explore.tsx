@@ -16,7 +16,7 @@ export function Explore({data}: {data: AppData}) {
   const needle = filter.trim().toLocaleLowerCase();
   return (
     <div className="page-wrap">
-      <PageIntro title={t("explore.title")} lede={t("explore.lede")} />
+      <PageIntro title={t("explore.title")} />
       <div className="explore-toolbar">
         <div className="segmented">
           <button aria-pressed={view === "languages"} onClick={() => setView("languages")}>

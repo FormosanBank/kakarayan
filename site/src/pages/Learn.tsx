@@ -59,7 +59,7 @@ export function Learn({data}: {data: AppData}) {
   ];
   return (
     <div className="page-wrap page-wrap--wide learner-page">
-      <PageIntro title={t("learn.title")} lede={t("learn.lede")} />
+      <PageIntro title={t("learn.title")} />
       {language && (
         <section className="learner-scope" aria-label={tx("Learning language", "學習語言")}>
           <div className="learner-scope__selectors">
@@ -85,16 +85,6 @@ export function Learn({data}: {data: AppData}) {
           </dl>
         </section>
       )}
-      <div className="privacy-banner">
-        <span aria-hidden="true">●</span>
-        <p>
-          <strong>{t("learn.local")}</strong>
-          {tx(
-            " MT and ASR ask before sending anything to Hugging Face.",
-            " 機器翻譯與語音辨識會在傳送資料至 Hugging Face 前取得同意。",
-          )}
-        </p>
-      </div>
       <div className="studio-tabs" role="tablist" aria-label={tx("Learner tools", "學習工具")}>
         {tabs.map(([id, label]) => (
           <button
@@ -187,12 +177,6 @@ export function Learn({data}: {data: AppData}) {
             </div>
           ))}
       </div>
-      <p className="learning-note">
-        {tx(
-          "Corpus examples link to their source. Machine output is always marked as a draft.",
-          "語料例句會連結至來源；機器輸出一律標示為草稿。",
-        )}
-      </p>
     </div>
   );
 }

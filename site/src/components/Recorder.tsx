@@ -237,18 +237,8 @@ export function Recorder({
   return (
     <section className="model-tool" aria-labelledby="recording-heading">
       <div className="tool-heading">
-        <div>
-          <p className="eyebrow">{tx("Local first", "本機優先")}</p>
-          <h3 id="recording-heading">{tx("Pronunciation recorder", "發音錄音工具")}</h3>
-        </div>
-        <span className="status status--local">{tx("on-device", "裝置端")}</span>
+        <h3 id="recording-heading">{tx("Pronunciation recorder", "發音錄音工具")}</h3>
       </div>
-      <p>
-        {tx(
-          "Recording and playback stay in this tab. Nothing is uploaded until you explicitly choose automatic transcription below.",
-          "錄音與播放都留在此分頁中。只有在您明確選擇下方的自動轉錄後，資料才會上傳。",
-        )}
-      </p>
       {reference && (
         <div className="practice-reference">
           <span>{tx("Practice target", "練習目標")}</span>
@@ -308,14 +298,13 @@ export function Recorder({
           {model ? (
             <p className="model-disclosure">
               {tx("Model:", "模型：")} <a href={model.url}>{model.repository}</a> ·{" "}
-              {tx("license", "授權")} {model.license} ·{" "}
-              {model.limitations}
+              {tx("license", "授權")} {model.license}
             </p>
           ) : (
             <p className="model-disclosure">
               {tx(
-                "The public multi-language ASR endpoint supplies this language. Detailed model metadata was not captured in this local release.",
-                "公開多語言語音辨識端點支援此語言；此本機版本未擷取詳細模型中繼資料。",
+                "Shared multilingual ASR service.",
+                "共用多語言語音辨識服務。",
               )}
             </p>
           )}
@@ -337,8 +326,8 @@ export function Recorder({
             />
             <span>
               {tx(
-                "Upload this recording directly to the public FormosanBank ASR Space on Hugging Face. The result is an automatic transcript, not a pronunciation score.",
-                "將此錄音直接上傳至 Hugging Face 上公開的 FormosanBank 語音辨識 Space。結果是自動轉錄文字，不是發音評分。",
+                "Upload this recording to FormosanBank ASR on Hugging Face for automatic transcription.",
+                "將此錄音上傳到 Hugging Face 上的 FormosanBank 語音辨識服務以自動轉錄。",
               )}
             </span>
           </label>
