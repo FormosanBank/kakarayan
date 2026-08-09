@@ -1,0 +1,28 @@
+# This project-scoped file mirrors FormosanBank policy. GitHub Pages only recognizes an
+# origin-root robots.txt as crawler policy, so maintainers must install the same rules at
+# formosanbank.github.io/robots.txt or a custom-domain root.
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: *
+Allow: /
+
+Sitemap: https://formosanbank.github.io/kakarayan/sitemap.xml
+
+Content-Signal: search=yes, ai-train=no, ai-input=no

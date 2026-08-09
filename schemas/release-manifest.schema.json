@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/release-manifest.schema.json",
+  "title": "Kakarayan release manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "release_id",
+    "generated_at",
+    "kakarayan",
+    "source",
+    "artifacts",
+    "counts",
+    "formats"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "kakarayan": {"$ref": "static-api.schema.json#/$defs/application"},
+    "source": {"$ref": "catalog.schema.json#/$defs/source"},
+    "counts": {"$ref": "catalog.schema.json#/$defs/counts"},
+    "formats": {
+      "type": "object",
+      "required": ["cldf", "aligned", "canonical_packages"],
+      "properties": {
+        "cldf": {"type": "object"},
+        "aligned": {"type": "object"},
+        "canonical_packages": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "media_type",
+          "bytes",
+          "sha256",
+          "scope",
+          "rights_ids",
+          "publishable",
+          "blocked_reasons"
+        ],
+        "properties": {
+          "path": {"type": "string", "pattern": "^[^/]"},
+          "media_type": {"type": "string"},
+          "bytes": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "scope": {"type": "string"},
+          "rights_ids": {"type": "array", "items": {"type": "string"}},
+          "publishable": {"type": "boolean"},
+          "blocked_reasons": {"type": "array", "items": {"type": "string"}},
+          "asset_name": {"type": "string", "pattern": "^[^/]+$"},
+          "download_url": {"type": "string", "format": "uri"},
+          "compression": {"enum": ["gzip"]},
+          "content_media_type": {"type": "string"},
+          "content_bytes": {"type": "integer", "minimum": 1},
+          "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "format": {"type": "string"},
+          "language_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "corpus_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "tiers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        },
+        "dependentRequired": {
+          "compression": ["content_media_type", "content_bytes", "content_sha256"],
+          "content_media_type": ["compression", "content_bytes", "content_sha256"],
+          "content_bytes": ["compression", "content_media_type", "content_sha256"],
+          "content_sha256": ["compression", "content_media_type", "content_bytes"]
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,252 @@
+name: Build and publish a data release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Public FormosanBank branch, tag, or commit
+        required: true
+        default: main
+        type: string
+      dry_run:
+        description: Build and validate without creating a GitHub release
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: formosanbank-data-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the immutable data release
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      source_commit: ${{ steps.source.outputs.source_commit }}
+    env:
+      SOURCE_REF: ${{ inputs.source_ref }}
+    steps:
+      - name: Check out Kakarayan
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Require an approved software license for a real publication
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [[ ! -f LICENSE && ! -f LICENSE.md ]]; then
+            echo "Data publication is disabled until maintainers add an approved software license."
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+
+      - name: Validate the public source ref
+        shell: bash
+        run: |
+          if [[ ! "$SOURCE_REF" =~ ^[A-Za-z0-9._/-]+$ ]] \
+            || [[ "$SOURCE_REF" == -* ]] \
+            || [[ "$SOURCE_REF" == *".."* ]] \
+            || [[ "$SOURCE_REF" == *"@{"* ]]; then
+            echo "Invalid FormosanBank source ref."
+            exit 1
+          fi
+
+      - name: Check out the exact public FormosanBank source
+        id: source
+        shell: bash
+        run: |
+          git init -q build/formosanbank
+          git -C build/formosanbank remote add origin \
+            https://github.com/FormosanBank/FormosanBank.git
+          git -C build/formosanbank fetch --depth=1 origin "$SOURCE_REF"
+          git -C build/formosanbank checkout --detach FETCH_HEAD
+          SOURCE_COMMIT="$(git -C build/formosanbank rev-parse HEAD)"
+          echo "SOURCE_COMMIT=$SOURCE_COMMIT" >> "$GITHUB_ENV"
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Install locked dependencies
+        run: |
+          uv sync --locked --all-groups
+          uv run ruff check publisher
+          uv run mypy publisher
+
+      - name: Build every research format
+        run: |
+          uv run python -m publisher.cli \
+            --repo build/formosanbank \
+            --output build/data-release \
+            --source-commit "$SOURCE_COMMIT" \
+            --refresh-models \
+            --compress-database \
+            --release-only
+          uv run python -m publisher.verify_release \
+            --release build/data-release \
+            --max-artifact-mib 2048
+
+      - name: Record release ID
+        id: release
+        shell: bash
+        run: |
+          RELEASE_ID="$(python -c \
+            'import json; print(json.load(open("build/data-release/release-manifest.json"))["release_id"])')"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "Validated $RELEASE_ID from FormosanBank $SOURCE_COMMIT"
+
+      - name: Enforce rights decisions for a real publication
+        if: ${{ !inputs.dry_run }}
+        run: |
+          uv run python -m publisher.verify_release \
+            --release build/data-release \
+            --max-artifact-mib 2048 \
+            --require-publishable-scope site-query-data \
+            --require-publishable-scope release-core \
+            --require-publishable-scope prepared-download
+
+      - name: Pack validated output for the publication job
+        if: ${{ !inputs.dry_run }}
+        run: tar -C build/data-release -cf build/data-release.tar .
+
+      - name: Transfer validated output
+        if: ${{ !inputs.dry_run }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: data-release-${{ steps.release.outputs.release_id }}
+          path: build/data-release.tar
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    name: Create a draft GitHub data release
+    if: ${{ !inputs.dry_run }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+    environment:
+      name: data-release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_ID: ${{ needs.build.outputs.release_id }}
+      SOURCE_COMMIT: ${{ needs.build.outputs.source_commit }}
+    steps:
+      - name: Check out Kakarayan
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Download validated output
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: data-release-${{ needs.build.outputs.release_id }}
+          path: build
+
+      - name: Recheck transferred bytes and rights
+        run: |
+          mkdir -p build/data-release
+          tar -C build/data-release -xf build/data-release.tar
+          uv run python -m publisher.verify_release \
+            --release build/data-release \
+            --max-artifact-mib 2048 \
+            --require-publishable-scope site-query-data \
+            --require-publishable-scope release-core \
+            --require-publishable-scope prepared-download
+
+      - name: Create the draft release
+        shell: bash
+        run: |
+          TAG="data-$RELEASE_ID"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 1
+          fi
+          gh release create "$TAG" \
+            --draft \
+            --title "FormosanBank data $RELEASE_ID" \
+            --notes "Immutable public data build from FormosanBank commit $SOURCE_COMMIT. Verify every asset against release-manifest.json and SHA256SUMS. This draft requires maintainer review before publication."
+
+      - name: Upload release assets
+        shell: bash
+        run: |
+          TAG="data-$RELEASE_ID"
+          mkdir -p build/release-assets
+          while IFS=$'\t' read -r path asset_name; do
+            if [[ "$(basename "$path")" != "$asset_name" ]]; then
+              echo "Unsafe asset mapping: $path -> $asset_name"
+              exit 1
+            fi
+            ln "build/data-release/$path" "build/release-assets/$asset_name"
+          done < <(
+            jq -r '.artifacts[] | [.path, .asset_name] | @tsv' \
+              build/data-release/release-manifest.json
+          )
+          ln build/data-release/SHA256SUMS build/release-assets/SHA256SUMS
+          while IFS= read -r asset; do
+            gh release upload "$TAG" "$asset"
+          done < <(find build/release-assets -type f | sort)
+          gh release upload "$TAG" build/data-release/release-manifest.json
+
+      - name: Verify remote release assets
+        shell: bash
+        run: |
+          TAG="data-$RELEASE_ID"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > build/remote-release.json
+          uv run python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path("build/data-release")
+          manifest = json.loads((root / "release-manifest.json").read_text())
+          expected = {
+              item["asset_name"]: (item["bytes"], item["sha256"])
+              for item in manifest["artifacts"]
+          }
+          for name in ("SHA256SUMS", "release-manifest.json"):
+              path = root / name
+              expected[name] = (
+                  path.stat().st_size,
+                  hashlib.sha256(path.read_bytes()).hexdigest(),
+              )
+          remote = json.loads(Path("build/remote-release.json").read_text())
+          actual = {item["name"]: item for item in remote["assets"]}
+          if set(actual) != set(expected):
+              raise SystemExit(
+                  f"Remote asset set differs: missing={sorted(set(expected) - set(actual))}, "
+                  f"extra={sorted(set(actual) - set(expected))}"
+              )
+          for name, (size, digest) in expected.items():
+              item = actual[name]
+              if item["size"] != size:
+                  raise SystemExit(f"Remote size mismatch for {name}")
+              remote_digest = item.get("digest")
+              if remote_digest and remote_digest != f"sha256:{digest}":
+                  raise SystemExit(f"Remote digest mismatch for {name}")
+          print(f"Verified {len(expected)} remote assets for {manifest['release_id']}")
+          PY

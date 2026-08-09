@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/content.schema.json",
+  "title": "Reviewed Kakarayan learning content",
+  "type": "object",
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "target_language_id",
+          "dialects",
+          "interface_language",
+          "title",
+          "summary",
+          "body_markdown",
+          "author",
+          "reviewer",
+          "review_status",
+          "reviewed_at",
+          "citations",
+          "rights"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{2,80}$"},
+          "kind": {"enum": ["grammar-note", "lesson", "paradigm", "usage-note"]},
+          "target_language_id": {"type": "string", "minLength": 1},
+          "dialects": {"type": "array", "items": {"type": "string"}},
+          "interface_language": {"enum": ["en", "zh-Hant"]},
+          "title": {"type": "string", "minLength": 1, "maxLength": 160},
+          "summary": {"type": "string", "minLength": 1, "maxLength": 600},
+          "body_markdown": {"type": "string", "minLength": 1, "maxLength": 100000},
+          "author": {"type": "string", "minLength": 1},
+          "reviewer": {"type": "string", "minLength": 1},
+          "review_status": {"const": "reviewed"},
+          "reviewed_at": {"type": "string", "format": "date"},
+          "citations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "rights": {
+            "type": "object",
+            "required": ["status", "evidence"],
+            "properties": {
+              "status": {"const": "reviewed"},
+              "license_expression": {"type": ["string", "null"]},
+              "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "format": "uri"}
+              }
+            },
+            "additionalProperties": false
+          },
+          "related_queries": {
+            "type": "array",
+            "items": {"$ref": "export-recipe.schema.json"}
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

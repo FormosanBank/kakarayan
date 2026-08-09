@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/model-catalog.schema.json",
+  "title": "Kakarayan public model catalogue",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "provider", "models", "services"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "provider": {"const": "Hugging Face"},
+    "models": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/model"}
+    },
+    "services": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/service"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "model": {
+      "type": "object",
+      "required": [
+        "id",
+        "repository",
+        "task",
+        "url",
+        "license",
+        "languages",
+        "limitations",
+        "framework",
+        "model_family",
+        "artifact_bytes",
+        "evaluation_metrics",
+        "license_source",
+        "intended_use"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^model_"},
+        "repository": {"type": "string", "pattern": "^FormosanBank/"},
+        "task": {"enum": ["translation", "automatic-speech-recognition"]},
+        "url": {"type": "string", "format": "uri"},
+        "license": {"type": "string"},
+        "languages": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "direction": {"type": ["string", "null"]},
+        "framework": {"type": "string"},
+        "model_family": {"type": "string"},
+        "artifact_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "evaluation_metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "value"],
+            "properties": {
+              "name": {"type": "string"},
+              "value": {"type": ["string", "number", "integer", "boolean", "null"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "license_source": {"type": "string"},
+        "intended_use": {"type": "string"},
+        "last_modified": {"type": ["string", "null"], "format": "date-time"},
+        "limitations": {"type": "string"},
+        "training_lineage": {"type": "string"},
+        "browser_service_id": {"type": ["string", "null"]}
+      },
+      "additionalProperties": false
+    },
+    "service": {
+      "type": "object",
+      "required": [
+        "id",
+        "space",
+        "url",
+        "api_url",
+        "api_name",
+        "tasks",
+        "supported_languages",
+        "status",
+        "checked_at",
+        "third_party_notice"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^service_"},
+        "space": {"type": "string", "pattern": "^FormosanBank/"},
+        "url": {"type": "string", "format": "uri"},
+        "api_url": {"type": ["string", "null"], "format": "uri"},
+        "api_name": {"type": ["string", "null"], "pattern": "^/"},
+        "tasks": {
+          "type": "array",
+          "items": {"enum": ["translation", "automatic-speech-recognition"]},
+          "minItems": 1
+        },
+        "supported_languages": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "status": {"enum": ["available", "sleeping", "unavailable", "unchecked"]},
+        "checked_at": {"type": ["string", "null"], "format": "date-time"},
+        "third_party_notice": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}

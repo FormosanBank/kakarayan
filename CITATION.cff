@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: >-
+  Cite Kakarayan, the exact data release, FormosanBank, and every required
+  corpus-specific source when using this software or its derived data.
+title: Kakarayan
+type: software
+version: 0.1.0
+date-released: "2026-07-30"
+url: https://github.com/FormosanBank/kakarayan
+repository-code: https://github.com/FormosanBank/kakarayan
+authors:
+  - given-names: Gabriel
+    family-names: Gras
+  - given-names: Hunter
+    family-names: Scheppat
+preferred-citation:
+  type: software
+  title: Kakarayan
+  authors:
+    - given-names: Gabriel
+      family-names: Gras
+    - given-names: Hunter
+      family-names: Scheppat
+  version: 0.1.0
+  url: https://github.com/FormosanBank/kakarayan
