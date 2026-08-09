@@ -308,7 +308,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               </select>
             </label>
             <label className="field">
-              {tx("Optional query", "選用查詢")}
+              {tx("Query", "查詢")}
               <input
                 value={query}
                 maxLength={256}

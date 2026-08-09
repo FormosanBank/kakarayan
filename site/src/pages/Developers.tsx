@@ -23,7 +23,6 @@ export function Developers({data}: {data: AppData}) {
       <PageIntro title={t("developers.title")} />
       <section className="api-choice">
         <article className="api-choice__primary">
-          <p className="eyebrow">{tx("Always available with the site", "隨網站一併提供")}</p>
           <h2>{tx("Static API v1", "靜態 API v1")}</h2>
           <p>
             {tx(
@@ -35,7 +34,6 @@ export function Developers({data}: {data: AppData}) {
           <span className="status status--available">{tx("release-pinned", "固定版本")}</span>
         </article>
         <article>
-          <p className="eyebrow">{tx("Optional no-cost service", "選用的免費服務")}</p>
           <h2>{tx("Live REST API", "即時 REST API")}</h2>
           <p>
             {tx(
@@ -51,7 +49,6 @@ export function Developers({data}: {data: AppData}) {
       </section>
       <section className="endpoint-section">
         <div className="section-heading">
-          <p className="eyebrow">{tx("Static contract", "靜態介面契約")}</p>
           <h2>{tx("Public JSON endpoints", "公開 JSON 端點")}</h2>
         </div>
         <div className="endpoint-list">
@@ -106,7 +103,6 @@ languages[, c("id", "name", "iso639_3")]`}</code>
       </section>
       <section className="data-contract">
         <div className="section-heading">
-          <p className="eyebrow">{tx("Data contract", "資料契約")}</p>
           <h2>{tx("Export row fields", "匯出資料列欄位")}</h2>
           <p>{tx("The browser dataset builder projects XML into these explicit columns. Structured JSON and JSON Lines retain the complete nested record.", "瀏覽器資料集產生器會將 XML 投影為這些明確欄位。結構化 JSON 與 JSON Lines 會保留完整巢狀記錄。")}</p>
         </div>
@@ -127,12 +123,11 @@ languages[, c("id", "name", "iso639_3")]`}</code>
       </section>
       <section className="client-section">
         <div className="section-heading">
-          <p className="eyebrow">{tx("Repository clients", "儲存庫用戶端")}</p>
           <h2>{tx("JavaScript, Python, and R", "JavaScript、Python 與 R")}</h2>
           <p>
             {tx(
-              "Each client supports release pinning, verified static search shards, timeouts, and the optional live API.",
-              "每個用戶端都支援固定版本、經驗證的靜態搜尋分片、逾時設定與選用的即時 API。",
+              "Each client supports release pinning, verified static search shards, timeouts, and the live API.",
+              "每個用戶端都支援固定版本、經驗證的靜態搜尋分片、逾時設定與即時 API。",
             )}
           </p>
         </div>

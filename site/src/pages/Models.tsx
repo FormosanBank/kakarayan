@@ -64,7 +64,7 @@ export function Models({data}: {data: AppData}) {
         <div><dt>{tx("Registered models", "登錄模型")}</dt><dd>{number(data.models.models.length)}</dd></div>
         <div><dt>{tx("Evaluation reported", "已提供評估")}</dt><dd>{number(evaluatedCount)}</dd></div>
         <div><dt>{tx("License identified", "已辨識授權")}</dt><dd>{number(licensedCount)}</dd></div>
-        <div><dt>{tx("Services available now", "目前可用服務")}</dt><dd>{number(availableServices)}</dd></div>
+        <div><dt>{tx("Available services", "可用服務")}</dt><dd>{number(availableServices)}</dd></div>
       </dl>
       <div className="model-toolbar">
         <div className="segmented">
@@ -167,11 +167,11 @@ export function Models({data}: {data: AppData}) {
       </div>
       {!models.length && (
         <div className="empty-state">
-          {tx("No public models are registered for this task.", "此任務沒有登錄公開模型。")}
+          {tx("No models are registered for this task.", "此任務沒有登錄模型。")}
         </div>
       )}
       <section className="service-register">
-        <h2>{tx("Optional public services", "選用公開服務")}</h2>
+        <h2>{tx("Services", "服務")}</h2>
         {data.models.services.map((service) => (
           <article key={service.id}>
             <div>

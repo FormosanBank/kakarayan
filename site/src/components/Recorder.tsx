@@ -282,7 +282,7 @@ export function Recorder({
       {audio && (
         <div className="asr-panel">
           <div className="tool-heading">
-            <h4>{tx("Optional automatic transcript", "選用自動轉錄")}</h4>
+            <h4>{tx("Automatic transcript", "自動轉錄")}</h4>
             <span className={`status status--${service?.status ?? "unavailable"}`}>
               {service?.status ?? "unavailable"}
             </span>
@@ -309,7 +309,7 @@ export function Recorder({
             </p>
           )}
           <label className="field">
-            {tx("Optional human reference transcript", "選用人工參考轉錄")}
+            {tx("Reference transcript", "參考轉錄")}
             <textarea
               value={reference}
               onChange={(event) => setReference(event.target.value)}

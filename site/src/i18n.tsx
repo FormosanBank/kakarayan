@@ -58,7 +58,7 @@ const messages = {
     "search.research": "Research view",
     "learn.title": "Learn from corpus examples",
     "learn.lede":
-      "Save words or sentences, review them here, and try optional MT or ASR.",
+      "Save words or sentences, review them here, and use MT or ASR.",
     "learn.lookup": "Dictionary and examples",
     "learn.deck": "Study deck",
     "learn.practice": "Pronunciation",
@@ -74,7 +74,7 @@ const messages = {
       "Choose a research format with provenance, checksums, citations, and corpus-specific rights.",
     "developers.title": "Build with FormosanBank",
     "developers.lede":
-      "Use the versioned static JSON API or the optional live API.",
+      "Use the versioned static JSON API or the live API.",
     "models.title": "Public language models",
     "models.lede":
       "Check FormosanBank MT and ASR models, licenses, limits, and service status.",
@@ -127,7 +127,7 @@ const messages = {
     "search.save": "儲存到字卡",
     "search.research": "研究檢視",
     "learn.title": "從語料例句學習",
-    "learn.lede": "儲存單詞或例句、在此複習，並選用機器翻譯或語音辨識。",
+    "learn.lede": "儲存單詞或例句、在此複習，並使用機器翻譯或語音辨識。",
     "learn.lookup": "詞典與例句",
     "learn.deck": "學習字卡",
     "learn.practice": "發音練習",
@@ -141,7 +141,7 @@ const messages = {
     "download.title": "下載公開資料",
     "download.lede": "選擇研究格式，並保留來源、校驗碼、引用與各語料庫權利資訊。",
     "developers.title": "使用 FormosanBank 開發",
-    "developers.lede": "使用具版本的靜態 JSON API 或選用的即時 API。",
+    "developers.lede": "使用具版本的靜態 JSON API 或即時 API。",
     "models.title": "公開語言模型",
     "models.lede": "查看 FormosanBank 機器翻譯與語音辨識模型、授權、限制及服務狀態。",
     "about.title": "關於 Kakarayan",

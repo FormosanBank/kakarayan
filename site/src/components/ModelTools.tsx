@@ -244,7 +244,7 @@ export function TranslationTool({
       )}
       {language && (
         <div className="model-disclosure model-disclosure--summary">
-          <strong>{tx("Selected capability", "所選功能")}</strong>
+          <strong>{tx("Model", "模型")}</strong>
           <span>{model ? model.repository : tx("No language-specific MT model is registered.", "沒有登錄此語言專用的機器翻譯模型。")}</span>
           {model && <span>{tx("License", "授權")} {model.license}</span>}
           <Link to={`/lookup?type=sentences&language=${encodeURIComponent(language.id)}&mode=translation`}>

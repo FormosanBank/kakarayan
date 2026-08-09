@@ -176,7 +176,7 @@ export function Summaries({data}: {data: AppData}) {
               value={collocate}
               maxLength={80}
               onChange={(event) => setCollocate(event.target.value)}
-              placeholder={tx("Optional, ±2 tokens", "選用，前後各 2 個詞元")}
+              placeholder={tx("±2 tokens", "前後各 2 個詞元")}
             />
           </label>
           <label className="field">
