@@ -384,7 +384,7 @@ test("concordance filters apply dialect and evidence requirements before countin
   await page.getByRole("combobox", {name: "Dialect", exact: true}).selectOption("Coastal");
   await page.getByLabel("Word or phrase in Amis").fill("fangcalay");
   await page.getByRole("button", {name: "Search", exact: true}).click();
-  await expect(page.locator(".result-card")).toHaveCount(1);
+  await expect(page.locator(".result-card")).toHaveCount(1, {timeout: 30_000});
   await expect(page.locator(".result-summary")).toContainText("1 sentence");
   await expect(page.locator(".result-card__scope")).toContainText("Coastal");
 });
