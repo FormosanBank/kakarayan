@@ -808,6 +808,27 @@ def _write_search_data(
                 "corpus_id": corpus_id,
                 "part": scope_part,
                 "records": len(current_records),
+                "unit_counts": {
+                    "texts": len({str(record["text_id"]) for record in current_records}),
+                    "sentences": len(current_records),
+                    "words": sum(
+                        len(cast(list[dict[str, object]], record["words"]))
+                        for record in current_records
+                    ),
+                    "morphemes": sum(
+                        len(cast(list[dict[str, object]], word["morphemes"]))
+                        for record in current_records
+                        for word in cast(list[dict[str, object]], record["words"])
+                    ),
+                    "tokens": sum(
+                        len(cast(list[dict[str, object]], record["tokens"]))
+                        for record in current_records
+                    ),
+                    "audio": sum(
+                        len(cast(list[dict[str, object]], record["audio"]))
+                        for record in current_records
+                    ),
+                },
                 "bytes": len(data),
                 "uncompressed_bytes": len(uncompressed),
                 "sha256": hashlib.sha256(data).hexdigest(),

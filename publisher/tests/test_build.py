@@ -57,6 +57,14 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert search_response["source"]["commit"] == first.source.commit
     assert search_response["canonical_url"].endswith("/api/v1/search/manifest.json")
     assert search_manifest["shards"][0]["records"] == 2
+    assert search_manifest["shards"][0]["unit_counts"] == {
+        "audio": 1,
+        "morphemes": 1,
+        "sentences": 2,
+        "texts": 1,
+        "tokens": 4,
+        "words": 2,
+    }
     assert search_manifest["shards"][0]["language_id"] == "lang_amis"
     assert search_manifest["shards"][0]["path"].endswith(".json.gz")
     assert (

@@ -92,6 +92,19 @@
           "corpus_id": {"type": "string", "pattern": "^corpus_"},
           "part": {"type": "integer", "minimum": 0},
           "records": {"type": "integer", "minimum": 1, "maximum": 1000},
+          "unit_counts": {
+            "type": "object",
+            "required": ["texts", "sentences", "words", "morphemes", "tokens", "audio"],
+            "properties": {
+              "texts": {"type": "integer", "minimum": 1, "maximum": 1000},
+              "sentences": {"type": "integer", "minimum": 1, "maximum": 1000},
+              "words": {"type": "integer", "minimum": 0},
+              "morphemes": {"type": "integer", "minimum": 0},
+              "tokens": {"type": "integer", "minimum": 0},
+              "audio": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": false
+          },
           "bytes": {"type": "integer", "minimum": 1},
           "uncompressed_bytes": {"type": "integer", "minimum": 1},
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},

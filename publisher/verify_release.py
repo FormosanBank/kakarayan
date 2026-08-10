@@ -127,6 +127,21 @@ def _verify_search(root: Path) -> None:
         records = json.loads(content)
         if not isinstance(records, list) or len(records) != shard["records"]:
             raise VerificationError(f"Search record count mismatch: {shard['path']}")
+        if "unit_counts" in shard:
+            actual_unit_counts = {
+                "texts": len({str(record["text_id"]) for record in records}),
+                "sentences": len(records),
+                "words": sum(len(record["words"]) for record in records),
+                "morphemes": sum(
+                    len(word["morphemes"])
+                    for record in records
+                    for word in record["words"]
+                ),
+                "tokens": sum(len(record["tokens"]) for record in records),
+                "audio": sum(len(record["audio"]) for record in records),
+            }
+            if shard["unit_counts"] != actual_unit_counts:
+                raise VerificationError(f"Search unit counts mismatch: {shard['path']}")
         scope = (str(shard["language_id"]), str(shard["corpus_id"]))
         parts = scope_parts.setdefault(scope, set())
         part = int(shard["part"])

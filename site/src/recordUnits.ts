@@ -2,6 +2,16 @@ import type {SearchForm, SearchRecord} from "./types";
 
 export type RecordUnit = "text" | "sentence" | "word" | "morpheme" | "token" | "audio";
 
+export function recordHasUnit(record: SearchRecord, unit: RecordUnit): boolean {
+  if (unit === "word") return record.words.length > 0;
+  if (unit === "morpheme") {
+    return record.words.some((word) => word.morphemes.length > 0);
+  }
+  if (unit === "token") return record.tokens.length > 0;
+  if (unit === "audio") return record.audio.length > 0;
+  return true;
+}
+
 function formText(forms: SearchForm[], kind: string): string {
   return forms.find((form) => form.kind === kind)?.text ?? "";
 }

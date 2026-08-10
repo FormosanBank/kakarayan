@@ -132,6 +132,14 @@ export interface SearchShard {
   corpus_id: string;
   part: number;
   records: number;
+  unit_counts?: {
+    texts: number;
+    sentences: number;
+    words: number;
+    morphemes: number;
+    tokens: number;
+    audio: number;
+  };
   bytes: number;
   uncompressed_bytes: number;
   sha256: string;

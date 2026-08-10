@@ -19,6 +19,7 @@ import {downloadExport, type ExportFormat} from "../exports";
 import {useI18n} from "../i18n";
 import {
   projectRecordUnits,
+  recordHasUnit,
   type RecordUnit,
 } from "../recordUnits";
 import {Link, useSearchParams} from "../routing";
@@ -34,6 +35,10 @@ function size(bytes: number): string {
     unit += 1;
   }
   return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
+}
+
+function unitCountKey(unit: RecordUnit): "texts" | "sentences" | "words" | "morphemes" | "tokens" | "audio" {
+  return unit === "audio" ? "audio" : `${unit}s`;
 }
 
 export function DatasetBuilder({data}: {data: AppData}) {
@@ -106,13 +111,25 @@ export function DatasetBuilder({data}: {data: AppData}) {
     ),
     [corpusIds, data.search.shards, languageIds],
   );
+  const unitShards = useMemo(
+    () => shards.filter((shard) => {
+      if (!shard.unit_counts || recordUnit === "sentence") return true;
+      return shard.unit_counts[unitCountKey(recordUnit)] > 0;
+    }),
+    [recordUnit, shards],
+  );
   const indexes = useMemo(
     () => data.search.indexes.filter(
       (index) => languageIds.includes(index.language_id) && (!corpusIds.length || corpusIds.includes(index.corpus_id)),
     ),
     [corpusIds, data.search.indexes, languageIds],
   );
-  const estimate = useMemo(() => estimateScope(shards), [shards]);
+  const estimate = useMemo(() => estimateScope(unitShards), [unitShards]);
+  const exactUnitRows = useMemo(() => {
+    if (!unitShards.length || unitShards.some((shard) => !shard.unit_counts)) return null;
+    const key = unitCountKey(recordUnit);
+    return unitShards.reduce((total, shard) => total + (shard.unit_counts?.[key] ?? 0), 0);
+  }, [recordUnit, unitShards]);
   const selectedCorpora = corpusIds.length
     ? data.corpora.filter((corpus) => corpusIds.includes(corpus.id))
     : corpora;
@@ -122,7 +139,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
     .filter((entry) => entry && entry.redistribution !== "allowed");
   const overMemoryBudget = estimate.uncompressedBytes > 1024 ** 3;
   const selectedSourceRows = matchingSourceRows ?? estimate.records;
-  const estimatedProjectedRows = Math.round(selectedSourceRows * projectionRatio);
+  const estimatedProjectedRows = !dialects.length &&
+      !requirements.length && !query.trim() && exactUnitRows !== null
+    ? exactUnitRows
+    : Math.round(selectedSourceRows * projectionRatio);
   const expectedRows = maxRows === null
     ? estimatedProjectedRows
     : Math.min(maxRows, estimatedProjectedRows);
@@ -137,9 +157,24 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const previewSelection = useCallback(async (signal: AbortSignal) => {
     const sampleLimit = Math.min(500, estimate.records);
     const result = query.trim()
-      ? await searchRecords(shards, query.trim(), mode, signal, sampleLimit, indexes)
+      ? await searchRecords(
+          unitShards,
+          query.trim(),
+          mode,
+          signal,
+          sampleLimit,
+          indexes,
+          "",
+          "sentence",
+          (record) => recordHasUnit(record, recordUnit),
+        )
       : null;
-    const sourceRecords = result?.records ?? await loadPreviewRecords(shards, signal, sampleLimit);
+    const sourceRecords = result?.records ?? await loadPreviewRecords(
+      unitShards,
+      signal,
+      sampleLimit,
+      (record) => recordHasUnit(record, recordUnit),
+    );
     const filtered = sourceRecords.filter((record) => recordMeetsFilters(record, dialects, requirements));
     const baseRows = result?.matches ?? estimate.records;
     const filterRatio = sourceRecords.length ? filtered.length / sourceRecords.length : 0;
@@ -150,7 +185,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     setMatchingSourceRows(filteredRows);
     setProjectionRatio(filtered.length ? projected.length / filtered.length : 0);
     setPreview(projected.slice(0, 12));
-  }, [dialects, estimate.records, indexes, mode, query, recordUnit, requirements, shards]);
+  }, [dialects, estimate.records, indexes, mode, query, recordUnit, requirements, unitShards]);
 
   useEffect(() => {
     if (!languageId) return;
@@ -191,10 +226,25 @@ export function DatasetBuilder({data}: {data: AppData}) {
         );
       }
       sourceRecords = (
-        await searchRecords(shards, query.trim(), mode, signal, sourceLimit, indexes)
+        await searchRecords(
+          unitShards,
+          query.trim(),
+          mode,
+          signal,
+          sourceLimit,
+          indexes,
+          "",
+          "sentence",
+          (record) => recordHasUnit(record, recordUnit),
+        )
       ).records;
     } else {
-      sourceRecords = await loadPreviewRecords(shards, signal, sourceLimit);
+      sourceRecords = await loadPreviewRecords(
+        unitShards,
+        signal,
+        sourceLimit,
+        (record) => recordHasUnit(record, recordUnit),
+      );
     }
     const filtered = sourceRecords.filter((record) => recordMeetsFilters(record, dialects, requirements));
     const projected = projectRecordUnits(filtered, recordUnit);
