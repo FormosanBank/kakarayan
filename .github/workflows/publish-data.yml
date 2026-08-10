@@ -182,7 +182,11 @@ jobs:
         shell: bash
         run: |
           TAG="data-$RELEASE_ID"
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          EXISTING_RELEASE_ID="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"$TAG\") | .id"
+          )"
+          if [[ -n "$EXISTING_RELEASE_ID" ]]; then
             echo "Release $TAG already exists."
             exit 1
           fi
@@ -216,7 +220,15 @@ jobs:
         shell: bash
         run: |
           TAG="data-$RELEASE_ID"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > build/remote-release.json
+          REMOTE_RELEASE_ID="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"$TAG\") | .id"
+          )"
+          if [[ -z "$REMOTE_RELEASE_ID" ]]; then
+            echo "Draft release $TAG was not found."
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/$REMOTE_RELEASE_ID" > build/remote-release.json
           uv run python - <<'PY'
           import hashlib
           import json
