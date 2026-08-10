@@ -416,6 +416,12 @@ test("dataset recipes and worker summaries are available without a backend", asy
   ).toBeVisible({timeout: 30_000});
   await expect(page.getByText(/First \d+ word rows/)).toBeVisible();
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  const corpusSelect = page.getByRole("combobox", {name: "Corpus", exact: true}).first();
+  const corpusLabels = await corpusSelect.locator("option").allTextContents();
+  if (!corpusLabels.includes("TestCorpus")) {
+    expect(corpusLabels).toContain("NTUFormosanCorpus");
+    await corpusSelect.selectOption({label: "NTUFormosanCorpus"});
+  }
   await page.getByLabel("Record unit").selectOption("morpheme");
   await expect(page.getByText(/First \d+ morpheme rows/)).toBeVisible({timeout: 30_000});
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
