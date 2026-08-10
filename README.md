@@ -209,9 +209,10 @@ CI supplies PostgreSQL and also builds the API container.
 
 - Pull requests run checks only. They cannot deploy Pages, create releases, or access the
   Hugging Face credential.
-- `deploy-pages.yml` runs only from `main` or an explicit dispatch. It pins the public source
-  commit, checks rights, enforces a 900 MiB site budget and 50 MiB file budget, reruns browser
-  checks, and deploys one saved Pages artifact.
+- `deploy-pages.yml` runs for relevant `main` changes, published `data-fb-*` releases, or an
+  explicit dispatch. It verifies the release's saved browser bundle, checks rights, enforces
+  a 900 MiB site budget and 50 MiB file budget, reruns production browser checks, and deploys
+  one saved Pages artifact without rebuilding the corpus.
 - `publish-data.yml` defaults to a dry run. A real dispatch rechecks all artifact bytes and
   rights in a separate write-enabled job, then creates a draft GitHub release. It never
   publishes that draft automatically.

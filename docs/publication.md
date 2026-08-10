@@ -7,7 +7,9 @@ Pages workflow, data-release workflow, and direct-browser MT and ASR service con
 Repository administrators still control settings that a writer cannot change:
 
 1. In **Settings > Pages**, set the source to **GitHub Actions**.
-2. Give the `github-pages` environment the desired protection rules.
+2. Give the `github-pages` environment custom deployment policies for the `main` branch
+   and `data-fb-*` tags. The tag policy is required because publishing a data release
+   triggers Pages from that immutable release tag.
 3. Require maintainer approval for the `data-release` environment.
 4. In **Settings > Code security**, enable the dependency graph. This is repository
    metadata analysis and does not run a corpus build.
@@ -22,7 +24,8 @@ must create a public Hugging Face Docker Space, set `HF_SPACE_REPO`, add a narro
 Checked on 2026-08-10:
 
 - Pages uses GitHub Actions and is public at `https://formosanbank.github.io/kakarayan/`.
-- The `data-release` and `github-pages` environments exist.
+- The `data-release` and `github-pages` environments exist. The Pages environment accepts
+  `main` and `data-fb-*` release tags.
 - A reviewed software license and the first immutable data release are published.
 - The dependency graph remains unavailable, so dependency review reports a warning and
   skips instead of blocking unrelated checks.
