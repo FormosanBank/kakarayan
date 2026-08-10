@@ -19,17 +19,92 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Resolve immutable publication inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      source_commit: ${{ steps.source.outputs.source_commit }}
+    env:
+      SOURCE_REF: ${{ inputs.source_ref }}
+    steps:
+      - name: Check out Kakarayan
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+
+      - name: Validate the public source ref
+        shell: bash
+        run: |
+          if [[ ! "$SOURCE_REF" =~ ^[A-Za-z0-9._/-]+$ ]] \
+            || [[ "$SOURCE_REF" == -* ]] \
+            || [[ "$SOURCE_REF" == *".."* ]] \
+            || [[ "$SOURCE_REF" == *"@{"* ]]; then
+            echo "Invalid FormosanBank source ref."
+            exit 1
+          fi
+
+      - name: Resolve the exact public FormosanBank source
+        id: source
+        shell: bash
+        run: |
+          git init -q build/formosanbank
+          git -C build/formosanbank remote add origin \
+            https://github.com/FormosanBank/FormosanBank.git
+          git -C build/formosanbank fetch --depth=1 origin "$SOURCE_REF"
+          SOURCE_COMMIT="$(git -C build/formosanbank rev-parse FETCH_HEAD)"
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "Resolved FormosanBank $SOURCE_REF to $SOURCE_COMMIT"
+
+      - name: Capture one public model catalogue for both builds
+        run: |
+          mkdir -p build/publication-inputs
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from publisher.model_catalog import build_model_catalog
+
+          Path("build/publication-inputs/models.json").write_text(
+              json.dumps(
+                  build_model_catalog(),
+                  ensure_ascii=False,
+                  sort_keys=True,
+                  separators=(",", ":"),
+              )
+              + "\n",
+              encoding="utf-8",
+              newline="\n",
+          )
+          PY
+
+      - name: Transfer immutable publication inputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: publication-inputs-${{ github.run_id }}
+          path: build/publication-inputs/models.json
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
   build:
-    name: Build the immutable data release
+    name: Build every research format
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 360
     permissions:
       contents: read
     outputs:
       release_id: ${{ steps.release.outputs.release_id }}
-      source_commit: ${{ steps.source.outputs.source_commit }}
     env:
-      SOURCE_REF: ${{ inputs.source_ref }}
+      SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
     steps:
       - name: Check out Kakarayan
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -54,29 +129,19 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Validate the public source ref
-        shell: bash
-        run: |
-          if [[ ! "$SOURCE_REF" =~ ^[A-Za-z0-9._/-]+$ ]] \
-            || [[ "$SOURCE_REF" == -* ]] \
-            || [[ "$SOURCE_REF" == *".."* ]] \
-            || [[ "$SOURCE_REF" == *"@{"* ]]; then
-            echo "Invalid FormosanBank source ref."
-            exit 1
-          fi
-
       - name: Check out the exact public FormosanBank source
-        id: source
-        shell: bash
         run: |
           git init -q build/formosanbank
           git -C build/formosanbank remote add origin \
             https://github.com/FormosanBank/FormosanBank.git
-          git -C build/formosanbank fetch --depth=1 origin "$SOURCE_REF"
+          git -C build/formosanbank fetch --depth=1 origin "$SOURCE_COMMIT"
           git -C build/formosanbank checkout --detach FETCH_HEAD
-          SOURCE_COMMIT="$(git -C build/formosanbank rev-parse HEAD)"
-          echo "SOURCE_COMMIT=$SOURCE_COMMIT" >> "$GITHUB_ENV"
-          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Download immutable publication inputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication-inputs-${{ github.run_id }}
+          path: build/publication-inputs
 
       - name: Install locked dependencies
         run: |
@@ -84,13 +149,13 @@ jobs:
           uv run ruff check publisher
           uv run mypy publisher
 
-      - name: Build every research format
+      - name: Build and verify every research format
         run: |
           uv run python -m publisher.cli \
             --repo build/formosanbank \
             --output build/data-release \
             --source-commit "$SOURCE_COMMIT" \
-            --refresh-models \
+            --model-catalog build/publication-inputs/models.json \
             --compress-database \
             --release-only
           uv run python -m publisher.verify_release \
@@ -99,28 +164,25 @@ jobs:
 
       - name: Record release ID
         id: release
-        shell: bash
         run: |
-          RELEASE_ID="$(python -c \
-            'import json; print(json.load(open("build/data-release/release-manifest.json"))["release_id"])')"
+          RELEASE_ID="$(jq -r .release_id build/data-release/release-manifest.json)"
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Validated $RELEASE_ID from FormosanBank $SOURCE_COMMIT"
 
-      - name: Enforce rights decisions for a real publication
+      - name: Enforce research-format rights for a real publication
         if: ${{ !inputs.dry_run }}
         run: |
           uv run python -m publisher.verify_release \
             --release build/data-release \
             --max-artifact-mib 2048 \
-            --require-publishable-scope site-query-data \
             --require-publishable-scope release-core \
             --require-publishable-scope prepared-download
 
-      - name: Pack validated output for the publication job
+      - name: Pack validated research output
         if: ${{ !inputs.dry_run }}
         run: tar -C build/data-release -cf build/data-release.tar .
 
-      - name: Transfer validated output
+      - name: Transfer validated research output
         if: ${{ !inputs.dry_run }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -130,10 +192,93 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
+  site:
+    name: Build browser search data
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    env:
+      SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+    steps:
+      - name: Check out Kakarayan
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+
+      - name: Check out the exact public FormosanBank source
+        run: |
+          git init -q build/formosanbank
+          git -C build/formosanbank remote add origin \
+            https://github.com/FormosanBank/FormosanBank.git
+          git -C build/formosanbank fetch --depth=1 origin "$SOURCE_COMMIT"
+          git -C build/formosanbank checkout --detach FETCH_HEAD
+
+      - name: Download immutable publication inputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: publication-inputs-${{ github.run_id }}
+          path: build/publication-inputs
+
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+
+      - name: Build and verify browser search data
+        run: |
+          uv run python -m publisher.cli \
+            --repo build/formosanbank \
+            --output build/site-release \
+            --source-commit "$SOURCE_COMMIT" \
+            --model-catalog build/publication-inputs/models.json \
+            --site-only
+          uv run python -m publisher.verify_release \
+            --release build/site-release \
+            --require-publishable-scope site-query-data
+
+      - name: Record release ID
+        id: release
+        run: |
+          RELEASE_ID="$(jq -r .release_id build/site-release/release-manifest.json)"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+          echo "Validated browser data for $RELEASE_ID"
+
+      - name: Pack validated browser search data
+        if: ${{ !inputs.dry_run }}
+        run: |
+          uv run python -m publisher.site_bundle pack \
+            --release build/site-release \
+            --output build/site-release.tar
+
+      - name: Transfer validated browser search data
+        if: ${{ !inputs.dry_run }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: site-release-${{ steps.release.outputs.release_id }}
+          path: build/site-release.tar
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
   publish:
     name: Create a draft GitHub data release
     if: ${{ !inputs.dry_run }}
-    needs: build
+    needs:
+      - prepare
+      - build
+      - site
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -143,7 +288,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_ID: ${{ needs.build.outputs.release_id }}
-      SOURCE_COMMIT: ${{ needs.build.outputs.source_commit }}
+      SITE_RELEASE_ID: ${{ needs.site.outputs.release_id }}
+      SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
     steps:
       - name: Check out Kakarayan
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -161,16 +307,32 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --all-groups
 
-      - name: Download validated output
+      - name: Require matching parallel builds
+        run: |
+          if [[ "$RELEASE_ID" != "$SITE_RELEASE_ID" ]]; then
+            echo "Research and browser builds produced different release IDs."
+            exit 1
+          fi
+
+      - name: Download validated research output
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: data-release-${{ needs.build.outputs.release_id }}
           path: build
 
-      - name: Recheck transferred bytes and rights
+      - name: Download validated browser search data
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: site-release-${{ needs.site.outputs.release_id }}
+          path: build
+
+      - name: Join and recheck the validated publication
         run: |
           mkdir -p build/data-release
           tar -C build/data-release -xf build/data-release.tar
+          uv run python -m publisher.site_bundle attach \
+            --release build/data-release \
+            --bundle build/site-release.tar
           uv run python -m publisher.verify_release \
             --release build/data-release \
             --max-artifact-mib 2048 \
@@ -193,7 +355,7 @@ jobs:
           gh release create "$TAG" \
             --draft \
             --title "FormosanBank data $RELEASE_ID" \
-            --notes "Immutable public data build from FormosanBank commit $SOURCE_COMMIT. Verify every asset against release-manifest.json and SHA256SUMS. This draft requires maintainer review before publication."
+            --notes "Immutable public data build from FormosanBank commit $SOURCE_COMMIT. Research exports and the Pages search bundle were built in parallel from identical inputs and verified before upload. This draft requires maintainer review before publication."
 
       - name: Upload release assets
         shell: bash

@@ -269,7 +269,7 @@ def verify_release(
         )
     elif database:
         _verify_database(root / "formosanbank.sqlite")
-    if any(artifact["scope"] == "site-query-data" for artifact in artifacts):
+    if any(str(artifact["path"]).startswith(("api/", "search/")) for artifact in artifacts):
         _verify_search(root)
     return manifest
 

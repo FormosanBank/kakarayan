@@ -145,6 +145,13 @@ GitHub Releases receive approved bulk packages and the SQLite snapshot. The gene
 public catalogue points to ten curated whole-release `data-<release-id>` assets; granular
 language and corpus selections are handled by the browser dataset builder.
 
+The data workflow builds research exports and browser search data in parallel from one
+resolved FormosanBank commit and one captured model catalogue. The browser output is stored
+as a deterministic, checksummed `site-release.tar` asset inside the immutable data release.
+Pages verifies and extracts that bundle instead of parsing the full corpus again. This also
+lets application-only deployments reuse an existing data release while preserving the
+source and producer revisions recorded inside its manifest.
+
 The indexed full-corpus rehearsal for public FormosanBank commit
 `40fd519cd82295bd7824e207990d277b871ad47f` produced about 319 MiB of Pages data across
 642 files. Its largest compressed shard was about 23.2 MiB and its largest vocabulary index
