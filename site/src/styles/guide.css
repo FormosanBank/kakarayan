@@ -1,151 +1,37 @@
-.guide-page {
-  --guide-index: 216px;
-}
-
 .guide-browser {
-  display: grid;
   min-height: 720px;
-  grid-template-columns: var(--guide-index) minmax(0, 1fr);
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: 12px;
   background: var(--canvas);
 }
 
-.guide-browser__index {
-  display: flex;
-  min-width: 0;
-  padding: 22px 16px;
-  border-right: 1px solid var(--hairline);
-  flex-direction: column;
-  background: var(--surface-soft);
-}
-
-.guide-browser__index h2 {
-  margin: 0 8px 14px;
-  color: var(--body);
-  font-family: var(--font-body);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.guide-browser__index nav {
-  display: grid;
-  gap: 4px;
-}
-
-.guide-browser__index nav button {
-  display: flex;
-  width: 100%;
-  min-height: 36px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 9999px;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  color: var(--charcoal);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-}
-
-.guide-browser__index nav button[aria-pressed="true"] {
-  color: var(--canvas);
-  background: var(--ink);
-}
-
-.guide-browser__index nav small {
-  color: inherit;
-  font-family: var(--mono);
-  font-size: 9px;
-}
-
-.guide-browser__context {
-  display: grid;
-  gap: 3px;
-  padding: 14px 8px;
-  margin-top: 16px;
-  border-top: 1px solid var(--hairline);
-  border-bottom: 1px solid var(--hairline);
-}
-
-.guide-browser__context span,
-.guide-browser__note {
-  color: var(--body);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.guide-browser__context strong {
-  overflow-wrap: anywhere;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.guide-browser__note {
-  margin: 18px 8px 0;
-}
-
-.guide-browser__index > a {
-  margin: auto 8px 0;
-  color: var(--body);
-  font-size: 12px;
-}
-
-.guide-browser__reader {
-  min-width: 0;
-}
-
 .guide-browser__bar {
   display: flex;
-  min-height: 68px;
+  min-height: 56px;
   gap: 20px;
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--hairline);
   align-items: center;
   justify-content: space-between;
-}
-
-.guide-browser__bar span {
-  display: block;
-  color: var(--body);
-  font-size: 10px;
-  font-weight: 500;
 }
 
 .guide-browser__bar h2 {
-  margin: 2px 0 0;
-  font-size: 16px;
+  margin: 0;
+  font-size: 15px;
   font-weight: 600;
 }
 
-.guide-browser__actions {
-  display: flex;
+.guide-browser__bar a {
   flex: 0 0 auto;
-  gap: 12px;
-  align-items: center;
-}
-
-.guide-browser__actions .guide-browser__language {
-  min-width: 32px;
-  padding: 4px 7px;
-  border: 1px solid var(--hairline-strong);
-  border-radius: 9999px;
-  color: var(--charcoal);
-  font-family: var(--mono);
-  text-align: center;
-}
-
-.guide-browser__actions a {
+  color: var(--body);
   font-size: 12px;
-  white-space: nowrap;
 }
 
 .guide-frame {
   position: relative;
-  height: 720px;
+  height: min(820px, calc(100vh - 180px));
+  min-height: 660px;
   background: var(--canvas);
 }
 
@@ -189,62 +75,9 @@
 }
 
 @media (max-width: 768px) {
-  .guide-browser {
-    display: block;
-    overflow: visible;
-    border: 0;
-  }
-
-  .guide-browser__index {
-    padding: 16px;
-    margin-bottom: 16px;
-    overflow: hidden;
-    border: 1px solid var(--hairline);
-    border-radius: 12px;
-  }
-
-  .guide-browser__index h2 {
-    margin-left: 4px;
-  }
-
-  .guide-browser__index nav {
-    display: flex;
-    padding-bottom: 4px;
-    overflow-x: auto;
-  }
-
-  .guide-browser__index nav button {
-    width: auto;
-    flex: 0 0 auto;
-    gap: 8px;
-  }
-
-  .guide-browser__context {
-    padding-inline: 4px;
-  }
-
-  .guide-browser__note {
-    margin-inline: 4px;
-  }
-
-  .guide-browser__index > a {
-    margin: 16px 4px 0;
-  }
-
-  .guide-browser__reader {
-    overflow: hidden;
-    border: 1px solid var(--hairline);
-    border-radius: 12px;
-  }
-
   .guide-browser__bar {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .guide-browser__actions {
-    width: 100%;
-    justify-content: space-between;
   }
 
   .guide-frame {

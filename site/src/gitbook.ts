@@ -19,7 +19,7 @@ export const GITBOOK_TOPICS = [
     id: "welcome",
     labelEn: "Overview",
     labelZh: "總覽",
-    en: "background/formosanbank",
+    en: "",
   },
   {
     id: "languages",

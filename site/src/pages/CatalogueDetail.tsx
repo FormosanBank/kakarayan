@@ -179,8 +179,8 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           {tx("Build corpus dataset", "建立語料庫資料集")}
         </Link>
         {GITBOOK_CORPUS_PAGES[corpus.id] && (
-          <Link className="button button--quiet" to={`/guide?corpus=${corpus.id}`}>
-            {tx("Read corpus guide", "閱讀語料庫指南")}
+          <Link className="button button--quiet" to={`/docs?corpus=${corpus.id}`}>
+            {tx("Read corpus docs", "閱讀語料庫文件")}
           </Link>
         )}
         <a

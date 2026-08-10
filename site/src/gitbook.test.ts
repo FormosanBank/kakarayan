@@ -8,6 +8,12 @@ import {
 } from "./gitbook";
 
 describe("GitBook integration", () => {
+  it("opens the canonical welcome page at the GitBook root", () => {
+    expect(gitBookPageUrl(GITBOOK_TOPICS[0], "en")).toBe(
+      "https://ai4commsci.gitbook.io/formosanbank",
+    );
+  });
+
   it("maps every corpus in the current public release to documentation", () => {
     expect(Object.keys(GITBOOK_CORPUS_PAGES)).toHaveLength(22);
     expect(Object.values(GITBOOK_CORPUS_PAGES).every((page) => page.en.length > 0)).toBe(true);

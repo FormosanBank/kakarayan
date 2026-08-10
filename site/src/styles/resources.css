@@ -265,6 +265,9 @@
 
 .api-choice code {
   overflow-wrap: anywhere;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .api-choice .status {
@@ -294,6 +297,11 @@
   font-size: 13px;
 }
 
+.endpoint-list code {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .code-samples {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -321,7 +329,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
-  font-size: 11px;
+  font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -353,7 +361,7 @@
   padding: 18px;
   margin: 0;
   overflow: auto;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.6;
 }
 
@@ -408,8 +416,8 @@
   padding: 18px;
   margin: 0;
   overflow: auto;
-  font-size: 11px;
-  line-height: 1.65;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .contract-notes {
