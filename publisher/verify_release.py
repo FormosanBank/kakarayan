@@ -133,9 +133,7 @@ def _verify_search(root: Path) -> None:
                 "sentences": len(records),
                 "words": sum(len(record["words"]) for record in records),
                 "morphemes": sum(
-                    len(word["morphemes"])
-                    for record in records
-                    for word in record["words"]
+                    len(word["morphemes"]) for record in records for word in record["words"]
                 ),
                 "tokens": sum(len(record["tokens"]) for record in records),
                 "audio": sum(len(record["audio"]) for record in records),
