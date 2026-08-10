@@ -7,6 +7,7 @@ from publisher.identifiers import dimension_id
 # Mirrors FormosanBank/QC/corpus_counts.py. trv is resolved separately below.
 ISO_TO_LANGUAGE = {
     "ami": "Amis",
+    "bzg": "Babuza-Favorlang",
     "tay": "Atayal",
     "pwn": "Paiwan",
     "bnn": "Bunun",
@@ -26,6 +27,7 @@ ISO_TO_LANGUAGE = {
 
 ZH_HANT_NAMES = {
     "Amis": "阿美語",
+    "Babuza-Favorlang": "",
     "Atayal": "泰雅語",
     "Bunun": "布農語",
     "Kanakanavu": "卡那卡那富語",

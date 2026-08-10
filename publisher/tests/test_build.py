@@ -4,6 +4,7 @@ import gzip
 import hashlib
 import json
 import sqlite3
+import subprocess
 import zipfile
 from contextlib import closing
 from pathlib import Path
@@ -291,3 +292,43 @@ def test_cldf_streams_and_validates_large_source_fields(
     assert counts["examples"] == 2
     with zipfile.ZipFile(tmp_path / "large-cldf.zip") as archive:
         assert large_translation.encode() in archive.read("examples.csv")
+
+
+def test_cldf_includes_babuza_favorlang_language_reference(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    [source] = public_repo.glob("Corpora/*/XML/*.xml")
+    xml = source.read_text(encoding="utf-8")
+    source.write_text(
+        xml.replace('xml:lang="ami"', 'xml:lang="bzg"').replace(
+            'dialect="Xiuguluan"', 'dialect="Favorlang"'
+        ),
+        encoding="utf-8",
+    )
+    subprocess.run(
+        ["git", "-C", str(public_repo), "commit", "-am", "Use Babuza-Favorlang fixture"],
+        check=True,
+        capture_output=True,
+    )
+    release = build_release(
+        public_repo,
+        tmp_path / "release",
+        include_prepared=False,
+    )
+    rights = json.loads((release.output / "rights.json").read_text(encoding="utf-8"))
+    output = tmp_path / "babuza-favorlang-cldf.zip"
+    counts = write_cldf_package(
+        release.output / "formosanbank.sqlite",
+        output,
+        release_id=release.release_id,
+        source_commit=release.source.commit,
+        rights=rights,
+    )
+
+    assert counts["languages"] == 1
+    with zipfile.ZipFile(output) as archive:
+        languages = archive.read("languages.csv").decode("utf-8")
+        examples = archive.read("examples.csv").decode("utf-8")
+    assert "lang_babuza_favorlang,Babuza-Favorlang,,,,,bzg" in languages
+    assert "lang_babuza_favorlang" in examples
