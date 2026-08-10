@@ -1,0 +1,67 @@
+"""Assemble the optional Hugging Face Docker Space from the API source."""
+
+from __future__ import annotations
+
+import argparse
+import re
+import shutil
+from pathlib import Path
+
+from publisher.build import BuildError
+
+_RELEASE_RE = re.compile(r"^fb-[0-9]{8}-[0-9a-f]{7,12}$")
+
+
+def assemble_space(source: Path, output: Path, release_id: str) -> None:
+    if not _RELEASE_RE.fullmatch(release_id):
+        raise BuildError(f"Invalid release ID: {release_id!r}")
+    source = source.resolve()
+    output = output.resolve()
+    if output.exists() and any(output.iterdir()):
+        raise BuildError(f"Space output must be absent or empty: {output}")
+    output.mkdir(parents=True, exist_ok=True)
+    for name in (
+        "__init__.py",
+        "app.py",
+        "config.py",
+        "cursors.py",
+        "errors.py",
+        "release.py",
+        "store.py",
+        "requirements.txt",
+        ".dockerignore",
+    ):
+        shutil.copy2(source / name, output / name)
+    shutil.copy2(source / "space" / "README.md", output / "README.md")
+    dockerfile = (source / "Dockerfile").read_text(encoding="utf-8")
+    marker = "ENV PYTHONDONTWRITEBYTECODE=1 \\\n"
+    manifest_url = (
+        "https://github.com/FormosanBank/kakarayan/releases/download/"
+        f"data-{release_id}/release-manifest.json"
+    )
+    replacement = (
+        f"ENV KAKARAYAN_RELEASE_MANIFEST_URL={manifest_url} \\\n"
+        "    KAKARAYAN_CORS_ORIGINS=https://formosanbank.github.io \\\n"
+        "    PYTHONDONTWRITEBYTECODE=1 \\\n"
+    )
+    if dockerfile.count(marker) != 1:
+        raise BuildError("API Dockerfile environment marker is missing or ambiguous")
+    (output / "Dockerfile").write_text(
+        dockerfile.replace(marker, replacement),
+        encoding="utf-8",
+        newline="\n",
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--release-id", required=True)
+    args = parser.parse_args(argv)
+    assemble_space(args.source, args.output, args.release_id)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

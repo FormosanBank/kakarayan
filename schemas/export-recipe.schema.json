@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://formosanbank.github.io/kakarayan/schemas/export-recipe.schema.json",
+  "title": "Kakarayan export recipe",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "release_id",
+    "selection",
+    "fields",
+    "format",
+    "spreadsheet_safe"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
+    "selection": {
+      "type": "object",
+      "required": [
+        "query",
+        "match",
+        "language_ids",
+        "corpus_ids",
+        "record_ids",
+        "max_rows",
+        "record_unit"
+      ],
+      "properties": {
+        "query": {"type": "string", "maxLength": 256},
+        "match": {
+          "enum": [
+            "source",
+            "exact",
+            "prefix",
+            "contains",
+            "translation",
+            "phonology",
+            "gloss",
+            "fuzzy",
+            "regex"
+          ]
+        },
+        "query_field": {"enum": ["formosan", "translation"]},
+        "translation_language": {"type": "string", "maxLength": 35},
+        "language_ids": {
+          "type": "array",
+          "items": {"type": "string", "maxLength": 128},
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true
+        },
+        "corpus_ids": {
+          "type": "array",
+          "items": {"type": "string", "maxLength": 128},
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "record_ids": {
+          "type": "array",
+          "items": {"type": "string", "maxLength": 128},
+          "maxItems": 10000,
+          "uniqueItems": true
+        },
+        "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000000},
+        "record_unit": {
+          "enum": ["text", "sentence", "word", "morpheme", "token", "audio"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "id",
+          "text_id",
+          "standard",
+          "original",
+          "translations",
+          "language_id",
+          "corpus_id",
+          "dialect",
+          "source_path",
+          "tokens",
+          "audio",
+          "phonology",
+          "glosses"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 13,
+      "uniqueItems": true
+    },
+    "format": {
+      "enum": [
+        "csv",
+        "tsv",
+        "json",
+        "jsonl",
+        "parquet",
+        "plain",
+        "interlinear",
+        "audio",
+        "recipe"
+      ]
+    },
+    "spreadsheet_safe": {"type": "boolean"}
+  },
+  "additionalProperties": false
+}

@@ -1,170 +1,256 @@
-# kakarayan
+# Kakarayan
 
-Web application for exposing the [FormosanBank](https://github.com/FormosanBank/FormosanBank)
-corpus of the 16 Formosan (indigenous Taiwanese) languages. Built on **Django + HTMX**.
+Kakarayan is the public web interface and publication toolkit for
+[FormosanBank](https://github.com/FormosanBank/FormosanBank). It serves community learners,
+linguists, educators, and developers without requiring a paid backend.
 
-The primary audience is language learners and researchers. The interface is available in
-both English and Traditional Chinese (繁體中文), with search across Formosan word forms and
-their English or Chinese translations.
+The primary application is a static React site for GitHub Pages. Corpus search, selected
+exports, study decks, orthography tools, and recordings run in the browser. An optional
+read-only FastAPI service adds convenient corpus queries when a no-cost Hugging Face Space
+is available. The site remains useful when that service and every model service are offline.
 
-**Current milestone: dictionary search.** The app exposes a bilingual dictionary and
-concordance search across all 16 languages. Earlier work established the data model and
-the pipeline that loads the FormosanBank XML corpus into PostgreSQL.
+FormosanBank XML is canonical. Everything Kakarayan publishes is a versioned, checksummed,
+rebuildable projection of one exact public FormosanBank commit.
 
-The corpus tables are a **derived read-model** of the FormosanBank XML — they are rebuilt
-by the ingestion command and never hand-edited. The XML in the FormosanBank repo stays
-canonical.
+## What is included
 
-## Stack & reproducibility
+- Separate word dictionary and sentence search across original and FormosanBank standard
+  forms, tokens, phonology, translations, and morpheme glosses. Users can search in either
+  the selected Formosan language or an available translation language and follow matches
+  in either direction.
+- Corpus and language catalogues that keep Seediq and Truku as separate display identities.
+- A bounded dataset builder, deterministic linguistic summaries in a Worker, and CSV, TSV,
+  JSON, JSON Lines, Parquet, plain text, interlinear, audio-reference, and reproducible
+  recipe exports for browser selections.
+- Ten curated whole-release downloads for common database, tabular, spreadsheet, CLDF,
+  text, metadata, and time-aligned workflows. Specific selections belong in the browser
+  dataset builder.
+- Learner tools with cited words and sentences, private local cards, deterministic spaced
+  repetition, backup/restore, Anki TSV, local recording, and reviewed orthography tables.
+  Cards can be saved only from dictionary or sentence results.
+- Optional direct-browser FormosanBank MT and ASR calls with explicit consent and visible
+  third-party boundaries.
+- A versioned static JSON API, optional read-only live API, and JavaScript, Python, and R
+  clients.
+- An embedded FormosanBank documentation reader on the public HTTPS site, with curated
+  guide sections, corpus-specific deep links, and an external fallback for local previews.
+- Public-repository noncommercial distribution policy, stricter corpus overrides, source
+  locators, checksums, release pinning, and deterministic synthetic-fixture tests.
 
-- **Python 3.13** + dependencies managed by [uv](https://docs.astral.sh/uv/)
-  (`.python-version`, `pyproject.toml`, committed `uv.lock`).
-- **PostgreSQL 16** is the canonical target (`docker-compose.yml`); any running Postgres
-  16/17 works for local dev. Extensions `pg_trgm` + `btree_gin` are enabled by migrations.
-- Reads the corpus from a local **FormosanBank checkout** (`FORMOSANBANK_REPO`); imports
-  its QC parsers for canonical tokenization/language rules (see `corpus/ingestion/parse.py`).
+The earlier Django and PostgreSQL dictionary application remains in the repository. It is
+useful as an optional server-backed development surface and behavioral reference, but it is
+not required by the public static site.
 
-## Setup
+## Repository map
 
-```bash
-# 1. Install uv, then sync the environment (installs Python 3.13 + deps)
-uv sync
-
-# 2. Start PostgreSQL 16 (Docker) — or point DATABASE_URL at any running PG 16/17
-docker compose up -d db
-
-# 3. Configure environment
-cp .env.example .env
-#   edit .env: set DATABASE_URL and FORMOSANBANK_REPO (path to a FormosanBank checkout)
-
-# 4. Create the schema
-uv run python manage.py migrate
-
-# 5. Seed dimensions (languages, dialects, corpora) and ingest the corpus
-uv run python manage.py seed_reference
-uv run python manage.py ingest_corpus --all
+```text
+site/                 React, TypeScript, Vite, PWA, Workers, unit tests, and Playwright checks
+publisher/            deterministic XML projection, packages, manifests, and verification
+schemas/              versioned JSON Schema contracts
+content/              reviewed learning-content registry and contribution boundary
+api/                  optional bounded read-only FastAPI service and Docker Space source
+clients/              JavaScript, Python/CLI, and R clients
+tests/fixtures/       invented public-repository fixture with no private corpus material
+corpus/, config/      preserved Django/PostgreSQL application
+.github/workflows/    CI and guarded Pages, data-release, and Space workflows
+docs/                 architecture, data, API, operations, rights, privacy, and learning
 ```
 
-## Running the development server
+Generated corpus data belongs under `build/` and is ignored by Git. Full FormosanBank
+projections must never be committed to this repository.
+
+## Requirements
+
+- Python 3.13 and [uv](https://docs.astral.sh/uv/)
+- Node.js 22 and npm
+- R for the R client check
+- PostgreSQL 16 for the preserved Django test suite
+- Docker for the optional API image check
+
+Install the locked Python and frontend dependencies:
 
 ```bash
-# Start Postgres first (if using Docker)
-docker compose up -d db
-
-# Run the app (hot-reload by default)
-uv run python manage.py runserver
+uv sync --locked --all-groups
+npm ci --prefix site
 ```
 
-Open `http://localhost:8000/` in a browser. The dictionary search page loads immediately;
-results require a populated corpus (see ingestion commands below).
+## Quick local preview with invented data
 
-To switch the interface language, use the language selector in the top-right corner of
-the page. Supported: English (`en`) and Traditional Chinese (`zh-hant`).
-
-## Running tests
+Use a new output path for every publisher run. The publisher refuses to overwrite existing
+output. Include the small prepared packages so every public tool has data to display.
 
 ```bash
-# Full suite (~1 s, no external dependencies required)
-uv run pytest
-
-# Single test module
-uv run pytest corpus/tests/test_views.py
-
-# Single test
-uv run pytest corpus/tests/test_views.py::TestDictionarySearch::test_meaning_search_en
-
-# With verbose output
-uv run pytest -v
+uv run python -m publisher.fixture_cli \
+  --output build/fixture-release \
+  --include-prepared
+uv run python -m publisher.verify_release --release build/fixture-release
+uv run python -m publisher.assemble_site \
+  --release build/fixture-release \
+  --public site/public
+npm --prefix site run build
+uv run python -m publisher.verify_site --site site/dist
+npm --prefix site run preview -- --host 127.0.0.1
 ```
 
-Tests use `pytest-django` and an in-process PostgreSQL database (the same one configured
-in `.env`). No corpus data needs to be ingested — the test fixtures build a minimal
-object graph directly. The `pg_trgm` and `btree_gin` extensions must exist (created by
-migration `0001`).
+Open `http://127.0.0.1:4173/kakarayan/`. The `/kakarayan/` subpath matches the production
+GitHub Pages project path.
 
-## Code quality
+The Guide route opens the canonical GitBook in a new tab during this HTTP preview. GitBook
+allows the embedded reader only when Kakarayan is served over HTTPS, as it is on GitHub
+Pages.
+
+This fixture is intentionally tiny. It contains two invented Amis sentences in
+`TestCorpus`. Try `lima`, `waco`, `toki`, or `rima` in Lookup or Learn. In Research, choose
+Amis before previewing or exporting. Downloads contains small synthetic packages for
+testing the interface, not FormosanBank research data.
+
+To rebuild locally, remove only the generated, ignored output directories you intend to
+replace: `build/fixture-release`, `site/public/api`, `site/public/data`, and `site/dist`.
+
+## Build from the public FormosanBank repository
+
+Start with a clean public checkout and pin its exact commit:
 
 ```bash
-# Lint (must be clean before committing)
+git clone https://github.com/FormosanBank/FormosanBank.git build/formosanbank
+SOURCE_COMMIT="$(git -C build/formosanbank rev-parse HEAD)"
+
+uv run python -m publisher.cli \
+  --repo build/formosanbank \
+  --output build/data-release \
+  --source-commit "$SOURCE_COMMIT" \
+  --refresh-models \
+  --compress-database \
+  --release-only
+
+uv run python -m publisher.verify_release \
+  --release build/data-release \
+  --max-artifact-mib 2048
+```
+
+The release profile builds research packages and the immutable SQLite snapshot, then keeps
+only assets that can be uploaded to one flat GitHub Release. Its manifest records the
+GitHub asset name and immutable URL for every file. The Pages profile omits bulk tables and
+the live-API database:
+
+```bash
+uv run python -m publisher.cli \
+  --repo build/formosanbank \
+  --output build/pages-release \
+  --source-commit "$SOURCE_COMMIT" \
+  --refresh-models \
+  --site-only
+
+uv run python -m publisher.verify_release --release build/pages-release
+uv run python -m publisher.assemble_site \
+  --release build/pages-release \
+  --public site/public \
+  --download-manifest build/data-release/release-manifest.json
+npm --prefix site run build
+uv run python -m publisher.verify_site --site site/dist
+npm --prefix site run preview -- --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:4173/kakarayan/` to use the complete public corpus locally. This
+profile is much larger than the fixture because it generates the browser search indexes
+for every public corpus. It still needs no local server beyond Vite's static preview and no
+paid backend.
+
+Publication workflows additionally require reviewed, machine-readable rights decisions.
+Every corpus discovered in the canonical public FormosanBank checkout receives a reviewed
+noncommercial distribution entry. An explicit metadata override can impose a stricter
+source or community rule. Pages also requires the matching data release to be published,
+then imports its validated manifest so the download interface cannot link to a draft or a
+different corpus commit.
+
+## Checks
+
+Publisher, API, and Python client:
+
+```bash
+uv run pytest publisher/tests api/tests clients/python/tests
+uv run ruff format --check corpus config publisher
 uv run ruff check .
-
-# Auto-fix lint violations
-uv run ruff check --fix .
-
-# Format
-uv run ruff format .
-
-# Type-check
-uv run mypy corpus config
-
-# Run all pre-commit hooks against the whole codebase
-uv run pre-commit run --all-files
+uv run mypy corpus config publisher api clients/python/kakarayan_client
 ```
 
-Pre-commit hooks run `ruff` automatically on every `git commit`. Install them once after
-cloning with `uv run pre-commit install`.
-
-## Ingestion commands
+Static application:
 
 ```bash
-uv run python manage.py seed_reference                # languages, dialects, corpora
-uv run python manage.py ingest_corpus --all           # every corpus
-uv run python manage.py ingest_corpus --corpus Wikipedias        # one corpus (repeatable)
-uv run python manage.py ingest_corpus --language Amis            # one language, all corpora
-uv run python manage.py ingest_corpus --corpus ePark --language Amis  # both filters
-uv run python manage.py ingest_corpus --all --defer-indexes      # faster full rebuild
+npm --prefix site run lint
+npm --prefix site run typecheck
+npm --prefix site test
+npm --prefix site run build
+npm --prefix site run test:e2e
+npm --prefix site audit --audit-level=high
 ```
 
-`--corpus` and `--language` compose: `--language` alone loads that language across every
-corpus; combined with `--corpus` it scopes to that corpus. Re-running is always safe: a
-plain corpus ingest is **delete-and-reloaded** in its own transaction, and a
-language-filtered ingest wipes/reloads only that language's rows within each corpus,
-leaving other languages untouched.
-When a corpus changes or a new one is added to FormosanBank, `git pull` the checkout and
-re-run `ingest_corpus` for that corpus (or `--all`). Each run records the FormosanBank
-commit it reflects on an `IngestionRun` row.
+JavaScript, Python, and R clients:
 
-## Data model
-
-Containment: `Corpus → Text → Sentence → Word → Morpheme`. `Translation` and
-`AudioSegment` attach to exactly one tier (CHECK-constrained). `Token` is a derived
-per-occurrence concordance index (one row per `<W>` for segmented corpora, else per
-whitespace chunk of the sentence FORM) with denormalized corpus/language/dialect and
-GIN-trigram-indexed `surface_norm` for exact/prefix/substring/fuzzy lookup. See
-`corpus/models.py`.
-
-## Project layout
-
+```bash
+npm --prefix clients/javascript test
+uv run pytest clients/python/tests
+uv build clients/python --out-dir build/python-client
+R CMD build clients/R
+R CMD check --no-manual --no-build-vignettes kakarayan_*.tar.gz
 ```
-config/                     Django project (settings, urls)
-corpus/
-  models.py                 all corpus tables
-  migrations/               incl. 0001_extensions (pg_trgm, btree_gin)
-  ingestion/
-    parse.py                FormosanBank QC bridge + XML → dict tree
-    normalize.py            surface_norm / gloss folding + tokenize
-    seed.py                 languages / dialects / corpora
-    loader.py               corpus → tiers → tokens → bulk load
-  management/commands/
-    seed_reference.py
-    ingest_corpus.py
-  views/
-    dictionary.py           word + meaning search, HTMX card expand, pagination
-  templates/corpus/
-    base.html               topbar, language switcher, HTMX wiring
-    dictionary/             index, results partial, card partials, pagination
-  static/corpus/
-    css/tokens.css          design-system custom properties (colors, type, spacing)
-    css/components.css      component classes (.kk-card, .kk-pagination, …)
-    js/htmx.min.js          HTMX 2.0.4 (served locally, no CDN)
-    assets/                 weave-pattern SVGs (5 accent colours)
-  tests/
-    conftest.py             shared DB fixtures
-    test_normalize.py       normalization invariants
-    test_search.py          query helper functions
-    test_views.py           HTTP + HTMX response behaviour, pagination
-    test_i18n.py            language switching, bilingual UI
-locale/
-  en/LC_MESSAGES/           English UI catalog
-  zh_Hant/LC_MESSAGES/      Traditional Chinese translations
+
+The complete Django suite needs PostgreSQL:
+
+```bash
+docker compose up -d db
+DATABASE_URL=postgres://kakarayan:kakarayan@127.0.0.1:5432/kakarayan \
+  uv run pytest
 ```
+
+CI supplies PostgreSQL and also builds the API container.
+
+## Publication boundaries
+
+- Pull requests run checks only. They cannot deploy Pages, create releases, or access the
+  Hugging Face credential.
+- `deploy-pages.yml` runs only from `main` or an explicit dispatch. It pins the public source
+  commit, checks rights, enforces a 900 MiB site budget and 50 MiB file budget, reruns browser
+  checks, and deploys one saved Pages artifact.
+- `publish-data.yml` defaults to a dry run. A real dispatch rechecks all artifact bytes and
+  rights in a separate write-enabled job, then creates a draft GitHub release. It never
+  publishes that draft automatically.
+- `deploy-api.yml` is manual, environment-gated, and accepts only a published immutable data
+  release. It pins that release in the Docker Space source.
+- Kakarayan original work is licensed under CC BY-NC 4.0. Corpus records retain the
+  displayed FormosanBank, source, citation, and community terms.
+- The browser MT and ASR tools use the catalogued public FormosanBank Hugging Face Spaces
+  directly. They need no repository secret or Kakarayan backend.
+
+Repository administrators must enable Pages with GitHub Actions before the first deploy.
+See [publication operations](docs/publication.md) for the exact launch order and current
+settings status.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Data model and formats](docs/data-and-formats.md)
+- [Static and live APIs](docs/api.md)
+- [Publication operations](docs/publication.md)
+- [Rights, citation, and privacy](docs/rights-citation-privacy.md)
+- [Learning tools and model services](docs/learning-and-models.md)
+- [Original Django dictionary application](docs/legacy-django.md)
+
+The implementation contract and durable work record are in
+[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md), [`GOAL.md`](GOAL.md), and
+[`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
+
+## Corrections and responsible use
+
+Corpus records are attestations from named sources, not universal grammar rules. Machine
+translation and ASR are drafts, not expert corrections. Original and FormosanBank standard
+orthography are always distinct fields.
+
+For a correction, rights concern, attribution issue, or takedown request, open an issue in
+the [Kakarayan repository](https://github.com/FormosanBank/kakarayan/issues) and identify
+the release ID, corpus, source path, and record ID. Do not include private personal
+information in a public issue.
+
+Public FormosanBank corpus data is available for noncommercial use under the displayed
+central, corpus-specific, upstream-source, citation, and community terms. A stricter term
+controls for the affected material.

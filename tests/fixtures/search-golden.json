@@ -1,0 +1,233 @@
+{
+  "records": [
+    {
+      "id": "sentence_amis_alpha",
+      "language_id": "lang_amis",
+      "corpus_id": "corpus_alpha",
+      "dialect": "Xiuguluan",
+      "xml_id": "S1",
+      "standard": "Ámis lima.",
+      "original": "Ámis lima.",
+      "translations": [
+        {"text": "Five people", "xml_lang": "eng"},
+        {"text": "五個人", "xml_lang": "zho"}
+      ],
+      "tokens": [
+        {"surface": "Ámis", "normalized": "ámis"},
+        {"surface": "lima.", "normalized": "lima"}
+      ],
+      "forms": [{"text": "lima.", "normalized": "lima"}],
+      "phonology": ["ʔamis lima"],
+      "glosses": ["FIVE PERSON"]
+    },
+    {
+      "id": "sentence_amis_beta",
+      "language_id": "lang_amis",
+      "corpus_id": "corpus_beta",
+      "dialect": "Central",
+      "xml_id": "S1",
+      "standard": "Fangcalay",
+      "original": "fangcalay",
+      "translations": [
+        {"text": "beautiful", "xml_lang": "eng"},
+        {"text": "美麗", "xml_lang": "zho"}
+      ],
+      "tokens": [{"surface": "Fangcalay", "normalized": "fangcalay"}],
+      "forms": [{"text": "Fangcalay", "normalized": "fangcalay"}],
+      "phonology": ["faŋcalaj"],
+      "glosses": ["BEAUTIFUL"]
+    },
+    {
+      "id": "sentence_amis_unsegmented",
+      "language_id": "lang_amis",
+      "corpus_id": "corpus_alpha",
+      "dialect": "Xiuguluan",
+      "xml_id": "S2",
+      "standard": "sowal, kako.",
+      "original": "sowal, kako.",
+      "translations": [{"text": "I speak.", "xml_lang": "eng"}],
+      "tokens": [],
+      "forms": [],
+      "phonology": [],
+      "glosses": []
+    },
+    {
+      "id": "sentence_amis_duplicate_xml_id",
+      "language_id": "lang_amis",
+      "corpus_id": "corpus_alpha",
+      "dialect": "Xiuguluan",
+      "xml_id": "S1",
+      "standard": "lima",
+      "original": "lima",
+      "translations": [{"text": "five", "xml_lang": "eng"}],
+      "tokens": [],
+      "forms": [],
+      "phonology": [],
+      "glosses": []
+    },
+    {
+      "id": "sentence_bunun",
+      "language_id": "lang_bunun",
+      "corpus_id": "corpus_shared",
+      "dialect": "Isbukun",
+      "xml_id": "S1",
+      "standard": "lima",
+      "original": "lima",
+      "translations": [{"text": "hand", "xml_lang": "eng"}],
+      "tokens": [{"surface": "lima", "normalized": "lima"}],
+      "forms": [],
+      "phonology": [],
+      "glosses": []
+    },
+    {
+      "id": "sentence_seediq",
+      "language_id": "lang_seediq",
+      "corpus_id": "corpus_shared",
+      "dialect": "Toda",
+      "xml_id": "S1",
+      "standard": "musa",
+      "original": "musa",
+      "translations": [{"text": "go", "xml_lang": "eng"}],
+      "tokens": [{"surface": "musa", "normalized": "musa"}],
+      "forms": [],
+      "phonology": [],
+      "glosses": []
+    },
+    {
+      "id": "sentence_truku",
+      "language_id": "lang_truku",
+      "corpus_id": "corpus_shared",
+      "dialect": "Truku",
+      "xml_id": "S1",
+      "standard": "musa",
+      "original": "musa",
+      "translations": [{"text": "go", "xml_lang": "eng"}],
+      "tokens": [{"surface": "musa", "normalized": "musa"}],
+      "forms": [],
+      "phonology": [],
+      "glosses": []
+    }
+  ],
+  "cases": [
+    {
+      "name": "source exact preserves case and punctuation",
+      "mode": "source",
+      "query": "Ámis lima.",
+      "expected_ids": ["sentence_amis_alpha"]
+    },
+    {
+      "name": "source exact rejects a case change",
+      "mode": "source",
+      "query": "ámis lima.",
+      "expected_ids": []
+    },
+    {
+      "name": "normalized exact composes diacritics",
+      "mode": "exact",
+      "query": "ÁMIS",
+      "expected_ids": ["sentence_amis_alpha"]
+    },
+    {
+      "name": "normalized exact folds edge punctuation",
+      "mode": "exact",
+      "query": "lima!",
+      "language_ids": ["lang_amis"],
+      "expected_ids": ["sentence_amis_alpha", "sentence_amis_duplicate_xml_id"]
+    },
+    {
+      "name": "internal punctuation remains contrastive",
+      "mode": "exact",
+      "query": "sowal kako",
+      "expected_ids": []
+    },
+    {
+      "name": "unsegmented sentence forms remain searchable",
+      "mode": "exact",
+      "query": "sowal, kako!",
+      "expected_ids": ["sentence_amis_unsegmented"]
+    },
+    {
+      "name": "prefix search",
+      "mode": "prefix",
+      "query": "fang",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "substring search",
+      "mode": "contains",
+      "query": "ngca",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "bounded regex search",
+      "mode": "regex",
+      "query": "^fang.*lay$",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "fuzzy candidate ranking",
+      "mode": "fuzzy",
+      "query": "fangcalai",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "English translation search",
+      "mode": "translation",
+      "query": "beautiful",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "Traditional Chinese translation search",
+      "mode": "translation",
+      "query": "美麗",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "phonological form search",
+      "mode": "phonology",
+      "query": "ŋca",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "morpheme gloss search",
+      "mode": "gloss",
+      "query": "beautiful",
+      "expected_ids": ["sentence_amis_beta"]
+    },
+    {
+      "name": "language scope separates homographs",
+      "mode": "exact",
+      "query": "lima",
+      "language_ids": ["lang_bunun"],
+      "expected_ids": ["sentence_bunun"]
+    },
+    {
+      "name": "corpus scope retains duplicate XML IDs as distinct records",
+      "mode": "exact",
+      "query": "lima",
+      "language_ids": ["lang_amis"],
+      "corpus_ids": ["corpus_alpha"],
+      "expected_ids": ["sentence_amis_alpha", "sentence_amis_duplicate_xml_id"]
+    },
+    {
+      "name": "Seediq remains distinct from Truku",
+      "mode": "exact",
+      "query": "musa",
+      "language_ids": ["lang_seediq"],
+      "expected_ids": ["sentence_seediq"]
+    },
+    {
+      "name": "Truku remains distinct from Seediq",
+      "mode": "exact",
+      "query": "musa",
+      "language_ids": ["lang_truku"],
+      "expected_ids": ["sentence_truku"]
+    },
+    {
+      "name": "empty query returns no occurrences",
+      "mode": "exact",
+      "query": "   ",
+      "expected_ids": []
+    }
+  ]
+}

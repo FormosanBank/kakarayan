@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "entries": [
+    {
+      "corpus": "TestCorpus",
+      "redistribution": "allowed",
+      "commercial_use": "allowed",
+      "attribution": "Synthetic Kakarayan publisher fixture.",
+      "license_expression": "CC0-1.0",
+      "notes": "Invented test data with no real language or contributor content.",
+      "evidence": ["https://example.invalid/kakarayan/synthetic-fixture"],
+      "review_status": "reviewed",
+      "reviewed_at": "2024-01-02"
+    }
+  ]
+}

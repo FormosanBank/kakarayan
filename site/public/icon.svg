@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Kakarayan</title>
+  <circle cx="256" cy="256" r="208" fill="#000"/>
+  <path d="M171 133h52v99l87-99h68L270 253l118 126h-70l-95-104v104h-52z" fill="#fff"/>
+</svg>
