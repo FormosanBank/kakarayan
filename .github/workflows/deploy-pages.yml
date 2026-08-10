@@ -28,7 +28,7 @@ on:
         type: string
 
 concurrency:
-  group: github-pages-production
+  group: github-pages-production-${{ github.event_name == 'release' && !startsWith(github.event.release.tag_name, 'data-') && github.run_id || 'deploy' }}
   cancel-in-progress: true
 
 jobs:
