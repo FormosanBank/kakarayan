@@ -158,7 +158,7 @@ jobs:
         uses: r-lib/actions/setup-r@929c772977a3a13c8733b363bf5a2f685c25dd91
 
       - name: Install R package dependencies
-        uses: r-lib/actions/setup-r-dependencies@929c772977a3a13c8733b363bf5a2f685c25dd91
+        uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
           working-directory: clients/R
 
