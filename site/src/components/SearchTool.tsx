@@ -281,6 +281,21 @@ export function SearchTool({
     void performSearch(initialLimit, true);
   }
 
+  function clearSearch() {
+    controller.current?.abort();
+    setQuery("");
+    setRecords([]);
+    setScanned(0);
+    setMatches(0);
+    setTruncated(false);
+    setVisibleLimit(initialLimit);
+    setSearched(false);
+    setBusy(false);
+    setError("");
+    setNotice("");
+    setParams({type: kind});
+  }
+
   async function addSentence(record: SearchRecord) {
     try {
       await saveCard(cardFromRecord(record, data.meta.release_id, targetLanguage));
@@ -405,12 +420,19 @@ export function SearchTool({
             ))}
           </select>
         </div>
-        <button
-          className="button button--primary"
-          disabled={busy || !languageId || !targetLanguage || !query.trim()}
-        >
-          {busy ? tx("Searching…", "搜尋中…") : t("search.submit")}
-        </button>
+        <div className="search-form__actions">
+          <button
+            className="button button--primary"
+            disabled={busy || !languageId || !targetLanguage || !query.trim()}
+          >
+            {busy ? tx("Searching…", "搜尋中…") : t("search.submit")}
+          </button>
+          {(query || searched || records.length > 0) && (
+            <button className="button button--quiet" type="button" onClick={clearSearch}>
+              {tx("Clear", "清除")}
+            </button>
+          )}
+        </div>
         <details className="lookup-options">
           <summary>{tx("Search options", "搜尋選項")}</summary>
           <div className="lookup-options__grid">
@@ -474,7 +496,18 @@ export function SearchTool({
           <Diagnostics releaseId={data.meta.release_id} error={new Error(error)} />
         </div>
       )}
-      {notice && <p className="callout callout--success" role="status">{notice}</p>}
+      {notice && (
+        <div className="search-notice" role="status">
+          <span>{notice}</span>
+          <button
+            type="button"
+            aria-label={tx("Dismiss message", "關閉訊息")}
+            onClick={() => setNotice("")}
+          >
+            {tx("Close", "關閉")}
+          </button>
+        </div>
+      )}
 
       {(records.length > 0 || (!busy && searched)) && (
         <div className="results-heading" aria-live="polite">
