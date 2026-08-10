@@ -99,6 +99,7 @@ def assemble(
         raise BuildError("Release has no static search data")
     shutil.copytree(release / "api", api_target)
     data_target.mkdir()
+    shutil.copy2(manifest, data_target / "release-manifest.json")
     shutil.copytree(search / "shards", data_target / "search" / "shards")
     shutil.copytree(search / "indexes", data_target / "search" / "indexes")
     if download_manifest is not None:

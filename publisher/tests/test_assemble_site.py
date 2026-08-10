@@ -29,6 +29,9 @@ def test_assemble_site_copies_api_and_release_data(public_repo: Path, tmp_path: 
     )
 
     assert (public / "api" / "v1" / "meta.json").is_file()
+    assert json.loads(
+        (public / "data" / "release-manifest.json").read_text(encoding="utf-8")
+    ) == json.loads((release.output / "release-manifest.json").read_text(encoding="utf-8"))
     assert next((public / "data" / "search" / "shards").rglob("*.json.gz")).is_file()
     assert next((public / "data" / "search" / "indexes").rglob("*.json.gz")).is_file()
     assert not (public / "data" / "search" / "sentences.jsonl").exists()
