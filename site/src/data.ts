@@ -617,12 +617,16 @@ export async function loadPreviewRecords(
   shards: SearchShard[],
   signal?: AbortSignal,
   limit = 25,
+  predicate: (record: SearchRecord) => boolean = () => true,
 ): Promise<SearchRecord[]> {
   const records: SearchRecord[] = [];
   for (const shard of shards) {
     if (signal?.aborted) throw new DOMException("Load cancelled", "AbortError");
     const values = await loadShard(shard, signal);
-    records.push(...values.slice(0, Math.max(0, limit - records.length)));
+    for (const record of values) {
+      if (predicate(record)) records.push(record);
+      if (records.length >= limit) break;
+    }
     if (records.length >= limit) break;
   }
   return records;

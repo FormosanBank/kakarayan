@@ -54,7 +54,7 @@ export function Home({data}: {data: AppData}) {
     ["/learn", tx("Learning tools", "學習工具"), tx("deck, MT, and ASR", "字卡、翻譯與語音")],
     ["/research", tx("Research", "研究工具"), tx("datasets and summaries", "資料集與摘要")],
     ["/explore", tx("Languages and corpora", "語言與語料庫"), tx("coverage, sources, and rights", "涵蓋範圍、來源與權利")],
-    ["/guide", tx("FormosanBank guide", "FormosanBank 指南"), tx("methods, rights, and documentation", "方法、權利與文件")],
+    ["/docs", tx("Docs", "文件"), tx("methods, rights, and documentation", "方法、權利與文件")],
     ["/downloads", tx("Downloads", "資料下載"), tx("prepared formats", "準備好的格式")],
     ["/models", tx("Language models", "語言模型"), tx("MT and ASR registry", "翻譯與語音辨識登錄")],
     ["/developers", tx("API and clients", "API 與用戶端"), tx("build with the bank", "使用語料庫開發")],

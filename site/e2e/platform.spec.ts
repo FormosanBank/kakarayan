@@ -33,7 +33,7 @@ const routes = [
   ["#/lookup", /Dictionary and sentences/],
   ["#/learn", /Learn from corpus examples/],
   ["#/research", /Research tools/],
-  ["#/guide", /FormosanBank guide/],
+  ["#/docs", /Docs/],
   ["#/explore", /Languages and corpora/],
   ["#/downloads", /Download public data/],
   ["#/developers", /Build with FormosanBank/],
@@ -135,7 +135,7 @@ test("mobile navigation closes after selecting a route", async ({page}, testInfo
 test("navigation remains compact at tablet widths", async ({page}, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "Tablet geometry is tested once");
   await page.setViewportSize({width: 820, height: 900});
-  await page.goto("#/guide");
+  await page.goto("#/docs");
   await expect(page.locator(".mobile-menu > summary")).toBeVisible();
   await expect(page.locator(".primary-nav")).toBeHidden();
   const geometry = await page.evaluate(() => ({
@@ -169,24 +169,23 @@ test("catalogue filters names, source paths, and linked languages", async ({page
   }
 });
 
-test("the guide provides curated bilingual GitBook browsing with a local fallback", async ({
+test("docs use the canonical GitBook reader without duplicate navigation", async ({
   page,
 }) => {
-  await page.goto("#/guide");
-  await expect(page.getByRole("heading", {level: 1, name: "FormosanBank guide"})).toBeVisible();
-  await expect(page.getByRole("button", {name: "Overview"})).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", {name: "XML format"}).click();
-  await expect(page).toHaveURL(/#\/guide\?topic=xml$/);
-  await expect(page.locator(".guide-browser__bar").getByRole("link", {name: "Open separately ↗"}))
-    .toHaveAttribute("href", /the-bank-architecture\/formosanbank-xml-format$/);
-  await expect(page.getByRole("heading", {name: "Embedded reader available on the public site"}))
-    .toBeVisible();
+  await page.goto("#/docs");
+  await expect(page.getByRole("heading", {level: 1, name: "Docs"})).toBeVisible();
+  await expect(page.locator(".guide-browser__index")).toHaveCount(0);
+  await expect(page.locator(".guide-browser__bar").getByRole("link", {name: "Open in GitBook ↗"}))
+    .toHaveAttribute("href", "https://ai4commsci.gitbook.io/formosanbank");
+  await expect(page.getByRole("heading", {name: "Docs open on the public site"})).toBeVisible();
 
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
-  await expect(page.getByRole("heading", {level: 1, name: "FormosanBank 使用指南"})).toBeVisible();
-  await expect(page.locator(".guide-browser__bar").getByRole("link", {name: "另開頁面 ↗"}))
-    .toHaveAttribute("href", /the-bank-architecture\/formosanbank-xml-format$/);
-  await expect(page.locator(".guide-browser__language")).toHaveText("EN");
+  await expect(page.getByRole("heading", {level: 1, name: "文件"})).toBeVisible();
+  await expect(page.locator(".guide-browser__bar").getByRole("link", {name: "在 GitBook 開啟 ↗"}))
+    .toHaveAttribute("href", "https://ai4commsci.gitbook.io/formosanbank");
+
+  await page.goto("#/guide");
+  await expect(page.getByRole("heading", {level: 1, name: "文件"})).toBeVisible();
 });
 
 test("legacy lookup routes open the matching mode on the unified page", async ({page}) => {
@@ -234,11 +233,11 @@ test("language and corpus catalogue entries have stable detail routes", async ({
     "href",
     `#/research?corpus=${corpus.id}`,
   );
-  const guideLink = page.getByRole("link", {name: "Read corpus guide"});
+  const guideLink = page.getByRole("link", {name: "Read corpus docs"});
   if (GITBOOK_CORPUS_PAGES[corpus.id]) {
     await expect(guideLink).toHaveAttribute(
       "href",
-      new RegExp(`#\\/guide\\?corpus=${corpus.id}$`),
+      new RegExp(`#\\/docs\\?corpus=${corpus.id}$`),
     );
   } else {
     await expect(guideLink).toHaveCount(0);
@@ -258,6 +257,8 @@ test("developer documentation links all maintained client libraries", async ({pa
   await page.goto("#/developers");
   const staticApiHeading = page.getByRole("heading", {name: "Static API v1"});
   await expect(staticApiHeading).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(page.locator(".api-choice__primary code")).toHaveCSS("font-size", "14px");
+  await expect(page.locator(".code-samples pre").first()).toHaveCSS("font-size", "14px");
   await page.getByRole("button", {name: "Run request"}).click();
   await expect(page.locator(".api-explorer__response")).toContainText("fb-");
   await expect(page.locator(".api-explorer__response")).toContainText('"api_version": "v1"');
@@ -358,6 +359,11 @@ test("dictionary and sentence lookup search from translations back to Formosan",
   const sentence = page.locator(".result-card").first();
   await expect(sentence.locator(".kwic")).toContainText("lima waco");
   await expect(sentence.locator(".translation-match mark")).toHaveText("fictional");
+  await expect(sentence.locator(".translation-text")).toContainText("fictional");
+  await page.getByRole("button", {name: "Clear", exact: true}).click();
+  await expect(page.getByLabel("Word or phrase in English")).toHaveValue("");
+  await expect(page.locator(".result-card")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/q=/);
 });
 
 test("scoped RE2 search runs without weakening the content security policy", async ({
@@ -410,6 +416,10 @@ test("dataset recipes and worker summaries are available without a backend", asy
   ).toBeVisible({timeout: 30_000});
   await expect(page.getByText(/First \d+ word rows/)).toBeVisible();
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  await page.getByLabel("Record unit").selectOption("morpheme");
+  await expect(page.getByText(/First \d+ morpheme rows/)).toBeVisible({timeout: 30_000});
+  await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  await page.getByLabel("Record unit").selectOption("word");
   await expect(page.locator(".builder__estimate")).toContainText("Estimated output rows");
   await page.getByLabel("Output row cap").selectOption("all");
   await expect(page.locator(".builder__estimate")).toContainText("All rows");

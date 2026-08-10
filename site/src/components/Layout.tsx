@@ -9,7 +9,7 @@ const navigation = [
   ["/lookup", "nav.lookup"],
   ["/learn", "nav.learn"],
   ["/research", "nav.research"],
-  ["/guide", "nav.guide"],
+  ["/docs", "nav.guide"],
   ["/downloads", "nav.download"],
   ["/developers", "nav.developers"],
 ] as const;
@@ -120,7 +120,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             <NavLink to="/models">{t("nav.models")}</NavLink>
             <NavLink to="/downloads">{t("nav.download")}</NavLink>
             <NavLink to="/developers">{t("nav.developers")}</NavLink>
-            <NavLink to="/guide">{t("nav.guide")}</NavLink>
+            <NavLink to="/docs">{t("nav.guide")}</NavLink>
             <NavLink to="/about">{t("nav.about")}</NavLink>
             <a href="https://github.com/FormosanBank/kakarayan">GitHub</a>
             <a href={`https://github.com/FormosanBank/FormosanBank/commit/${data.meta.source.commit}`}>

@@ -4,8 +4,8 @@ message: >-
   corpus-specific source when using this software or its derived data.
 title: Kakarayan
 type: software
-version: 0.1.0
-date-released: "2026-07-30"
+version: 0.2.0
+date-released: "2026-08-10"
 url: https://github.com/FormosanBank/kakarayan
 repository-code: https://github.com/FormosanBank/kakarayan
 authors:
@@ -21,5 +21,5 @@ preferred-citation:
       family-names: Gras
     - given-names: Hunter
       family-names: Scheppat
-  version: 0.1.0
+  version: 0.2.0
   url: https://github.com/FormosanBank/kakarayan

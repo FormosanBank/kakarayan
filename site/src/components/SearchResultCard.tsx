@@ -195,11 +195,13 @@ export function SearchResultCard({
                 lang={translation.xml_lang}
                 className={isMatch ? "translation-match" : undefined}
               >
-                <span>
+                <span className="translation-meta">
                   {translationLanguageName(translation.xml_lang, locale)}
                   {isMatch && <small>{tx("match", "相符")}</small>}
                 </span>
-                <HighlightedText text={translation.text} query={query} active={isMatch} />
+                <span className="translation-text">
+                  <HighlightedText text={translation.text} query={query} active={isMatch} />
+                </span>
               </p>
             );
           })}

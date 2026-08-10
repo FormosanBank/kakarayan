@@ -1,6 +1,6 @@
 [project]
 name = "kakarayan"
-version = "0.1.0"
+version = "0.2.0"
 description = "Web application exposing the FormosanBank corpus. Milestone 1: corpus ingestion into PostgreSQL."
 readme = "README.md"
 license = "CC-BY-NC-4.0"

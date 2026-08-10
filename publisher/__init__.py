@@ -2,7 +2,7 @@
 
 SCHEMA_VERSION = "1.0.0"
 API_VERSION = "v1"
-APPLICATION_VERSION = "0.1.0"
+APPLICATION_VERSION = "0.2.0"
 
 PUBLIC_DOWNLOAD_PATHS = (
     "formosanbank.sqlite.gz",
