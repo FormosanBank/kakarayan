@@ -38,7 +38,7 @@ Every static response uses one validated envelope:
   "generated_at": "2026-07-30T00:00:00Z",
   "kakarayan": {
     "repository": "FormosanBank/kakarayan",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "commit": "40-character application commit"
   },
   "source": {

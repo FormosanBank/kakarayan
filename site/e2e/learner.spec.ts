@@ -62,7 +62,14 @@ test("local study data migrates, backs up, restores, and remains private", async
   await dictionary.getByLabel("Word in Amis", {exact: true}).fill("lima");
   await dictionary.getByRole("button", {name: "Search"}).click();
   await dictionary.getByRole("button", {name: "Save word"}).click();
-  await expect(dictionary.getByText("lima saved.")).toBeVisible();
+  const saveNotice = dictionary.locator(".search-notice");
+  await expect(saveNotice).toContainText("lima saved.");
+  await expect(saveNotice).toHaveCSS("position", "fixed");
+  const noticeBox = await saveNotice.boundingBox();
+  expect(noticeBox).not.toBeNull();
+  expect((noticeBox?.y ?? 0) + (noticeBox?.height ?? 0)).toBeLessThanOrEqual(
+    page.viewportSize()!.height,
+  );
   await page.getByRole("tab", {name: /Study deck/}).click();
   await expect(page.getByRole("heading", {name: "legacy front"})).toBeVisible();
   await expect(page.locator(".deck-toolbar")).toContainText("2 cards");

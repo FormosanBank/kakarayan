@@ -33,7 +33,7 @@ function safeDetail(error: Error): string {
 function makeDiagnostics(releaseId: string | null, error: Error | null): DiagnosticDocument {
   return {
     application: "Kakarayan",
-    application_version: import.meta.env.VITE_APP_VERSION ?? "0.1.0",
+    application_version: import.meta.env.VITE_APP_VERSION ?? "0.2.0",
     data_release: releaseId,
     failed_public_asset: error ? publicAsset(error.message) : null,
     error: error ? {name: error.name, detail: safeDetail(error)} : null,
