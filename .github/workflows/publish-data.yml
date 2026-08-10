@@ -210,7 +210,15 @@ jobs:
             jq -r '.artifacts[] | [.path, .asset_name] | @tsv' \
               build/data-release/release-manifest.json
           )
-          ln build/data-release/SHA256SUMS build/release-assets/SHA256SUMS
+          jq -r \
+            '.artifacts | sort_by(.asset_name)[] | "\(.sha256)  \(.asset_name)"' \
+            build/data-release/release-manifest.json \
+            > build/release-assets/SHA256SUMS
+          MANIFEST_SHA256="$(
+            sha256sum build/data-release/release-manifest.json | cut -d ' ' -f 1
+          )"
+          printf '%s  release-manifest.json\n' "$MANIFEST_SHA256" \
+            >> build/release-assets/SHA256SUMS
           while IFS= read -r asset; do
             gh release upload "$TAG" "$asset"
           done < <(find build/release-assets -type f | sort)
@@ -240,8 +248,26 @@ jobs:
               item["asset_name"]: (item["bytes"], item["sha256"])
               for item in manifest["artifacts"]
           }
-          for name in ("SHA256SUMS", "release-manifest.json"):
-              path = root / name
+          checksum_path = Path("build/release-assets/SHA256SUMS")
+          manifest_path = root / "release-manifest.json"
+          checksums = {}
+          for line in checksum_path.read_text().splitlines():
+              digest, name = line.split("  ", 1)
+              if name in checksums:
+                  raise SystemExit(f"Duplicate release checksum for {name}")
+              checksums[name] = digest
+          expected_checksums = {
+              name: digest for name, (_, digest) in expected.items()
+          }
+          expected_checksums["release-manifest.json"] = hashlib.sha256(
+              manifest_path.read_bytes()
+          ).hexdigest()
+          if checksums != expected_checksums:
+              raise SystemExit("Release checksum names or digests differ from the manifest")
+          for name, path in (
+              ("SHA256SUMS", checksum_path),
+              ("release-manifest.json", manifest_path),
+          ):
               expected[name] = (
                   path.stat().st_size,
                   hashlib.sha256(path.read_bytes()).hexdigest(),
