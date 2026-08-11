@@ -118,11 +118,7 @@ export function LanguageDetail({
               <dl className="detail-counts">
                 <div>
                   <dt>{tx("Searchable sentences in this language", "此語言的可搜尋句子")}</dt>
-                  <dd>
-                    {number(data.search.shards
-                      .filter((shard) => shard.language_id === language.id && shard.corpus_id === corpus.id)
-                      .reduce((total, shard) => total + shard.records, 0))}
-                  </dd>
+                  <dd>{number(corpus.counts.sentences ?? 0)}</dd>
                 </div>
               </dl>
               <Link to={`/corpora/${corpus.id}`}>{tx("Corpus details →", "語料庫詳細資料 →")}</Link>

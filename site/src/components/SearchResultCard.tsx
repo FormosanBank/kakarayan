@@ -1,12 +1,24 @@
-import {
-  translationTextMatches,
-  type SearchDirection,
-  type SearchMode,
-} from "../data";
+import {useEffect, useState} from "react";
+
+import {sentenceDetail} from "../apiClient";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import {translationLanguageName} from "../translationLanguages";
-import type {AppData, SearchRecord} from "../types";
+import type {
+  AppData,
+  MatchMode,
+  SearchDirection,
+  SearchRecord,
+  SentenceSummary,
+} from "../types";
+
+function translationTextMatches(value: string, query: string, mode: MatchMode): boolean {
+  const haystack = value.normalize("NFC").toLocaleLowerCase();
+  const needle = query.trim().normalize("NFC").toLocaleLowerCase();
+  if (mode === "exact") return haystack === needle;
+  if (mode === "prefix") return haystack.startsWith(needle);
+  return haystack.includes(needle);
+}
 
 function playableUrl(record: SearchRecord, index: number): string {
   const audio = record.audio[index];
@@ -120,7 +132,7 @@ function Interlinear({record}: {record: SearchRecord}) {
   );
 }
 
-export function SearchResultCard({
+function SearchResultDetail({
   data,
   record,
   query,
@@ -135,7 +147,7 @@ export function SearchResultCard({
   data: AppData;
   record: SearchRecord;
   query: string;
-  mode: SearchMode;
+  mode: MatchMode;
   direction: SearchDirection;
   targetLanguage: string;
   learner: boolean;
@@ -292,6 +304,91 @@ export function SearchResultCard({
           </div>
         </details>
       </footer>
+    </article>
+  );
+}
+
+export function SearchResultCard({
+  data,
+  summary,
+  query,
+  mode,
+  direction,
+  targetLanguage,
+  learner,
+  onSave,
+  onNotice,
+  onPractice,
+}: {
+  data: AppData;
+  summary: SentenceSummary;
+  query: string;
+  mode: MatchMode;
+  direction: SearchDirection;
+  targetLanguage: string;
+  learner: boolean;
+  onSave: (record: SearchRecord) => void;
+  onNotice: (notice: string) => void;
+  onPractice?: (record: SearchRecord) => void;
+}) {
+  const {tx} = useI18n();
+  const [open, setOpen] = useState(false);
+  const [record, setRecord] = useState<SearchRecord | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!open || record) return;
+    const controller = new AbortController();
+    sentenceDetail(data.meta.release_id, summary.id, controller.signal).then(
+      setRecord,
+      (cause: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
+      },
+    );
+    return () => controller.abort();
+  }, [data.meta.release_id, open, record, summary.id]);
+
+  if (record) {
+    return (
+      <SearchResultDetail
+        data={data}
+        record={record}
+        query={query}
+        mode={mode}
+        direction={direction}
+        targetLanguage={targetLanguage}
+        learner={learner}
+        onSave={onSave}
+        onNotice={onNotice}
+        {...(onPractice ? {onPractice} : {})}
+      />
+    );
+  }
+  const language = data.languages.find((item) => item.id === summary.language_id);
+  const corpus = data.corpora.find((item) => item.id === summary.corpus_id);
+  return (
+    <article className="result-card result-card--summary" id={`record-${summary.id}`}>
+      <div className="result-card__scope">
+        <span>{language?.name ?? summary.language_id}</span>
+        {summary.dialect && <span>{summary.dialect}</span>}
+        <span>{corpus?.name ?? summary.corpus_id}</span>
+      </div>
+      <h3 className="kwic">{summary.standard || summary.original}</h3>
+      <div className="translations">
+        {summary.translations
+          .filter((item) => !targetLanguage || item.xml_lang === targetLanguage)
+          .slice(0, 3)
+          .map((item, index) => (
+            <p key={`${item.xml_lang}-${index}`}>
+              <span className="translation-text">{item.text}</span>
+            </p>
+          ))}
+      </div>
+      <button className="button button--quiet" onClick={() => setOpen(true)} disabled={open}>
+        {open ? tx("Loading record…", "正在載入記錄…") : tx("Open full record", "開啟完整記錄")}
+      </button>
+      {error && <p className="callout callout--error">{error}</p>}
     </article>
   );
 }
