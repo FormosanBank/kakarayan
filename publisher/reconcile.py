@@ -305,29 +305,10 @@ def _canonical_xml(root: Path, source_repo: Path) -> int:
     return verified
 
 
-def _browser_counts(site: Path, expected: Mapping[str, int]) -> dict[str, int]:
-    response = json.loads(
-        (site / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")
-    )
-    manifest = response["data"]
-    sentences = 0
-    tokens = 0
-    for shard in manifest["shards"]:
-        content = gzip.decompress((site / "data" / shard["path"]).read_bytes())
-        records = json.loads(content)
-        sentences += len(records)
-        tokens += sum(len(record["tokens"]) for record in records)
-    result = {"sentences": sentences, "tokens": tokens}
-    _require_equal("browser sentence count", sentences, expected["sentences"])
-    _require_equal("browser token count", tokens, expected["tokens"])
-    return result
-
-
 def reconcile_release(
     root: Path,
     *,
     source_repo: Path | None = None,
-    site: Path | None = None,
 ) -> dict[str, object]:
     """Validate all primary projections and return a machine-readable report."""
     root = root.resolve()
@@ -403,7 +384,6 @@ def reconcile_release(
             )
 
     canonical_files = _canonical_xml(root, source_repo.resolve()) if source_repo else None
-    browser = _browser_counts(site.resolve(), database_counts) if site else None
     return {
         "release_id": manifest["release_id"],
         "counts": database_counts,
@@ -418,7 +398,6 @@ def reconcile_release(
         ],
         "sample_ids": {table: row["id"] for table, row in samples.items()},
         "canonical_files_verified": canonical_files,
-        "browser": browser,
     }
 
 
@@ -426,12 +405,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", required=True, type=Path)
     parser.add_argument("--source-repo", type=Path)
-    parser.add_argument("--site", type=Path)
     args = parser.parse_args(argv)
     result = reconcile_release(
         args.release,
         source_repo=args.source_repo,
-        site=args.site,
     )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0

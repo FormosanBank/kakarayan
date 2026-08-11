@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import gzip
 import hashlib
 import json
 import sqlite3
@@ -48,81 +47,6 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert amis["counts"]["sentences"] == 2
     assert amis["dialects"] == ["Xiuguluan"]
     assert "audio" in amis["capabilities"]
-    search_response = json.loads(
-        (first.output / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")
-    )
-    search_manifest = search_response["data"]
-    assert search_response["api_version"] == "v1"
-    assert search_response["kakarayan"]["commit"]
-    assert search_response["source"]["commit"] == first.source.commit
-    assert search_response["canonical_url"].endswith("/api/v1/search/manifest.json")
-    assert search_manifest["shards"][0]["records"] == 2
-    assert search_manifest["shards"][0]["unit_counts"] == {
-        "audio": 1,
-        "morphemes": 1,
-        "sentences": 2,
-        "texts": 1,
-        "tokens": 4,
-        "words": 2,
-    }
-    assert search_manifest["shards"][0]["language_id"] == "lang_amis"
-    assert search_manifest["shards"][0]["path"].endswith(".json.gz")
-    assert (
-        search_manifest["shards"][0]["uncompressed_bytes"] > search_manifest["shards"][0]["bytes"]
-    )
-    assert len(search_manifest["shards"][0]["uncompressed_sha256"]) == 64
-    assert search_manifest["shards"][0]["part"] == 0
-    assert search_manifest["translation_targets"] == [
-        {
-            "corpus_ids": ["corpus_testcorpus"],
-            "language_ids": ["lang_amis"],
-            "lexical_records": 1,
-            "records": 1,
-            "scopes": [
-                {
-                    "corpus_id": "corpus_testcorpus",
-                    "language_id": "lang_amis",
-                    "lexical_records": 1,
-                    "records": 1,
-                    "sentence_records": 1,
-                }
-            ],
-            "sentence_records": 1,
-            "xml_lang": "eng",
-        },
-        {
-            "corpus_ids": ["corpus_testcorpus"],
-            "language_ids": ["lang_amis"],
-            "lexical_records": 0,
-            "records": 1,
-            "scopes": [
-                {
-                    "corpus_id": "corpus_testcorpus",
-                    "language_id": "lang_amis",
-                    "lexical_records": 0,
-                    "records": 1,
-                    "sentence_records": 1,
-                }
-            ],
-            "sentence_records": 1,
-            "xml_lang": "zho",
-        },
-    ]
-    assert len(search_manifest["indexes"]) == 1
-    search_records = json.loads(
-        gzip.decompress(first.output.joinpath(search_manifest["shards"][0]["path"]).read_bytes())
-    )
-    search_index = json.loads(
-        gzip.decompress(first.output.joinpath(search_manifest["indexes"][0]["path"]).read_bytes())
-    )
-    assert search_index["terms"]["source"]["lima waco"] == [0]
-    assert search_index["terms"]["gloss"]["five"] == [0]
-    first_sentence = search_records[0]
-    assert first_sentence["phonology"][0]["text"] == "lima watso"
-    assert first_sentence["tier_translations"][1]["kind"] == "gloss"
-    assert first_sentence["tier_translations"][1]["owner_type"] == "morpheme"
-    assert first_sentence["words"][0]["class"] == "noun"
-    assert first_sentence["words"][0]["morphemes"][0]["class"] == "root"
     orthography = json.loads(
         (first.output / "api" / "v1" / "orthography.json").read_text(encoding="utf-8")
     )["data"]
@@ -262,7 +186,10 @@ def test_database_can_be_packaged_for_github_releases(
     assert artifact["asset_name"] == "formosanbank.sqlite.gz"
     assert artifact["download_url"].endswith(f"/data-{release.release_id}/formosanbank.sqlite.gz")
     assert not (release.output / "api").exists()
-    assert not (release.output / "search").exists()
+    assert (release.output / "site-metadata.zip").is_file()
+    with zipfile.ZipFile(release.output / "site-metadata.zip") as archive:
+        assert "v1/meta.json" in archive.namelist()
+        assert not any(name.startswith("v1/search/") for name in archive.namelist())
     assert not (release.output / "tables").exists()
     asset_names = [item["asset_name"] for item in manifest["artifacts"]]
     assert len(asset_names) == len(set(asset_names))

@@ -11,7 +11,6 @@ import re
 import shutil
 import sqlite3
 import subprocess
-import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Mapping
 from contextlib import ExitStack
@@ -24,6 +23,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
 from publisher import API_VERSION, APPLICATION_VERSION, PUBLIC_DOWNLOAD_PATHS, SCHEMA_VERSION
+from publisher.archive import directory_entries, write_zip
 from publisher.languages import language_rows
 from publisher.model_catalog import configured_model_catalog
 from publisher.orthography import build_orthography_catalog
@@ -464,469 +464,6 @@ def _build_catalog(
     }
 
 
-def _search_records(
-    connection: sqlite3.Connection,
-    rows: list[tuple[object, ...]],
-) -> list[dict[str, object]]:
-    """Project one bounded shard in bulk instead of issuing queries per sentence."""
-    if not rows:
-        return []
-    records: dict[str, dict[str, object]] = {}
-    for row in rows:
-        sentence_id = str(row[0])
-        records[sentence_id] = {
-            "id": sentence_id,
-            "text_id": row[1],
-            "corpus_id": row[2],
-            "language_id": row[3],
-            "dialect": row[4],
-            "source_path": row[5],
-            "xml_id": row[6],
-            "standard": row[7],
-            "original": row[8],
-            "translations": [],
-            "tokens": [],
-            "forms": [],
-            "phonology": [],
-            "tier_translations": [],
-            "audio": [],
-            "words": [],
-        }
-    sentence_ids = list(records)
-    placeholders = ",".join("?" for _ in sentence_ids)
-
-    def tier_rows(table: str, columns: tuple[str, ...]) -> None:
-        cursor = connection.execute(
-            f"""
-            SELECT scope.sentence_id, {", ".join(f"tier.{column}" for column in columns)}
-            FROM {table} tier
-            JOIN tier_scope_view scope
-              ON scope.owner_type = tier.owner_type AND scope.owner_id = tier.owner_id
-            WHERE scope.sentence_id IN ({placeholders})
-            ORDER BY scope.sentence_id,
-                     CASE tier.owner_type
-                       WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2
-                     END,
-                     tier.owner_id, tier.position, tier.id
-            """,
-            sentence_ids,
-        )
-        for item in cursor:
-            sentence_id = str(item[0])
-            value = dict(zip(columns, item[1:], strict=True))
-            cast(list[dict[str, object]], records[sentence_id][table]).append(value)
-
-    tier_rows(
-        "forms",
-        ("owner_type", "owner_id", "position", "text", "unclear", "kind", "notes", "normalized"),
-    )
-    tier_rows(
-        "phonology",
-        ("owner_type", "owner_id", "position", "text", "unclear", "kind"),
-    )
-    translation_columns = (
-        "owner_type",
-        "owner_id",
-        "position",
-        "text",
-        "unclear",
-        "xml_lang",
-        "kind",
-        "version",
-        "notes",
-        "normalized",
-    )
-    cursor = connection.execute(
-        f"""
-        SELECT scope.sentence_id,
-               {", ".join(f"tier.{column}" for column in translation_columns)}
-        FROM translations tier
-        JOIN tier_scope_view scope
-          ON scope.owner_type = tier.owner_type AND scope.owner_id = tier.owner_id
-        WHERE scope.sentence_id IN ({placeholders})
-        ORDER BY scope.sentence_id,
-                 CASE tier.owner_type WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2 END,
-                 tier.owner_id, tier.position, tier.id
-        """,
-        sentence_ids,
-    )
-    for item in cursor:
-        sentence_id = str(item[0])
-        value = dict(zip(translation_columns, item[1:], strict=True))
-        cast(list[dict[str, object]], records[sentence_id]["tier_translations"]).append(value)
-        if value["owner_type"] == "sentence":
-            cast(list[dict[str, object]], records[sentence_id]["translations"]).append(
-                {
-                    "text": value["text"],
-                    "xml_lang": value["xml_lang"],
-                    "kind": value["kind"],
-                    "version": value["version"],
-                }
-            )
-
-    audio_columns = (
-        "owner_type",
-        "owner_id",
-        "position",
-        "file",
-        "url",
-        "start",
-        "end",
-        "source",
-        "duration",
-        "availability_status",
-    )
-    cursor = connection.execute(
-        f"""
-        SELECT scope.sentence_id, {", ".join(f"tier.{column}" for column in audio_columns)}
-        FROM audio tier
-        JOIN tier_scope_view scope
-          ON scope.owner_type = tier.owner_type AND scope.owner_id = tier.owner_id
-        WHERE scope.sentence_id IN ({placeholders})
-        ORDER BY scope.sentence_id,
-                 CASE tier.owner_type WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2 END,
-                 tier.owner_id, tier.position, tier.id
-        """,
-        sentence_ids,
-    )
-    for item in cursor:
-        sentence_id = str(item[0])
-        value = dict(zip(audio_columns, item[1:], strict=True))
-        cast(list[dict[str, object]], records[sentence_id]["audio"]).append(value)
-
-    cursor = connection.execute(
-        f"""
-        SELECT sentence_id, surface, normalized, position, word_id
-        FROM tokens
-        WHERE sentence_id IN ({placeholders})
-        ORDER BY sentence_id, position, id
-        """,
-        sentence_ids,
-    )
-    for sentence_id, surface, normalized, position, word_id in cursor:
-        cast(list[dict[str, object]], records[str(sentence_id)]["tokens"]).append(
-            {
-                "surface": surface,
-                "normalized": normalized,
-                "position": position,
-                "word_id": word_id,
-            }
-        )
-
-    words_by_id: dict[str, dict[str, object]] = {}
-    cursor = connection.execute(
-        f"""
-        SELECT parent_id, id, xml_id, position, class, sclass
-        FROM words
-        WHERE parent_id IN ({placeholders})
-        ORDER BY parent_id, position, id
-        """,
-        sentence_ids,
-    )
-    for sentence_id, word_id, xml_id, position, word_class, sclass in cursor:
-        word = {
-            "id": word_id,
-            "xml_id": xml_id,
-            "position": position,
-            "class": word_class,
-            "sclass": sclass,
-            "morphemes": [],
-        }
-        words_by_id[str(word_id)] = word
-        cast(list[dict[str, object]], records[str(sentence_id)]["words"]).append(word)
-    if words_by_id:
-        word_ids = list(words_by_id)
-        word_placeholders = ",".join("?" for _ in word_ids)
-        cursor = connection.execute(
-            f"""
-            SELECT parent_id, id, xml_id, position, class, sclass
-            FROM morphemes
-            WHERE parent_id IN ({word_placeholders})
-            ORDER BY parent_id, position, id
-            """,
-            word_ids,
-        )
-        for word_id, morpheme_id, xml_id, position, morpheme_class, sclass in cursor:
-            cast(list[dict[str, object]], words_by_id[str(word_id)]["morphemes"]).append(
-                {
-                    "id": morpheme_id,
-                    "xml_id": xml_id,
-                    "position": position,
-                    "class": morpheme_class,
-                    "sclass": sclass,
-                }
-            )
-    return [records[str(row[0])] for row in rows]
-
-
-def _write_search_data(
-    connection: sqlite3.Connection,
-    output: Path,
-    *,
-    release_id: str,
-    shard_size: int = 1000,
-) -> dict[str, object]:
-    """Write portable JSONL plus bounded Pages-origin JSON shards."""
-    search_dir = output / "search"
-    search_dir.mkdir(parents=True, exist_ok=True)
-    query = """
-        SELECT
-          s.id,
-          t.id,
-          t.corpus_id,
-          t.language_id,
-          t.dialect,
-          t.source_path,
-          s.xml_id,
-          COALESCE((
-            SELECT text FROM forms
-            WHERE owner_type = 'sentence' AND owner_id = s.id AND kind = 'standard'
-            ORDER BY position LIMIT 1
-          ), ''),
-          COALESCE((
-            SELECT text FROM forms
-            WHERE owner_type = 'sentence' AND owner_id = s.id AND kind = 'original'
-            ORDER BY position LIMIT 1
-          ), '')
-        FROM sentences s
-        JOIN texts t ON t.id = s.parent_id
-        ORDER BY t.language_id, t.corpus_id, t.source_path, s.position
-    """
-    shards: list[dict[str, object]] = []
-    indexes: list[dict[str, object]] = []
-    current_scope: tuple[str, str] | None = None
-    current_rows: list[tuple[object, ...]] = []
-    scope_part = 0
-    scope_terms: dict[str, dict[str, set[int]]] = {}
-
-    def reset_terms() -> None:
-        nonlocal scope_terms
-        scope_terms = {
-            "source_exact": {},
-            "source": {},
-            "translation": {},
-            "phonology": {},
-            "gloss": {},
-            "regex": {},
-        }
-
-    def add_term(kind: str, value: object, part: int, *, normalize: bool = True) -> None:
-        text = str(value or "")
-        if normalize:
-            text = unicodedata.normalize("NFC", text).strip().casefold()
-        else:
-            text = unicodedata.normalize("NFC", text).strip()
-        if text:
-            scope_terms[kind].setdefault(text, set()).add(part)
-
-    def index_records(records: list[dict[str, object]], part: int) -> None:
-        for record in records:
-            source_values = [
-                record["standard"],
-                record["original"],
-                *(item["surface"] for item in cast(list[dict[str, object]], record["tokens"])),
-                *(item["text"] for item in cast(list[dict[str, object]], record["forms"])),
-            ]
-            for value in source_values:
-                add_term("source_exact", value, part, normalize=False)
-                add_term("source", value, part)
-                add_term("regex", value, part, normalize=False)
-            for item in cast(list[dict[str, object]], record["translations"]):
-                add_term("translation", item["text"], part)
-                add_term("regex", item["text"], part, normalize=False)
-            for item in cast(list[dict[str, object]], record["phonology"]):
-                add_term("phonology", item["text"], part)
-                add_term("regex", item["text"], part, normalize=False)
-            for item in cast(list[dict[str, object]], record["tier_translations"]):
-                add_term("regex", item["text"], part, normalize=False)
-                if item["owner_type"] != "sentence":
-                    add_term("gloss", item["text"], part)
-                    add_term("gloss", item["normalized"], part)
-
-    def write_index() -> None:
-        if current_scope is None or scope_part == 0:
-            return
-        corpus_id, language_id = current_scope
-        relative = Path("search") / "indexes" / language_id / corpus_id / "vocabulary.json.gz"
-        path = output / relative
-        document = {
-            "schema_version": SCHEMA_VERSION,
-            "release_id": release_id,
-            "language_id": language_id,
-            "corpus_id": corpus_id,
-            "shards": scope_part,
-            "terms": {
-                kind: {term: sorted(parts) for term, parts in values.items()}
-                for kind, values in scope_terms.items()
-            },
-        }
-        uncompressed = _json_bytes(document)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(gzip.compress(uncompressed, compresslevel=9, mtime=0))
-        data = path.read_bytes()
-        indexes.append(
-            {
-                "path": relative.as_posix(),
-                "language_id": language_id,
-                "corpus_id": corpus_id,
-                "shards": scope_part,
-                "terms": sum(len(values) for values in scope_terms.values()),
-                "bytes": len(data),
-                "uncompressed_bytes": len(uncompressed),
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "uncompressed_sha256": hashlib.sha256(uncompressed).hexdigest(),
-            }
-        )
-
-    def flush() -> None:
-        nonlocal current_rows, scope_part
-        if not current_rows or current_scope is None:
-            return
-        corpus_id, language_id = current_scope
-        current_records = _search_records(connection, current_rows)
-        index_records(current_records, scope_part)
-        for value in current_records:
-            stream.write(
-                json.dumps(
-                    value,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-                + "\n"
-            )
-        relative = Path("search") / "shards" / language_id / corpus_id / f"{scope_part:04d}.json.gz"
-        path = output / relative
-        uncompressed = _json_bytes(current_records)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(gzip.compress(uncompressed, compresslevel=9, mtime=0))
-        data = path.read_bytes()
-        shards.append(
-            {
-                "path": relative.as_posix(),
-                "language_id": language_id,
-                "corpus_id": corpus_id,
-                "part": scope_part,
-                "records": len(current_records),
-                "unit_counts": {
-                    "texts": len({str(record["text_id"]) for record in current_records}),
-                    "sentences": len(current_records),
-                    "words": sum(
-                        len(cast(list[dict[str, object]], record["words"]))
-                        for record in current_records
-                    ),
-                    "morphemes": sum(
-                        len(cast(list[dict[str, object]], word["morphemes"]))
-                        for record in current_records
-                        for word in cast(list[dict[str, object]], record["words"])
-                    ),
-                    "tokens": sum(
-                        len(cast(list[dict[str, object]], record["tokens"]))
-                        for record in current_records
-                    ),
-                    "audio": sum(
-                        len(cast(list[dict[str, object]], record["audio"]))
-                        for record in current_records
-                    ),
-                },
-                "bytes": len(data),
-                "uncompressed_bytes": len(uncompressed),
-                "sha256": hashlib.sha256(data).hexdigest(),
-                "uncompressed_sha256": hashlib.sha256(uncompressed).hexdigest(),
-            }
-        )
-        current_rows = []
-        scope_part += 1
-
-    with (search_dir / "sentences.jsonl").open("w", encoding="utf-8", newline="\n") as stream:
-        reset_terms()
-        for row in connection.execute(query):
-            scope = (str(row[2]), str(row[3]))
-            if current_scope != scope:
-                flush()
-                write_index()
-                current_scope = scope
-                scope_part = 0
-                reset_terms()
-            current_rows.append(row)
-            if len(current_rows) >= shard_size:
-                flush()
-        flush()
-        write_index()
-    translation_targets: dict[str, dict[str, object]] = {}
-    for (
-        xml_lang,
-        language_id,
-        corpus_id,
-        records,
-        sentence_records,
-        lexical_records,
-    ) in connection.execute(
-        """
-        SELECT translation.xml_lang,
-               text.language_id,
-               text.corpus_id,
-               COUNT(DISTINCT scope.sentence_id),
-               COUNT(DISTINCT CASE
-                 WHEN translation.owner_type = 'sentence' THEN scope.sentence_id
-               END),
-               COUNT(DISTINCT CASE
-                 WHEN translation.owner_type != 'sentence' THEN scope.sentence_id
-               END)
-        FROM translations translation
-        JOIN tier_scope_view scope
-          ON scope.owner_type = translation.owner_type
-         AND scope.owner_id = translation.owner_id
-        JOIN sentences sentence ON scope.sentence_id = sentence.id
-        JOIN texts text ON sentence.parent_id = text.id
-        WHERE TRIM(translation.xml_lang) != ''
-        GROUP BY translation.xml_lang, text.language_id, text.corpus_id
-        ORDER BY translation.xml_lang, text.language_id, text.corpus_id
-        """
-    ):
-        target = translation_targets.setdefault(
-            str(xml_lang),
-            {
-                "xml_lang": str(xml_lang),
-                "records": 0,
-                "sentence_records": 0,
-                "lexical_records": 0,
-                "language_ids": set(),
-                "corpus_ids": set(),
-                "scopes": [],
-            },
-        )
-        target["records"] = cast(int, target["records"]) + int(records)
-        target["sentence_records"] = cast(int, target["sentence_records"]) + int(sentence_records)
-        target["lexical_records"] = cast(int, target["lexical_records"]) + int(lexical_records)
-        cast(set[str], target["language_ids"]).add(str(language_id))
-        cast(set[str], target["corpus_ids"]).add(str(corpus_id))
-        cast(list[dict[str, object]], target["scopes"]).append(
-            {
-                "language_id": str(language_id),
-                "corpus_id": str(corpus_id),
-                "records": int(records),
-                "sentence_records": int(sentence_records),
-                "lexical_records": int(lexical_records),
-            }
-        )
-    return {
-        "schema_version": SCHEMA_VERSION,
-        "release_id": release_id,
-        "record_unit": "sentence",
-        "translation_targets": [
-            {
-                **target,
-                "language_ids": sorted(cast(set[str], target["language_ids"])),
-                "corpus_ids": sorted(cast(set[str], target["corpus_ids"])),
-            }
-            for target in translation_targets.values()
-        ],
-        "shards": shards,
-        "indexes": indexes,
-    }
-
-
 def _artifact(
     path: Path,
     root: Path,
@@ -1091,17 +628,12 @@ def build_release(
     rights_overrides: Path | None = None,
     model_catalog: dict[str, object] | None = None,
     include_prepared: bool = True,
-    site_only: bool = False,
     compress_database: bool = False,
     release_only: bool = False,
     application_commit: str | None = None,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
-    if site_only and include_prepared:
-        raise BuildError("A site-only build cannot include prepared download formats")
-    if site_only and compress_database:
-        raise BuildError("A site-only build has no database to compress")
-    if release_only and (site_only or not include_prepared or not compress_database):
+    if release_only and (not include_prepared or not compress_database):
         raise BuildError("A release-only build requires prepared formats and a compressed database")
     repo = repo.resolve()
     source = inspect_source(repo, expected_commit)
@@ -1164,11 +696,6 @@ def build_release(
             application_commit=kakarayan_commit,
             rights=rights,
         )
-        search_manifest = _write_search_data(
-            connection,
-            output,
-            release_id=release_id,
-        )
         meta = _api_envelope(
             "meta",
             {"current_release": release_id},
@@ -1203,7 +730,6 @@ def build_release(
         "models": models,
         "orthography": orthography,
         "content": content,
-        "search/manifest": search_manifest,
     }
     api_documents = {
         endpoint: _api_envelope(
@@ -1228,7 +754,6 @@ def build_release(
     validate_document(rights, schema_dir / "rights.schema.json")
     validate_document(orthography, schema_dir / "orthography.schema.json")
     validate_document(content, schema_dir / "content.schema.json")
-    validate_document(search_manifest, schema_dir / "search-manifest.schema.json")
 
     if include_prepared:
         prepared_rights, prepared_summary = build_prepared_formats(
@@ -1247,18 +772,14 @@ def build_release(
             "canonical_packages": 0,
         }
     artifact_content: dict[str, dict[str, object]] = {}
-    if site_only:
-        shutil.rmtree(tables_dir)
-        sqlite_path.unlink()
-        (output / "search" / "sentences.jsonl").unlink()
-    elif compress_database:
+    if compress_database:
         compressed_database, content = _compress_database(sqlite_path)
         artifact_content[compressed_database.relative_to(output).as_posix()] = content
     if release_only:
+        write_zip(output / "site-metadata.zip", directory_entries(output / "api"))
         if tables_dir.exists():
             shutil.rmtree(tables_dir)
         shutil.rmtree(output / "api")
-        shutil.rmtree(output / "search")
     rights_rows = cast(list[dict[str, object]], rights["entries"])
     rights_ids = [str(entry["id"]) for entry in rights_rows]
     rights_by_id: dict[str, Mapping[str, object]] = {
@@ -1279,8 +800,8 @@ def build_release(
         scope = (
             "prepared-download"
             if relative.startswith("prepared/")
-            else "site-query-data"
-            if relative.startswith(("api/", "search/"))
+            else "site-metadata"
+            if relative.startswith("api/") or relative == "site-metadata.zip"
             else "release-core"
         )
         artifact = _artifact(
@@ -1353,7 +874,7 @@ def build_release(
                 _artifact(
                     path,
                     output,
-                    scope="site-query-data",
+                    scope="site-metadata",
                     rights_ids=rights_ids,
                     rights_entries=rights_by_id,
                 )

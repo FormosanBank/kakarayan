@@ -90,18 +90,10 @@ def assemble(
         raise BuildError("Release manifest has no release_id")
     schema_dir = Path(__file__).resolve().parents[1] / "schemas"
     api_target = public / "api"
-    data_target = public / "data"
-    if api_target.exists() or data_target.exists():
-        raise BuildError("Generated site API/data targets already exist; remove them explicitly")
+    if api_target.exists():
+        raise BuildError("Generated site API target already exists; remove it explicitly")
     public.mkdir(parents=True, exist_ok=True)
-    search = release / "search"
-    if not search.is_dir():
-        raise BuildError("Release has no static search data")
     shutil.copytree(release / "api", api_target)
-    data_target.mkdir()
-    shutil.copy2(manifest, data_target / "release-manifest.json")
-    shutil.copytree(search / "shards", data_target / "search" / "shards")
-    shutil.copytree(search / "indexes", data_target / "search" / "indexes")
     if download_manifest is not None:
         try:
             published = json.loads(download_manifest.read_text(encoding="utf-8"))
