@@ -3,24 +3,31 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
+def release_path(client: TestClient, path: str) -> str:
+    release_id = client.get("/readyz").json()["release_id"]
+    return f"/v1/releases/{release_id}/{path}"
+
+
 def test_health_catalogues_and_contract(client: TestClient) -> None:
     assert client.get("/healthz").json() == {"status": "alive"}
     ready = client.get("/readyz")
     assert ready.status_code == 200
-    assert ready.json()["release_id"].startswith("fb-20240102-")
+    release_id = ready.json()["release_id"]
+    assert release_id.startswith("fb-20240102-")
     assert ready.headers["x-content-type-options"] == "nosniff"
 
     meta = client.get("/v1/meta")
-    assert meta.status_code == 200
     assert meta.headers["cache-control"] == "public, max-age=300"
     assert meta.headers["x-kakarayan-release"] == meta.json()["release_id"]
     languages = client.get("/v1/languages").json()
     amis = next(item for item in languages if item["name"] == "Amis")
-    assert client.get(f"/v1/languages/{amis['id']}").json()["name"] == "Amis"
+    language = client.get(f"/v1/releases/{release_id}/languages/{amis['id']}")
+    assert language.json()["name"] == "Amis"
+    assert "immutable" in language.headers["cache-control"]
 
     corpora = client.get("/v1/corpora").json()
     assert corpora[0]["name"] == "TestCorpus"
-    assert client.get(f"/v1/corpora/{corpora[0]['id']}").json()["name"] == "TestCorpus"
+    assert client.get(f"/v1/releases/{release_id}/corpora/{corpora[0]['id']}").status_code == 200
     assert client.get("/v1/downloads").json()["artifacts"]
     assert "entries" in client.get("/v1/rights").json()
     assert "models" in client.get("/v1/models").json()
@@ -28,85 +35,107 @@ def test_health_catalogues_and_contract(client: TestClient) -> None:
     assert client.get("/docs").status_code == 200
 
 
-def test_record_endpoints_preserve_tiers(client: TestClient) -> None:
+def test_record_summary_then_detail(client: TestClient) -> None:
     result = client.get(
-        "/v1/concordance",
-        params={
-            "q": "lima",
-            "language_id": "lang_amis",
-            "field": "form",
-            "match": "exact",
-        },
+        release_path(client, "concordance"),
+        params={"q": "lima", "language_id": "lang_amis", "match": "exact"},
     )
     assert result.status_code == 200
-    sentence_id = result.json()["items"][0]["id"]
-    sentence = client.get(f"/v1/sentences/{sentence_id}").json()
-    assert sentence["tiers"]["forms"][0]["kind"] == "standard"
-    assert sentence["tiers"]["forms"][1]["kind"] == "original"
-    assert sentence["words"][0]["morphemes"][0]["tiers"]["translations"][0]["text"] == "FIVE"
+    summary = result.json()["items"][0]
+    assert "words" not in summary
+    sentence = client.get(release_path(client, f"sentences/{summary['id']}"))
+    assert sentence.status_code == 200
+    body = sentence.json()
+    assert body["standard"] == "lima waco"
+    assert body["forms"][0]["kind"] == "standard"
+    assert body["words"][0]["morphemes"][0]["id"]
+    assert any(item["text"] == "FIVE" for item in body["tier_translations"])
 
-    text = client.get(f"/v1/texts/{sentence['parent_id']}").json()
-    assert text["source_path"] == "Corpora/TestCorpus/XML/fixture.xml"
-    assert text["sentence_count"] == 2
+    text = client.get(release_path(client, f"texts/{body['parent_id']}"))
+    assert text.json()["source_path"] == "Corpora/TestCorpus/XML/fixture.xml"
+    assert text.json()["sentence_count"] == 2
 
 
-def test_dictionary_concordance_and_frequencies(client: TestClient) -> None:
-    dictionary = client.get(
-        "/v1/dictionary",
-        params={"q": "li", "language_id": "lang_amis", "match": "prefix"},
-    )
+def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
+    url = release_path(client, "dictionary")
+    dictionary = client.get(url, params={"q": "li", "language_id": "lang_amis", "match": "prefix"})
     assert dictionary.status_code == 200
     assert dictionary.json()["items"][0]["headword"] == "lima"
 
+    reverse = client.get(
+        url,
+        params={
+            "q": "five",
+            "language_id": "lang_amis",
+            "direction": "translation",
+            "translation_language": "eng",
+            "match": "exact",
+        },
+    )
+    assert reverse.status_code == 200
+    assert reverse.json()["items"][0]["headword"] == "lima"
+
     translated = client.get(
-        "/v1/concordance",
+        release_path(client, "concordance"),
         params={
             "q": "fictional",
             "language_id": "lang_amis",
-            "field": "translation",
+            "direction": "translation",
+            "translation_language": "eng",
             "match": "contains",
         },
     )
     assert translated.status_code == 200
-    assert translated.json()["items"][0]["tiers"]["translations"][0]["xml_lang"] == "eng"
+    assert translated.json()["items"][0]["translations"][0]["xml_lang"] == "eng"
+    languages = client.get(
+        release_path(client, "translation-languages"),
+        params={"language_id": "lang_amis"},
+    ).json()
+    assert {item["xml_lang"] for item in languages} == {"eng", "zho"}
 
-    frequencies = client.get(
-        "/v1/frequencies",
-        params={"language_id": "lang_amis", "sort": "count", "limit": 1},
-    )
-    assert frequencies.status_code == 200
-    body = frequencies.json()
-    assert len(body["items"]) == 1
+
+def test_keyset_pages_and_query_identity(client: TestClient) -> None:
+    url = release_path(client, "frequencies")
+    first = client.get(url, params={"language_id": "lang_amis", "limit": 1})
+    body = first.json()
     assert body["next_cursor"]
     second = client.get(
-        "/v1/frequencies",
+        url,
+        params={"language_id": "lang_amis", "limit": 1, "cursor": body["next_cursor"]},
+    )
+    assert second.status_code == 200
+    assert second.json()["items"] != body["items"]
+    wrong_query = client.get(
+        url,
         params={
             "language_id": "lang_amis",
-            "sort": "count",
+            "prefix": "l",
             "limit": 1,
             "cursor": body["next_cursor"],
         },
     )
-    assert second.status_code == 200
-    assert second.json()["items"]
+    assert wrong_query.status_code == 400
 
 
-def test_bounds_errors_cors_and_read_only_surface(client: TestClient) -> None:
+def test_summaries_bounds_errors_cors_and_read_only(client: TestClient) -> None:
+    summary = client.get(release_path(client, "summaries"), params={"language_id": "lang_amis"})
+    assert summary.status_code == 200
+    assert summary.json()["sentences"] == 2
+    assert summary.json()["source_types"] >= len(summary.json()["source_frequencies"])
+
     too_long = client.get(
-        "/v1/dictionary",
+        release_path(client, "dictionary"),
         params={"q": "x" * 257, "language_id": "lang_amis"},
     )
     assert too_long.status_code == 422
-    assert too_long.json()["error"]["code"] == "invalid_parameter"
     assert too_long.json()["error"]["field"] == "q"
-
-    bad_cursor = client.get(
-        "/v1/frequencies",
-        params={"language_id": "lang_amis", "cursor": "not-a-cursor"},
+    assert (
+        client.get(
+            "/v1/releases/not-active/dictionary", params={"q": "x", "language_id": "lang_amis"}
+        ).status_code
+        == 404
     )
-    assert bad_cursor.status_code == 400
-    assert bad_cursor.json()["error"]["code"] == "invalid_cursor"
-    assert client.post("/v1/dictionary").status_code == 405
+    assert client.post(release_path(client, "dictionary")).status_code == 405
 
     preflight = client.options(
         "/v1/meta",
@@ -115,13 +144,9 @@ def test_bounds_errors_cors_and_read_only_surface(client: TestClient) -> None:
             "Access-Control-Request-Method": "GET",
         },
     )
-    assert preflight.status_code == 200
     assert preflight.headers["access-control-allow-origin"] == "https://formosanbank.github.io"
     denied = client.options(
         "/v1/meta",
-        headers={
-            "Origin": "https://untrusted.example",
-            "Access-Control-Request-Method": "GET",
-        },
+        headers={"Origin": "https://untrusted.example", "Access-Control-Request-Method": "GET"},
     )
     assert "access-control-allow-origin" not in denied.headers

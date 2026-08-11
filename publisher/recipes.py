@@ -8,13 +8,15 @@ import unicodedata
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import regex
 from jsonschema import Draft202012Validator
 
+from api.search import MatchMode, normalize_surface, normalize_text
+from api.search import matches as search_matches
 from publisher.build import BuildError
 
 
@@ -26,7 +28,7 @@ def load_recipe(path: Path, schema_path: Path) -> dict[str, Any]:
 
 
 def _normalize(value: str) -> str:
-    return unicodedata.normalize("NFC", value).strip().casefold()
+    return normalize_text(value)
 
 
 def _edit_distance(left: str, right: str, maximum: int) -> int:
@@ -64,9 +66,6 @@ def _translation_matches(
     match: str,
     pattern: regex.Pattern[str] | None,
 ) -> bool:
-    query_units = _text_units(query)
-    needle = query_units[0] if query_units else ""
-    units = _text_units(value)
     if match == "regex":
         if pattern is None:
             raise BuildError("Recipe regular expression was not compiled")
@@ -74,10 +73,11 @@ def _translation_matches(
             return pattern.search(value, timeout=0.05) is not None
         except TimeoutError as error:
             raise BuildError("Recipe regular expression exceeded its work limit") from error
-    if match == "exact":
-        return needle in units
-    if match == "prefix":
-        return any(unit.startswith(needle) for unit in units)
+    if match in {"exact", "prefix", "contains"}:
+        return search_matches(value, query, cast(MatchMode, match))
+    query_units = _text_units(query)
+    needle = query_units[0] if query_units else ""
+    units = _text_units(value)
     if match == "fuzzy":
         maximum = 1 if len(needle) <= 4 else 2
         return any(
@@ -120,8 +120,8 @@ def _matches(
         *(item["text"] for item in record["forms"]),
     ]
     if match == "source":
-        source = unicodedata.normalize("NFC", query).strip()
-        return any(unicodedata.normalize("NFC", value) == source for value in source_forms)
+        source = normalize_surface(query)
+        return any(normalize_surface(value) == source for value in source_forms)
     forms = [
         *(_normalize(value) for value in source_forms),
         *(_normalize(item["normalized"]) for item in record["tokens"]),
