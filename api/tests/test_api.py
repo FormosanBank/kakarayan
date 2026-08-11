@@ -150,3 +150,32 @@ def test_summaries_bounds_errors_cors_and_read_only(client: TestClient) -> None:
         headers={"Origin": "https://untrusted.example", "Access-Control-Request-Method": "GET"},
     )
     assert "access-control-allow-origin" not in denied.headers
+
+
+def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
+    params = [
+        ("language_id", "lang_amis"),
+        ("field", "id"),
+        ("field", "standard"),
+        ("field", "translations"),
+        ("max_rows", "1"),
+    ]
+    preview = client.get(release_path(client, "datasets/preview"), params=params)
+    assert preview.status_code == 200
+    assert preview.json()["estimated_rows"] == 2
+    assert preview.json()["returned_rows"] == 1
+    assert preview.json()["truncated"] is True
+    assert list(preview.json()["items"][0]) == ["id", "standard", "translations"]
+
+    exported = client.get(
+        release_path(client, "datasets/export"), params=[*params, ("format", "tsv")]
+    )
+    assert exported.status_code == 200
+    assert exported.headers["x-kakarayan-row-count"] == "1"
+    assert exported.text.startswith("id\tstandard\ttranslations\n")
+
+    unbounded = client.get(
+        release_path(client, "datasets/export"),
+        params={"language_id": "lang_amis", "max_rows": 1001},
+    )
+    assert unbounded.status_code == 422

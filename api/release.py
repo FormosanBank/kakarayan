@@ -105,7 +105,19 @@ def load_release(settings: Settings) -> ReleaseState:
     if meta.get("release_id") != manifest.get("release_id"):
         raise ReleaseError("SQLite and active manifest identify different releases")
     configured_checksum = settings.expected_sha256
-    manifest_checksum = manifest.get("database_sha256")
+    artifact: dict[str, Any] = next(
+        (
+            item
+            for item in manifest.get("artifacts", [])
+            if item.get("path") in {"formosanbank.sqlite", "formosanbank.sqlite.gz"}
+        ),
+        {},
+    )
+    manifest_checksum = (
+        artifact.get("content_sha256")
+        if artifact.get("compression") == "gzip"
+        else artifact.get("sha256")
+    )
     if configured_checksum and manifest_checksum != configured_checksum:
         raise ReleaseError("Configured checksum does not match the active release")
     return ReleaseState(settings.database_path, manifest, metadata)

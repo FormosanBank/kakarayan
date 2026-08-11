@@ -16,6 +16,36 @@ from api.search import MatchMode, normalize_surface, normalize_text
 SearchDirection = Literal["formosan", "translation"]
 FrequencySort = Literal["count", "form"]
 TierRequirement = Literal["translation", "audio", "phonology", "interlinear", "unclear"]
+DatasetField = Literal[
+    "id",
+    "text_id",
+    "standard",
+    "original",
+    "translations",
+    "tokens",
+    "phonology",
+    "glosses",
+    "language_id",
+    "corpus_id",
+    "dialect",
+    "source_path",
+    "audio",
+]
+DATASET_FIELDS: tuple[DatasetField, ...] = (
+    "id",
+    "text_id",
+    "standard",
+    "original",
+    "translations",
+    "tokens",
+    "phonology",
+    "glosses",
+    "language_id",
+    "corpus_id",
+    "dialect",
+    "source_path",
+    "audio",
+)
 
 
 def _like(value: str) -> str:
@@ -872,3 +902,174 @@ class CorpusStore:
             "translation_frequencies": translations,
             "distributions": distributions,
         }
+
+    def _dataset_clauses(
+        self,
+        *,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirements: Sequence[TierRequirement],
+    ) -> tuple[list[str], list[object]]:
+        clauses, parameters = self._scope(language_id, corpus_id, dialect)
+        normalized = (
+            normalize_surface(q or "") if direction == "formosan" else normalize_text(q or "")
+        )
+        if q is not None and not normalized:
+            raise ApiError(422, "invalid_parameter", "The query is empty after normalization")
+        if normalized and direction == "formosan":
+            token_clause, token_value = _predicate("tok.normalized", normalized, match)
+            form_clause, form_value = _predicate("f.normalized", normalized, match)
+            clauses.append(
+                "(EXISTS (SELECT 1 FROM tokens tok WHERE tok.sentence_id = s.id "
+                f"AND {token_clause}) OR EXISTS (SELECT 1 FROM forms f "
+                "JOIN tier_scope_view ts ON ts.owner_type = f.owner_type "
+                "AND ts.owner_id = f.owner_id "
+                f"WHERE ts.sentence_id = s.id AND {form_clause}))"
+            )
+            parameters.extend((token_value, form_value))
+        elif normalized:
+            translation_clause, translation_value = _predicate("tr.normalized", normalized, match)
+            language_clause = " AND tr.xml_lang = ?" if translation_language else ""
+            clauses.append(
+                "EXISTS (SELECT 1 FROM translations tr JOIN tier_scope_view ts "
+                "ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id "
+                f"WHERE ts.sentence_id = s.id AND {translation_clause}{language_clause})"
+            )
+            parameters.append(translation_value)
+            if translation_language:
+                parameters.append(translation_language)
+        self._tier_requirements(clauses, requirements)
+        return clauses, parameters
+
+    @staticmethod
+    def _dataset_projection(fields: Sequence[DatasetField]) -> str:
+        expressions = {
+            "id": "s.id AS id",
+            "text_id": "s.parent_id AS text_id",
+            "standard": """COALESCE((
+                SELECT f.text FROM forms f
+                WHERE f.owner_type = 'sentence' AND f.owner_id = s.id
+                  AND f.kind = 'standard' ORDER BY f.position LIMIT 1
+            ), '') AS standard""",
+            "original": """COALESCE((
+                SELECT f.text FROM forms f
+                WHERE f.owner_type = 'sentence' AND f.owner_id = s.id
+                  AND f.kind = 'original' ORDER BY f.position LIMIT 1
+            ), '') AS original""",
+            "translations": """COALESCE((SELECT group_concat(value, ' | ') FROM (
+                SELECT tr.xml_lang || ':' || tr.text AS value FROM translations tr
+                JOIN tier_scope_view ts
+                  ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+                WHERE ts.sentence_id = s.id
+                ORDER BY tr.owner_type, tr.owner_id, tr.position
+            )), '') AS translations""",
+            "tokens": """COALESCE((SELECT group_concat(surface, ' ') FROM (
+                SELECT tok.surface FROM tokens tok
+                WHERE tok.sentence_id = s.id ORDER BY tok.position
+            )), '') AS tokens""",
+            "phonology": """COALESCE((SELECT group_concat(value, ' | ') FROM (
+                SELECT p.text AS value FROM phonology p
+                JOIN tier_scope_view ts
+                  ON ts.owner_type = p.owner_type AND ts.owner_id = p.owner_id
+                WHERE ts.sentence_id = s.id
+                ORDER BY p.owner_type, p.owner_id, p.position
+            )), '') AS phonology""",
+            "glosses": """COALESCE((SELECT group_concat(value, ' | ') FROM (
+                SELECT tr.text AS value FROM translations tr
+                JOIN tier_scope_view ts
+                  ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+                WHERE ts.sentence_id = s.id AND tr.owner_type <> 'sentence'
+                ORDER BY tr.owner_type, tr.owner_id, tr.position
+            )), '') AS glosses""",
+            "language_id": "t.language_id AS language_id",
+            "corpus_id": "t.corpus_id AS corpus_id",
+            "dialect": "t.dialect AS dialect",
+            "source_path": "t.source_path AS source_path",
+            "audio": """COALESCE((SELECT group_concat(value, ' | ') FROM (
+                SELECT COALESCE(NULLIF(a.url, ''), NULLIF(a.file, ''), a.source) AS value
+                FROM audio a JOIN tier_scope_view ts
+                  ON ts.owner_type = a.owner_type AND ts.owner_id = a.owner_id
+                WHERE ts.sentence_id = s.id
+                ORDER BY a.owner_type, a.owner_id, a.position
+            )), '') AS audio""",
+        }
+        return ",\n".join(expressions[field] for field in fields)
+
+    def dataset(
+        self,
+        *,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirements: Sequence[TierRequirement],
+        fields: Sequence[DatasetField],
+        max_rows: int,
+    ) -> dict[str, Any]:
+        if not fields or any(field not in DATASET_FIELDS for field in fields):
+            raise ApiError(422, "invalid_parameter", "Choose at least one supported dataset field")
+        clauses, parameters = self._dataset_clauses(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirements,
+        )
+        where = " AND ".join(clauses)
+        projection = self._dataset_projection(fields)
+        with self.connect() as connection:
+            estimated_rows = int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM sentences s JOIN texts t ON t.id = s.parent_id "
+                    f"WHERE {where}",
+                    parameters,
+                ).fetchone()[0]
+            )
+            rows = [
+                dict(row)
+                for row in connection.execute(
+                    f"SELECT {projection} FROM sentences s "
+                    f"JOIN texts t ON t.id = s.parent_id WHERE {where} "
+                    "ORDER BY t.source_path, s.position, s.id LIMIT ?",
+                    (*parameters, max_rows),
+                )
+            ]
+        return {
+            "release_id": self.release_id,
+            "estimated_rows": estimated_rows,
+            "returned_rows": len(rows),
+            "truncated": estimated_rows > len(rows),
+            "fields": list(fields),
+            "items": rows,
+        }
+
+    def assert_export_allowed(self, language_id: str, corpus_id: str | None) -> None:
+        rights = {item["id"]: item for item in self.metadata("rights").get("entries", [])}
+        selected = [
+            corpus
+            for corpus in self.metadata("corpora")
+            if (not corpus_id or corpus["id"] == corpus_id)
+            and language_id in corpus.get("languages", [])
+        ]
+        blocked = [
+            corpus["id"]
+            for corpus in selected
+            if rights.get(corpus.get("rights_id"), {}).get("redistribution") != "allowed"
+        ]
+        if blocked:
+            raise ApiError(
+                403,
+                "export_not_permitted",
+                "The selected scope includes data without reviewed redistribution permission",
+            )

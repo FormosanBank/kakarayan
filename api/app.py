@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import json
 import logging
 import sqlite3
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
@@ -21,7 +23,14 @@ from api.config import Settings
 from api.errors import ApiError, api_error_handler, validation_error_handler
 from api.release import ReleaseError, load_release
 from api.search import MatchMode
-from api.store import CorpusStore, FrequencySort, SearchDirection, TierRequirement
+from api.store import (
+    DATASET_FIELDS,
+    CorpusStore,
+    DatasetField,
+    FrequencySort,
+    SearchDirection,
+    TierRequirement,
+)
 
 LOGGER = logging.getLogger("kakarayan.api")
 PageSize = Annotated[int, Query(ge=1, le=100)]
@@ -323,6 +332,129 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _cache(response, immutable=True)
         return release_store(request, release_id).summaries(
             language_id=language_id, corpus_id=corpus_id, dialect=dialect, limit=limit
+        )
+
+    def dataset_result(
+        request: Request,
+        release_id: str,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirement: list[TierRequirement] | None,
+        field: list[DatasetField] | None,
+        max_rows: int,
+    ) -> dict:
+        return release_store(request, release_id).dataset(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirement or (),
+            fields=field or DATASET_FIELDS,
+            max_rows=max_rows,
+        )
+
+    @app.get("/v1/releases/{release_id}/datasets/preview", tags=["datasets"])
+    async def dataset_preview(
+        request: Request,
+        response: Response,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+        dialect: OptionalDialect = None,
+        q: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
+        match: MatchMode = "exact",
+        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        field: Annotated[list[DatasetField] | None, Query()] = None,
+        max_rows: Annotated[int, Query(ge=1, le=25)] = 12,
+    ) -> dict:
+        _cache(response, immutable=True)
+        return dataset_result(
+            request,
+            release_id,
+            language_id,
+            corpus_id,
+            dialect,
+            q,
+            direction,
+            translation_language,
+            match,
+            requirement,
+            field,
+            max_rows,
+        )
+
+    @app.get(
+        "/v1/releases/{release_id}/datasets/export",
+        tags=["datasets"],
+        response_model=None,
+    )
+    async def dataset_export(
+        request: Request,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+        dialect: OptionalDialect = None,
+        q: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
+        match: MatchMode = "exact",
+        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        field: Annotated[list[DatasetField] | None, Query()] = None,
+        max_rows: Annotated[int, Query(ge=1, le=1000)] = 1000,
+        format: Literal["csv", "tsv", "jsonl"] = "csv",
+    ) -> Response:
+        current = release_store(request, release_id)
+        current.assert_export_allowed(language_id, corpus_id)
+        result = dataset_result(
+            request,
+            release_id,
+            language_id,
+            corpus_id,
+            dialect,
+            q,
+            direction,
+            translation_language,
+            match,
+            requirement,
+            field,
+            max_rows,
+        )
+        fields = result["fields"]
+        output = io.StringIO(newline="")
+        if format == "jsonl":
+            for row in result["items"]:
+                output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+            media_type = "application/x-ndjson"
+        else:
+            delimiter = "\t" if format == "tsv" else ","
+            writer = csv.DictWriter(
+                output, fieldnames=fields, delimiter=delimiter, lineterminator="\n"
+            )
+            writer.writeheader()
+            writer.writerows(result["items"])
+            media_type = "text/tab-separated-values" if format == "tsv" else "text/csv"
+        body = output.getvalue().encode()
+        if len(body) > 5 * 1024 * 1024:
+            raise ApiError(413, "export_too_large", "The export exceeds the 5 MiB response limit")
+        filename = f"kakarayan-{release_id}.{format}"
+        return Response(
+            body,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Kakarayan-Row-Count": str(result["returned_rows"]),
+            },
         )
 
     return app
