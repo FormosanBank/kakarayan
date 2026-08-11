@@ -1,46 +1,39 @@
 [project]
 name = "kakarayan"
 version = "0.2.0"
-description = "Web application exposing the FormosanBank corpus. Milestone 1: corpus ingestion into PostgreSQL."
+description = "Publisher and read-only query service for the public FormosanBank corpus."
 readme = "README.md"
 license = "CC-BY-NC-4.0"
 requires-python = "==3.13.*"
 dependencies = [
-    "django>=5.1,<5.2",
-    "psycopg[binary]>=3.2",
+    "fastapi>=0.116,<1",
+    "uvicorn[standard]>=0.35,<1",
+]
+
+[dependency-groups]
+publisher = [
+    "jsonschema>=4.23",
     "lxml>=5.0",
     "openpyxl>=3.1,<4",
     "pyarrow>=20,<26",
     "pycldf>=1.43,<3",
-    "django-environ>=0.11",
-    "django-htmx>=1.27.0",
-    "fastapi>=0.116,<1",
-    "jsonschema>=4.23",
-    "uvicorn[standard]>=0.35,<1",
-    "regex>=2026.1.15,<2027",
 ]
-
-[dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pytest-django>=4.9",
     "pytest-cov>=6.0",
     "ruff>=0.9,<0.15",
     "mypy>=1.13",
-    "django-stubs[compatible-mypy]>=5.1",
     "httpx>=0.28,<1",
     "pre-commit>=4.0",
 ]
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["tests.py", "test_*.py", "*_test.py"]
-addopts = "--cov=corpus --cov=publisher --cov-report=term-missing"
+addopts = "--cov=api --cov=publisher --cov-report=term-missing"
 
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-exclude = ["corpus/migrations/"]
 
 [tool.ruff.lint]
 select = [
@@ -51,23 +44,12 @@ select = [
     "UP",  # pyupgrade (modernise syntax for py313)
     "B",   # flake8-bugbear (likely bugs / bad practices)
 ]
-ignore = [
-    "B008",  # function calls in default args — Django's forms/models do this intentionally
-]
+ignore = ["B008"]
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.mypy]
 python_version = "3.13"
-plugins = ["mypy_django_plugin.main"]
 ignore_missing_imports = true
 warn_unused_ignores = true
-exclude = ["migrations/"]
-
-[[tool.mypy.overrides]]
-module = "corpus.ingestion.*"
-disallow_untyped_defs = false
-
-[tool.django-stubs]
-django_settings_module = "config.settings"
