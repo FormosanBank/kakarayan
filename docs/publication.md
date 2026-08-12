@@ -3,6 +3,9 @@
 Kakarayan publishes one immutable data release, activates that exact release in the required
 query API, and then deploys the matching static site. The order is intentional:
 
+Production-scale validation results for the current v1 architecture are recorded in
+[v1-evidence.md](v1-evidence.md).
+
 ```text
 FormosanBank commit -> draft data release -> published data release
                     -> query API ready on that release
