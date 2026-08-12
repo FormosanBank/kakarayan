@@ -219,7 +219,7 @@ class CorpusStore:
                   ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id
                 JOIN sentences s ON s.id = ts.sentence_id
                 JOIN texts t ON t.id = s.parent_id
-                WHERE {where} AND f.owner_type <> 'sentence' AND {form_clause}
+                WHERE {where} AND {form_clause}
             """
             return sql, (
                 *scope_parameters,

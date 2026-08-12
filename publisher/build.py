@@ -311,8 +311,7 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
         INSERT INTO formosan_vocabulary
         SELECT normalized FROM tokens WHERE normalized <> ''
         UNION
-        SELECT normalized FROM forms
-        WHERE normalized <> '' AND owner_type <> 'sentence';
+        SELECT normalized FROM forms WHERE normalized <> '';
 
         CREATE VIRTUAL TABLE formosan_vocabulary_fts USING fts5(
           value,

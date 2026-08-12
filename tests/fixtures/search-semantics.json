@@ -56,6 +56,17 @@
       "expected": ["lima waco"]
     },
     {
+      "name": "unsegmented sentence-level form remains searchable",
+      "route": "concordance",
+      "parameters": {
+        "q": "TOKI RIMA!",
+        "language_id": "lang_amis",
+        "match": "exact"
+      },
+      "field": "original",
+      "expected": ["toki rima"]
+    },
+    {
       "name": "English translation reverse concordance",
       "route": "concordance",
       "parameters": {

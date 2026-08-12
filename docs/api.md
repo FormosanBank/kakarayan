@@ -82,7 +82,7 @@ Optional filters are `corpus_id`, `dialect`, `translation_language`, and repeate
 Example reverse dictionary lookup:
 
 ```http
-GET /v1/releases/fb-20260811-abcdef12/dictionary?q=good&language_id=amis&direction=translation&translation_language=eng&match=exact&limit=25
+GET /v1/releases/fb-20260811-abcdef12/dictionary?q=good&language_id=lang_amis&direction=translation&translation_language=eng&match=exact&limit=25
 ```
 
 Search meaning is defined in [search-semantics.md](search-semantics.md). The server queries
@@ -158,7 +158,7 @@ service not ready.
 const release = "fb-20260811-abcdef12";
 const query = new URLSearchParams({
   q: "fangcalay",
-  language_id: "amis",
+  language_id: "lang_amis",
   direction: "formosan",
   match: "exact",
   limit: "25",
