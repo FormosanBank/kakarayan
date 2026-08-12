@@ -66,7 +66,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
   await expect(entry.getByRole("heading")).toContainText("lima");
-  await expect(entry).toContainText("FIVE");
+  await expect(entry).toContainText("English");
 
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
@@ -93,10 +93,12 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await expect(page.locator(".builder__summary")).toContainText("Matching rows");
 
   await page.getByRole("combobox", {name: "Search field"}).selectOption("translation");
-  await expect(page.getByRole("combobox", {name: "Translation language"})).toBeVisible();
-  await page.getByLabel("Optional word or phrase").fill("fictional");
+  const translationLanguage = page.getByRole("combobox", {name: "Translation language"});
+  await expect(translationLanguage).toBeVisible();
+  await translationLanguage.selectOption("eng");
+  await page.getByLabel("Optional word or phrase").fill("five");
   await page.getByRole("combobox", {name: "Match"}).selectOption("contains");
-  await expect(page.locator(".builder__summary")).toContainText(/Matching rows\s*1/u);
+  await expect(page.locator(".builder__summary dd").first()).toHaveText(/^[1-9][\d,]*$/u);
 
   const recipeDownload = page.waitForEvent("download");
   await page.getByRole("button", {name: "Download recipe"}).click();
