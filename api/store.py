@@ -121,6 +121,19 @@ class CorpusStore:
 
         connection.set_progress_handler(progress, 1000)
         try:
+            row = connection.execute(
+                "SELECT value_json FROM publication_metadata WHERE key = 'meta'"
+            ).fetchone()
+            try:
+                active_release = json.loads(str(row[0]))["release_id"] if row else None
+            except (json.JSONDecodeError, KeyError, TypeError):
+                active_release = None
+            if active_release != self.release_id:
+                raise ApiError(
+                    503,
+                    "release_mismatch",
+                    "The active query database changed. Restart with its matching manifest.",
+                )
             yield connection
         except sqlite3.OperationalError as error:
             if "interrupted" in str(error).lower():
@@ -140,6 +153,10 @@ class CorpusStore:
     def require_release(self, release_id: str) -> None:
         if release_id != self.release_id:
             raise ApiError(404, "release_not_found", "The requested release is not active")
+
+    def check_ready(self) -> None:
+        with self.connect():
+            return
 
     def metadata(self, key: str) -> Any:
         return self.state.metadata[key]

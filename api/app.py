@@ -182,6 +182,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/readyz", tags=["service"])
     async def ready(request: Request, response: Response) -> dict[str, str]:
         current = store(request)
+        current.check_ready()
         response.headers["Cache-Control"] = "no-store"
         return {"status": "ready", "release_id": current.release_id}
 
