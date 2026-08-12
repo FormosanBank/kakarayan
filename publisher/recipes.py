@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 import zipfile
 from collections.abc import Iterator, Sequence
@@ -131,16 +132,29 @@ def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]
 
 def _record_lines(release: Path) -> Iterator[str]:
     packages = sorted((release / "prepared" / "jsonl").glob("*.zip"))
-    if not packages:
+    if packages:
+        for package in packages:
+            yield from _archive_record_lines(package)
+        return
+    bundled = release / "prepared" / "hierarchical-jsonl.zip"
+    if not bundled.is_file():
         raise BuildError("Release contains no executable recipe record source")
-    for package in packages:
-        with zipfile.ZipFile(package) as archive:
-            for name in sorted(archive.namelist()):
-                if not name.endswith(".jsonl"):
-                    continue
-                with archive.open(name) as stream:
+    with zipfile.ZipFile(bundled) as outer:
+        for name in sorted(item for item in outer.namelist() if item.endswith(".zip")):
+            with outer.open(name) as stream, zipfile.ZipFile(io.BytesIO(stream.read())) as inner:
+                yield from _archive_record_lines(inner)
+
+
+def _archive_record_lines(package: Path | zipfile.ZipFile) -> Iterator[str]:
+    if isinstance(package, zipfile.ZipFile):
+        for name in sorted(package.namelist()):
+            if name.endswith(".jsonl"):
+                with package.open(name) as stream:
                     for line in stream:
                         yield line.decode("utf-8")
+        return
+    with zipfile.ZipFile(package) as archive:
+        yield from _archive_record_lines(archive)
 
 
 def _spreadsheet_safe(value: object, enabled: bool) -> object:

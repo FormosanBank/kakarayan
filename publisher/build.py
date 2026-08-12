@@ -974,6 +974,7 @@ def build_release(
             release_id=release_id,
             source_commit=source.commit,
             rights=rights,
+            compact_release=release_only,
         )
     else:
         prepared_rights = {}
@@ -991,6 +992,8 @@ def build_release(
         if tables_dir.exists():
             shutil.rmtree(tables_dir)
         shutil.rmtree(output / "api")
+        for duplicate in ("catalog.json", "models.json", "orthography.json", "rights.json"):
+            (output / duplicate).unlink()
     rights_rows = cast(list[dict[str, object]], rights["entries"])
     rights_ids = [str(entry["id"]) for entry in rights_rows]
     rights_by_id: dict[str, Mapping[str, object]] = {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sqlite3
 import subprocess
@@ -95,15 +96,15 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         assert "Generic-metadata.json" in archive.namelist()
         assert "README.txt" in archive.namelist()
         assert "rights.json" in archive.namelist()
-    jsonl_packages = list((first.output / "prepared" / "jsonl").glob("*.zip"))
-    assert len(jsonl_packages) == 1
-    with zipfile.ZipFile(jsonl_packages[0]) as archive:
-        assert archive.namelist() == [
-            "README.txt",
-            "data-dictionary.json",
-            "part-0000.jsonl",
-            "rights.json",
-        ]
+    with zipfile.ZipFile(first.output / "prepared" / "hierarchical-jsonl.zip") as outer:
+        [partition] = [name for name in outer.namelist() if name.endswith(".zip")]
+        with zipfile.ZipFile(io.BytesIO(outer.read(partition))) as archive:
+            assert archive.namelist() == [
+                "README.txt",
+                "data-dictionary.json",
+                "part-0000.jsonl",
+                "rights.json",
+            ]
 
     with closing(sqlite3.connect(first.output / "formosanbank.sqlite")) as database:
         assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)
@@ -193,6 +194,15 @@ def test_database_can_be_packaged_for_github_releases(
     assert not (release.output / "tables").exists()
     asset_names = [item["asset_name"] for item in manifest["artifacts"]]
     assert len(asset_names) == len(set(asset_names))
+    assert len(asset_names) == 12
+    assert not (release.output / "prepared" / "canonical").exists()
+    assert not (release.output / "prepared" / "jsonl").exists()
+    with zipfile.ZipFile(release.output / "prepared" / "hierarchical-jsonl.zip") as archive:
+        assert any(name.endswith(".zip") for name in archive.namelist())
+    assert not any(
+        (release.output / name).exists()
+        for name in ("catalog.json", "models.json", "orthography.json", "rights.json")
+    )
 
 
 def test_cldf_streams_and_validates_large_source_fields(

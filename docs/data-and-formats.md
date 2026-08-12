@@ -26,9 +26,13 @@ checks. It contains no corpus search records.
 ### Prepared research downloads
 
 Prepared downloads are intended for complete or large-scale analysis. The curated public
-set includes canonical source packages, normalized tabular packages, the SQLite read model,
-and specialist formats produced by `publisher/prepared.py`. The Downloads page shows the
-actual release inventory, sizes, checksums, included tiers, rights, and citation evidence.
+set includes normalized tabular packages, the SQLite read model, and specialist formats
+produced by `publisher/prepared.py`. Canonical XML remains available in FormosanBank. The
+Downloads page shows sizes, checksums, included tiers, rights, and citation evidence.
+
+The production release exposes 11 curated downloads. Hierarchical JSONL partitions used
+by export recipes are bundled into one archive. Corpus-specific canonical XML is not
+duplicated in the Kakarayan release.
 
 Prepared Parquet remains available when published. Kakarayan does not load an analytical
 database runtime into the browser to create custom Parquet files.
