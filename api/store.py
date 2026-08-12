@@ -623,7 +623,7 @@ class CorpusStore:
             sql = f"""
                 SELECT d.headword, MIN(d.display_form) AS display_form,
                        SUM(d.occurrences) AS occurrences,
-                       SUM(d.variant_count) AS variant_count
+                       COUNT(DISTINCT d.display_form) AS variant_count
                 FROM dictionary_terms d
                 WHERE {" AND ".join(clauses)}
                 GROUP BY d.headword

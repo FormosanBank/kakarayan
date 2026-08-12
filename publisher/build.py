@@ -343,8 +343,7 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
           dialect TEXT NOT NULL,
           headword TEXT NOT NULL,
           display_form TEXT NOT NULL,
-          occurrences INTEGER NOT NULL,
-          variant_count INTEGER NOT NULL
+          occurrences INTEGER NOT NULL
         );
 
         INSERT INTO dictionary_terms
@@ -365,13 +364,12 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
           JOIN texts t ON t.id = s.parent_id
           WHERE f.owner_type <> 'sentence' AND f.normalized <> ''
         )
-        SELECT language_id, corpus_id, dialect, headword,
-               MIN(display_form), COUNT(*), COUNT(DISTINCT display_form)
+        SELECT language_id, corpus_id, dialect, headword, display_form, COUNT(*)
         FROM candidates
-        GROUP BY language_id, corpus_id, dialect, headword;
+        GROUP BY language_id, corpus_id, dialect, headword, display_form;
 
         CREATE UNIQUE INDEX dictionary_terms_scope
-        ON dictionary_terms(language_id, corpus_id, dialect, headword);
+        ON dictionary_terms(language_id, corpus_id, dialect, headword, display_form);
 
         CREATE INDEX dictionary_terms_lookup
         ON dictionary_terms(language_id, headword, corpus_id, dialect);
