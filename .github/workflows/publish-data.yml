@@ -204,6 +204,7 @@ jobs:
           kill "$API_PID"
           wait "$API_PID" || true
           trap - EXIT
+          rm -r -- build/active-release build/formosanbank
 
       - name: Preserve query benchmark evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -226,7 +227,9 @@ jobs:
 
       - name: Pack validated release output
         if: ${{ !inputs.dry_run }}
-        run: tar -C build/data-release -cf build/data-release.tar .
+        run: |
+          tar -C build/data-release -cf build/data-release.tar .
+          rm -r -- build/data-release
 
       - name: Transfer validated release output
         if: ${{ !inputs.dry_run }}
@@ -281,6 +284,7 @@ jobs:
         run: |
           mkdir -p build/data-release
           tar -C build/data-release -xf build/data-release.tar
+          rm -- build/data-release.tar
           uv run python -m publisher.verify_release \
             --release build/data-release \
             --max-artifact-mib 2048 \
