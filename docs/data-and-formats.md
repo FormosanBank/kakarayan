@@ -34,6 +34,12 @@ The production release exposes 11 curated downloads. Hierarchical JSONL partitio
 by export recipes are bundled into one archive. Corpus-specific canonical XML is not
 duplicated in the Kakarayan release.
 
+The time-alignment package stores every valid sentence timing and media reference in one
+JSONL table. It also includes EAF, WebVTT, and SRT files for media with multiple cues, plus
+TextGrid when those cues do not overlap. A one-cue clip stays in the JSONL table because
+six separate interchange files add no alignment information. Audio bytes are never copied
+into the package.
+
 Prepared Parquet remains available when published. Kakarayan does not load an analytical
 database runtime into the browser to create custom Parquet files.
 

@@ -109,7 +109,7 @@ export function Downloads({data}: {data: AppData}) {
   );
   const unavailableCount = artifacts.filter((artifact) => !artifact.publishable).length;
   const formatNames: Record<string, string> = {
-    aligned: tx("time-aligned media", "時間對齊媒體"),
+    aligned: tx("time-alignment data", "時間對齊資料"),
     cldf: tx("CLDF dataset", "CLDF 資料集"),
     csv: tx("CSV tables", "CSV 表格"),
     jsonl: tx("JSON Lines", "JSON Lines"),

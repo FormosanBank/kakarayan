@@ -18,6 +18,7 @@ from openpyxl import load_workbook
 from publisher import PUBLIC_DOWNLOAD_PATHS
 from publisher.build import BuildError, build_release
 from publisher.cldf_export import write_cldf_package
+from publisher.format_aligned import write_aligned_package
 from publisher.verify_release import verify_release
 
 
@@ -88,8 +89,13 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         assert archive.read(source_path) == (public_repo / source_path).read_bytes()
         assert "rights.json" in archive.namelist()
     with zipfile.ZipFile(first.output / "prepared" / "time-aligned.zip") as archive:
-        assert any(name.endswith(".eaf") for name in archive.namelist())
-        assert any(name.endswith(".TextGrid") for name in archive.namelist())
+        alignment = json.loads(archive.read("alignments.jsonl"))
+        assert alignment["cues"][0]["sentence_id"].startswith("sentence_")
+        assert alignment["cues"][0]["start_ms"] == 1250
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["media_groups"] == 1
+        assert manifest["single_cue_groups"] == 1
+        assert manifest["interchange_groups"] == 0
         assert "README.txt" in archive.namelist()
         assert "rights.json" in archive.namelist()
     with zipfile.ZipFile(first.output / "prepared" / "formosanbank-cldf.zip") as archive:
@@ -203,6 +209,43 @@ def test_database_can_be_packaged_for_github_releases(
         (release.output / name).exists()
         for name in ("catalog.json", "models.json", "orthography.json", "rights.json")
     )
+
+
+def test_multi_cue_media_gets_interchange_files(public_repo: Path, tmp_path: Path) -> None:
+    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    database = release.output / "formosanbank.sqlite"
+    with closing(sqlite3.connect(database)) as connection:
+        sentence_ids = [
+            row[0] for row in connection.execute("SELECT id FROM sentences ORDER BY id")
+        ]
+        connection.execute(
+            """
+            INSERT INTO audio (
+              id, owner_type, owner_id, position, file, url, start, end,
+              start_raw, end_raw, source, duration, availability_status, attributes_json
+            ) VALUES (?, 'sentence', ?, 0, 'sentence.wav', NULL, 4.0, 5.0,
+                      '4.0', '5.0', NULL, 1.0, 'unknown', '{}')
+            """,
+            ("audio_second_cue", sentence_ids[1]),
+        )
+        connection.commit()
+
+    package = tmp_path / "time-aligned.zip"
+    counts = write_aligned_package(database, package, release.release_id, {"entries": []})
+
+    assert counts == {
+        "media_groups": 1,
+        "single_cue_groups": 0,
+        "interchange_groups": 1,
+        "textgrids": 1,
+        "files": 10,
+    }
+    with zipfile.ZipFile(package) as archive:
+        names = archive.namelist()
+        assert any(name.endswith(".eaf") for name in names)
+        assert any(name.endswith(".TextGrid") for name in names)
+        assert any(name.endswith(".source.vtt") for name in names)
+        assert any(name.endswith(".translation.srt") for name in names)
 
 
 def test_cldf_streams_and_validates_large_source_fields(

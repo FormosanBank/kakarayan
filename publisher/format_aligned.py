@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections import defaultdict
 from decimal import ROUND_HALF_UP, Decimal
+from itertools import groupby
 from pathlib import Path
 from typing import Any
 
@@ -218,87 +218,123 @@ def write_aligned_package(
         FROM sentence_view sv
         JOIN audio a ON a.owner_type = 'sentence' AND a.owner_id = sv.sentence_id
         WHERE a.start IS NOT NULL AND a.end IS NOT NULL AND a.end >= a.start
-        ORDER BY sv.source_path, COALESCE(a.file, a.url, a.source), a.start, a.end,
+          AND COALESCE(a.file, a.url, a.source, '') != ''
+        ORDER BY sv.text_id, COALESCE(a.file, a.url, a.source), a.start, a.end,
                  sv.sentence_id
     """
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
-    with open_release(database) as connection:
-        for row in connection.execute(query):
-            value = dict(row)
-            media = value["file"] or value["url"] or value["source"]
-            if not media:
-                continue
-            value["start_ms"] = _milliseconds(value["start"])
-            value["end_ms"] = _milliseconds(value["end"])
-            groups[(value["text_id"], media)].append(value)
-
-    entries: list[tuple[str, bytes]] = []
-    manifest_groups = []
+    entries: list[tuple[str, bytes | Path]] = []
+    alignment_rows = path.with_suffix(".alignments.jsonl.tmp")
+    media_group_count = 0
+    singleton_count = 0
+    interchange_count = 0
     textgrid_count = 0
-    for (text_id, media), cues in sorted(groups.items()):
-        media_id = hashlib.sha256(media.encode()).hexdigest()[:10]
-        stem = f"{cues[0]['corpus_id']}/{text_id}-{media_id}"
-        entries.extend(
-            [
-                (f"{stem}.source.vtt", _vtt(cues, "source_form")),
-                (f"{stem}.source.srt", _srt(cues, "source_form")),
-                (f"{stem}.translation.vtt", _vtt(cues, "translation")),
-                (f"{stem}.translation.srt", _srt(cues, "translation")),
-                (f"{stem}.eaf", _eaf(cues, media)),
-            ]
-        )
-        textgrid = _textgrid(cues)
-        if textgrid is not None:
-            entries.append((f"{stem}.TextGrid", textgrid))
-            textgrid_count += 1
-        manifest_groups.append(
-            {
-                "text_id": text_id,
-                "corpus_id": cues[0]["corpus_id"],
-                "language_id": cues[0]["language_id"],
-                "source_path": cues[0]["source_path"],
-                "media_reference": media,
-                "cue_count": len(cues),
-                "textgrid_included": textgrid is not None,
-            }
-        )
-    mapping = {
-        "release_id": release_id,
-        "timing": "Source seconds rounded to milliseconds with decimal ROUND_HALF_UP.",
-        "media": "References only. No audio bytes are redistributed.",
-        "textgrid": "Excluded for a media group when intervals overlap.",
-        "groups": manifest_groups,
-    }
-    entries.append(
-        (
-            "manifest.json",
-            (json.dumps(mapping, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(),
-        )
-    )
-    entries.append(
-        (
-            "README.txt",
+    try:
+        with (
+            open_release(database) as connection,
+            alignment_rows.open("w", encoding="utf-8", newline="\n") as stream,
+        ):
+            rows = connection.execute(query)
+
+            def key(row: Any) -> tuple[str, str]:
+                return str(row["text_id"]), str(row["file"] or row["url"] or row["source"])
+
+            for (text_id, media), grouped_rows in groupby(rows, key=key):
+                cues = [dict(row) for row in grouped_rows]
+                for cue in cues:
+                    cue["start_ms"] = _milliseconds(cue["start"])
+                    cue["end_ms"] = _milliseconds(cue["end"])
+                media_group_count += 1
+                record = {
+                    "text_id": text_id,
+                    "corpus_id": cues[0]["corpus_id"],
+                    "language_id": cues[0]["language_id"],
+                    "source_path": cues[0]["source_path"],
+                    "media_reference": media,
+                    "cues": [
+                        {
+                            "sentence_id": cue["sentence_id"],
+                            "start_ms": cue["start_ms"],
+                            "end_ms": cue["end_ms"],
+                            "source_form": cue["source_form"],
+                            "translation": cue["translation"],
+                        }
+                        for cue in cues
+                    ],
+                }
+                stream.write(
+                    json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                )
+                stream.write("\n")
+                if len(cues) == 1:
+                    singleton_count += 1
+                    continue
+                interchange_count += 1
+                media_id = hashlib.sha256(media.encode()).hexdigest()[:10]
+                stem = f"interchange/{cues[0]['corpus_id']}/{text_id}-{media_id}"
+                entries.extend(
+                    [
+                        (f"{stem}.source.vtt", _vtt(cues, "source_form")),
+                        (f"{stem}.source.srt", _srt(cues, "source_form")),
+                        (f"{stem}.translation.vtt", _vtt(cues, "translation")),
+                        (f"{stem}.translation.srt", _srt(cues, "translation")),
+                        (f"{stem}.eaf", _eaf(cues, media)),
+                    ]
+                )
+                textgrid = _textgrid(cues)
+                if textgrid is not None:
+                    entries.append((f"{stem}.TextGrid", textgrid))
+                    textgrid_count += 1
+        mapping = {
+            "release_id": release_id,
+            "timing": "Source seconds rounded to milliseconds with decimal ROUND_HALF_UP.",
+            "media": "References only. No audio bytes are redistributed.",
+            "alignments": "alignments.jsonl contains every valid timed media group and cue.",
+            "interchange": (
+                "EAF, WebVTT, and SRT are included for multi-cue media groups. TextGrid "
+                "is included when the cues do not overlap. Single-cue groups remain "
+                "complete in alignments.jsonl."
+            ),
+            "textgrid": "Excluded for a multi-cue media group when intervals overlap.",
+            "media_groups": media_group_count,
+            "single_cue_groups": singleton_count,
+            "interchange_groups": interchange_count,
+        }
+        entries.append(("alignments.jsonl", alignment_rows))
+        entries.append(
             (
-                "Kakarayan time-aligned derivatives\n\n"
-                f"Release: {release_id}\n"
-                "EAF, TextGrid, WebVTT, and SRT are generated only from valid sentence "
-                "timings. Media is referenced, never copied. Canonical XML remains the "
-                "authoritative representation.\n"
-            ).encode(),
+                "manifest.json",
+                (json.dumps(mapping, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(),
+            )
         )
-    )
-    entries.append(
-        (
-            "rights.json",
-            (json.dumps(rights, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(),
+        entries.append(
+            (
+                "README.txt",
+                (
+                    "Kakarayan time-aligned derivatives\n\n"
+                    f"Release: {release_id}\n"
+                    "alignments.jsonl contains every valid sentence timing and media reference. "
+                    "EAF, TextGrid, WebVTT, and SRT are generated for media with multiple cues, "
+                    "where interchange containers add information. Media is referenced, never "
+                    "copied. Canonical XML remains the authoritative representation.\n"
+                ).encode(),
+            )
         )
-    )
-    write_zip(path, entries)
-    for name, data in entries:
-        if name.endswith(".eaf"):
-            etree.fromstring(data)
-    return {
-        "media_groups": len(groups),
-        "textgrids": textgrid_count,
-        "files": len(entries),
-    }
+        entries.append(
+            (
+                "rights.json",
+                (json.dumps(rights, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode(),
+            )
+        )
+        write_zip(path, entries)
+        for name, data in entries:
+            if name.endswith(".eaf") and isinstance(data, bytes):
+                etree.fromstring(data)
+        return {
+            "media_groups": media_group_count,
+            "single_cue_groups": singleton_count,
+            "interchange_groups": interchange_count,
+            "textgrids": textgrid_count,
+            "files": len(entries),
+        }
+    finally:
+        alignment_rows.unlink(missing_ok=True)
