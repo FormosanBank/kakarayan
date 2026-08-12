@@ -18,6 +18,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
 from api.errors import ApiError, api_error_handler, validation_error_handler
@@ -102,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Accept", "If-None-Match", "X-Kakarayan-Client"],
         max_age=86400,
     )
+    app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 
     @app.exception_handler(ApiError)
     async def handle_api_error(request: Request, error: ApiError) -> JSONResponse:

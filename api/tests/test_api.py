@@ -47,8 +47,10 @@ def test_record_summary_then_detail(client: TestClient) -> None:
     result = client.get(
         release_path(client, "concordance"),
         params={"q": "lima", "language_id": "lang_amis", "match": "exact"},
+        headers={"Accept-Encoding": "gzip"},
     )
     assert result.status_code == 200
+    assert result.headers["content-encoding"] == "gzip"
     assert len(gzip.compress(result.content)) <= 100 * 1024
     summary = result.json()["items"][0]
     assert "words" not in summary
