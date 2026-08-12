@@ -39,6 +39,7 @@ const CURATED_DOWNLOAD_PATHS = [
   "formosanbank.sqlite.gz",
   "prepared/csv-tables.zip",
   "prepared/flat-jsonl-tables.zip",
+  "prepared/hierarchical-jsonl.zip",
   "prepared/formosanbank-cldf.zip",
   "prepared/formosanbank.xlsx",
   "prepared/metadata-and-audio.zip",
