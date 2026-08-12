@@ -3,7 +3,8 @@ FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     KAKARAYAN_DB_PATH=/data/formosanbank.sqlite \
-    KAKARAYAN_RELEASE_MANIFEST_PATH=/data/active-release.json
+    KAKARAYAN_RELEASE_MANIFEST_PATH=/data/active-release.json \
+    KAKARAYAN_CORS_ORIGINS=https://formosanbank.github.io
 
 RUN groupadd --gid 10001 kakarayan \
     && useradd --uid 10001 --gid kakarayan --no-create-home kakarayan \

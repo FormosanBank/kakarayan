@@ -4,12 +4,6 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Django
-*.log
-db.sqlite3
-/staticfiles/
-/media/
-
 # Env / secrets
 .env
 
@@ -22,10 +16,9 @@ db.sqlite3
 /build/
 /site/dist/
 /site/node_modules/
-/clients/javascript/node_modules/
-/clients/javascript/dist/
 /site/public/api/
-/site/public/data/
+/site/playwright-report/
+/site/test-results/
 /.pytest_cache/
 /.mypy_cache/
 /.ruff_cache/
