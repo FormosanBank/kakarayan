@@ -267,22 +267,34 @@ def _hierarchical_counts(root: Path) -> tuple[dict[str, int], float]:
                     float(row["duration"]) for row in rows if row.get("duration") is not None
                 )
 
-    for path in sorted((root / "prepared" / "jsonl").glob("*.zip")):
+    def add_archive(archive: zipfile.ZipFile) -> None:
+        for name in sorted(item for item in archive.namelist() if item.endswith(".jsonl")):
+            with archive.open(name) as stream:
+                for line in stream:
+                    sentence = json.loads(line)
+                    counts["sentences"] += 1
+                    text_ids.add(str(sentence["text_id"]))
+                    counts["tokens"] += len(sentence["tokens"])
+                    add_tiers(sentence["tiers"])
+                    for word in sentence["words"]:
+                        counts["words"] += 1
+                        add_tiers(word["tiers"])
+                        for morpheme in word["morphemes"]:
+                            counts["morphemes"] += 1
+                            add_tiers(morpheme["tiers"])
+
+    packages = sorted((root / "prepared" / "jsonl").glob("*.zip"))
+    for path in packages:
         with zipfile.ZipFile(path) as archive:
-            for name in sorted(item for item in archive.namelist() if item.endswith(".jsonl")):
-                with archive.open(name) as stream:
-                    for line in stream:
-                        sentence = json.loads(line)
-                        counts["sentences"] += 1
-                        text_ids.add(str(sentence["text_id"]))
-                        counts["tokens"] += len(sentence["tokens"])
-                        add_tiers(sentence["tiers"])
-                        for word in sentence["words"]:
-                            counts["words"] += 1
-                            add_tiers(word["tiers"])
-                            for morpheme in word["morphemes"]:
-                                counts["morphemes"] += 1
-                                add_tiers(morpheme["tiers"])
+            add_archive(archive)
+    if not packages:
+        with zipfile.ZipFile(root / "prepared" / "hierarchical-jsonl.zip") as outer:
+            for name in sorted(item for item in outer.namelist() if item.endswith(".zip")):
+                with (
+                    outer.open(name) as stream,
+                    zipfile.ZipFile(io.BytesIO(stream.read())) as inner,
+                ):
+                    add_archive(inner)
     counts["texts"] = len(text_ids)
     return counts, math.fsum(durations)
 

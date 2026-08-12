@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
@@ -42,6 +42,36 @@ def write_zip(
                         shutil.copyfileobj(source, destination, length=1024 * 1024)
                 else:
                     destination.write(data)
+    temporary.replace(path)
+
+
+def repack_zip(
+    path: Path,
+    source: Path,
+    *,
+    replacements: Mapping[str, bytes] | None = None,
+) -> None:
+    """Repack a ZIP deterministically without buffering large members."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(f"{path.suffix}.tmp")
+    replacement_data = replacements or {}
+    with (
+        zipfile.ZipFile(source) as source_archive,
+        zipfile.ZipFile(
+            temporary,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=9,
+            strict_timestamps=True,
+        ) as destination_archive,
+    ):
+        for name in sorted(source_archive.namelist()):
+            with destination_archive.open(_info(name, zipfile.ZIP_DEFLATED), "w") as destination:
+                if name in replacement_data:
+                    destination.write(replacement_data[name])
+                    continue
+                with source_archive.open(name) as source_member:
+                    shutil.copyfileobj(source_member, destination, length=1024 * 1024)
     temporary.replace(path)
 
 
