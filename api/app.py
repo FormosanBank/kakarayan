@@ -176,76 +176,72 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return current
 
     @app.get("/healthz", tags=["service"])
-    async def health() -> dict[str, str]:
+    def health() -> dict[str, str]:
         return {"status": "alive"}
 
     @app.get("/readyz", tags=["service"])
-    async def ready(request: Request, response: Response) -> dict[str, str]:
+    def ready(request: Request, response: Response) -> dict[str, str]:
         current = store(request)
         current.check_ready()
         response.headers["Cache-Control"] = "no-store"
         return {"status": "ready", "release_id": current.release_id}
 
     @app.get("/v1/meta", tags=["catalogue"])
-    async def meta(request: Request, response: Response) -> dict:
+    def meta(request: Request, response: Response) -> dict:
         _cache(response)
         return store(request).metadata("meta")
 
     @app.get("/v1/languages", tags=["catalogue"])
-    async def languages(request: Request, response: Response) -> list[dict]:
+    def languages(request: Request, response: Response) -> list[dict]:
         _cache(response)
         return store(request).metadata("languages")
 
     @app.get("/v1/corpora", tags=["catalogue"])
-    async def corpora(request: Request, response: Response) -> list[dict]:
+    def corpora(request: Request, response: Response) -> list[dict]:
         _cache(response)
         return store(request).metadata("corpora")
 
     @app.get("/v1/downloads", tags=["catalogue"])
-    async def downloads(request: Request, response: Response) -> dict:
+    def downloads(request: Request, response: Response) -> dict:
         _cache(response)
         return store(request).downloads()
 
     @app.get("/v1/rights", tags=["catalogue"])
-    async def rights(request: Request, response: Response) -> dict:
+    def rights(request: Request, response: Response) -> dict:
         _cache(response)
         return store(request).metadata("rights")
 
     @app.get("/v1/models", tags=["catalogue"])
-    async def models(request: Request, response: Response) -> dict:
+    def models(request: Request, response: Response) -> dict:
         _cache(response)
         return store(request).metadata("models")
 
     @app.get("/v1/releases/{release_id}/languages/{language_id}", tags=["catalogue"])
-    async def language(
+    def language(
         request: Request, response: Response, release_id: ReleaseId, language_id: str
     ) -> dict:
         _cache(response, immutable=True)
         return release_store(request, release_id).language(language_id)
 
     @app.get("/v1/releases/{release_id}/corpora/{corpus_id}", tags=["catalogue"])
-    async def corpus(
-        request: Request, response: Response, release_id: ReleaseId, corpus_id: str
-    ) -> dict:
+    def corpus(request: Request, response: Response, release_id: ReleaseId, corpus_id: str) -> dict:
         _cache(response, immutable=True)
         return release_store(request, release_id).corpus(corpus_id)
 
     @app.get("/v1/releases/{release_id}/texts/{text_id}", tags=["records"])
-    async def text(
-        request: Request, response: Response, release_id: ReleaseId, text_id: str
-    ) -> dict:
+    def text(request: Request, response: Response, release_id: ReleaseId, text_id: str) -> dict:
         _cache(response, immutable=True)
         return release_store(request, release_id).text(text_id)
 
     @app.get("/v1/releases/{release_id}/sentences/{sentence_id}", tags=["records"])
-    async def sentence(
+    def sentence(
         request: Request, response: Response, release_id: ReleaseId, sentence_id: str
     ) -> dict:
         _cache(response, immutable=True)
         return release_store(request, release_id).sentence(sentence_id)
 
     @app.get("/v1/releases/{release_id}/translation-languages", tags=["query"])
-    async def translation_languages(
+    def translation_languages(
         request: Request,
         response: Response,
         release_id: ReleaseId,
@@ -258,7 +254,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/v1/releases/{release_id}/dictionary", tags=["query"])
-    async def dictionary(
+    def dictionary(
         request: Request,
         response: Response,
         release_id: ReleaseId,
@@ -286,7 +282,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/v1/releases/{release_id}/concordance", tags=["query"])
-    async def concordance(
+    def concordance(
         request: Request,
         response: Response,
         release_id: ReleaseId,
@@ -316,7 +312,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/v1/releases/{release_id}/frequencies", tags=["query"])
-    async def frequencies(
+    def frequencies(
         request: Request,
         response: Response,
         release_id: ReleaseId,
@@ -342,7 +338,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/v1/releases/{release_id}/summaries", tags=["query"])
-    async def summaries(
+    def summaries(
         request: Request,
         response: Response,
         release_id: ReleaseId,
@@ -384,7 +380,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     @app.get("/v1/releases/{release_id}/datasets/preview", tags=["datasets"])
-    async def dataset_preview(
+    def dataset_preview(
         request: Request,
         response: Response,
         release_id: ReleaseId,
@@ -420,7 +416,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         tags=["datasets"],
         response_model=None,
     )
-    async def dataset_export(
+    def dataset_export(
         request: Request,
         release_id: ReleaseId,
         language_id: LanguageId,

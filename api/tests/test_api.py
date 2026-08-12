@@ -4,6 +4,7 @@ import gzip
 import json
 import logging
 import sqlite3
+from contextlib import closing
 
 from fastapi.testclient import TestClient
 
@@ -72,7 +73,7 @@ def test_record_summary_then_detail(client: TestClient) -> None:
 def test_summary_is_bounded_without_truncating_record_detail(settings: Settings) -> None:
     complete_text = "x" * 5000
     complete_gloss = "g" * 5000
-    with sqlite3.connect(settings.database_path) as connection:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
         sentence_id = connection.execute(
             "SELECT owner_id FROM forms WHERE owner_type = 'sentence' AND text = 'lima waco'"
         ).fetchone()[0]
