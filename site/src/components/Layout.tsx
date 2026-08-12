@@ -150,24 +150,6 @@ export function PageIntro({
   );
 }
 
-export function Stat({
-  value,
-  label,
-  tone = "ink",
-}: {
-  value: number | string;
-  label: string;
-  tone?: "ink" | "coral" | "gold" | "moss";
-}) {
-  const {number} = useI18n();
-  return (
-    <div className={`stat stat--${tone}`}>
-      <strong>{typeof value === "number" ? number(value) : value}</strong>
-      <span>{label}</span>
-    </div>
-  );
-}
-
 export function StatusBadge({value}: {value: string}) {
   const {tx} = useI18n();
   const labels: Record<string, string> = {

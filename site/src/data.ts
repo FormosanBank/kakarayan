@@ -24,7 +24,7 @@ async function json<T>(url: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function apiData<T>(url: string, signal?: AbortSignal): Promise<T> {
+async function apiEnvelope<T>(url: string, signal?: AbortSignal): Promise<ApiEnvelope<T>> {
   const envelope = await json<ApiEnvelope<T>>(url, signal);
   if (
     envelope.api_version !== "v1" ||
@@ -35,19 +35,31 @@ async function apiData<T>(url: string, signal?: AbortSignal): Promise<T> {
   ) {
     throw new Error(`Invalid static API envelope: ${url}`);
   }
-  return envelope.data;
+  return envelope;
 }
 
 export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
   const [meta, languages, corpora, rights, models, orthography, content] = await Promise.all([
     json<Meta>(`${base}api/v1/meta.json`, signal),
-    apiData<Language[]>(`${base}api/v1/languages.json`, signal),
-    apiData<Corpus[]>(`${base}api/v1/corpora.json`, signal),
-    apiData<RightsCatalog>(`${base}api/v1/rights.json`, signal),
-    apiData<ModelCatalog>(`${base}api/v1/models.json`, signal),
-    apiData<OrthographyCatalog>(`${base}api/v1/orthography.json`, signal),
-    apiData<LearningContentCatalog>(`${base}api/v1/content.json`, signal),
+    apiEnvelope<Language[]>(`${base}api/v1/languages.json`, signal),
+    apiEnvelope<Corpus[]>(`${base}api/v1/corpora.json`, signal),
+    apiEnvelope<RightsCatalog>(`${base}api/v1/rights.json`, signal),
+    apiEnvelope<ModelCatalog>(`${base}api/v1/models.json`, signal),
+    apiEnvelope<OrthographyCatalog>(`${base}api/v1/orthography.json`, signal),
+    apiEnvelope<LearningContentCatalog>(`${base}api/v1/content.json`, signal),
   ]);
+  if (meta.data.current_release !== meta.release_id) {
+    throw new Error("Static metadata identifies two different releases");
+  }
+  for (const envelope of [languages, corpora, rights, models, orthography, content]) {
+    if (
+      envelope.release_id !== meta.release_id ||
+      envelope.source.commit !== meta.source.commit ||
+      envelope.kakarayan.commit !== meta.kakarayan.commit
+    ) {
+      throw new Error(`Static metadata release mismatch: ${envelope.endpoint}`);
+    }
+  }
   let query: AppData["query"];
   try {
     await checkApiRelease(meta.release_id, signal);
@@ -57,7 +69,16 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
     if (message.startsWith("Release mismatch:")) throw cause;
     query = {baseUrl: apiBaseUrl, available: false, error: message};
   }
-  return {meta, languages, corpora, rights, models, orthography, content, query};
+  return {
+    meta,
+    languages: languages.data,
+    corpora: corpora.data,
+    rights: rights.data,
+    models: models.data,
+    orthography: orthography.data,
+    content: content.data,
+    query,
+  };
 }
 
 interface DataState {

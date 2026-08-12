@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import gzip
+import json
+import logging
+
 from fastapi.testclient import TestClient
+
+from api.app import _spreadsheet_safe
 
 
 def release_path(client: TestClient, path: str) -> str:
@@ -41,6 +47,7 @@ def test_record_summary_then_detail(client: TestClient) -> None:
         params={"q": "lima", "language_id": "lang_amis", "match": "exact"},
     )
     assert result.status_code == 200
+    assert len(gzip.compress(result.content)) <= 100 * 1024
     summary = result.json()["items"][0]
     assert "words" not in summary
     sentence = client.get(release_path(client, f"sentences/{summary['id']}"))
@@ -117,6 +124,28 @@ def test_keyset_pages_and_query_identity(client: TestClient) -> None:
     assert wrong_query.status_code == 400
 
 
+def test_search_cursors_do_not_duplicate_or_skip_when_page_size_changes(
+    client: TestClient,
+) -> None:
+    for route in ("dictionary", "concordance"):
+        url = release_path(client, route)
+        parameters = {
+            "q": "a",
+            "language_id": "lang_amis",
+            "match": "contains",
+        }
+        complete = client.get(url, params={**parameters, "limit": 100}).json()["items"]
+        first = client.get(url, params={**parameters, "limit": 1}).json()
+        assert first["next_cursor"]
+        rest = client.get(
+            url,
+            params={**parameters, "limit": 100, "cursor": first["next_cursor"]},
+        ).json()
+        paged = [*first["items"], *rest["items"]]
+        assert [item["id"] for item in paged] == [item["id"] for item in complete]
+        assert len({item["id"] for item in paged}) == len(paged)
+
+
 def test_summaries_bounds_errors_cors_and_read_only(client: TestClient) -> None:
     summary = client.get(release_path(client, "summaries"), params={"language_id": "lang_amis"})
     assert summary.status_code == 200
@@ -179,3 +208,39 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         params={"language_id": "lang_amis", "max_rows": 1001},
     )
     assert unbounded.status_code == 422
+
+
+def test_spreadsheet_export_cells_are_formula_safe() -> None:
+    for prefix in ("=", "+", "-", "@", "\t", "\r"):
+        assert _spreadsheet_safe(f"{prefix}danger") == f"'{prefix}danger"
+    assert _spreadsheet_safe("ordinary text") == "ordinary text"
+
+
+def test_request_records_use_route_templates_without_raw_queries(
+    client: TestClient, caplog
+) -> None:
+    caplog.set_level(logging.INFO, logger="kakarayan.api")
+    secret_query = "fictional private phrase"
+    client.get(
+        release_path(client, "concordance"),
+        params={
+            "q": secret_query,
+            "language_id": "lang_amis",
+            "direction": "translation",
+            "match": "contains",
+        },
+    )
+    records = [
+        json.loads(record.message)
+        for record in caplog.records
+        if record.name == "kakarayan.api" and record.message.startswith("{")
+    ]
+    request = next(
+        item
+        for item in records
+        if item.get("event") == "request" and str(item.get("route", "")).endswith("/concordance")
+    )
+    assert request["route"].endswith("/concordance")
+    assert request["status"] == 200
+    assert "duration_ms" in request
+    assert secret_query not in caplog.text

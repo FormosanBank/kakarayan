@@ -42,8 +42,8 @@ export function Home({data}: {data: AppData}) {
     {
       title: tx("For developers", "給開發者"),
       description: tx(
-        "Use versioned static APIs and JavaScript, Python, or R clients.",
-        "使用具版本的靜態 API 與 JavaScript、Python 或 R 用戶端。",
+        "Use the release-scoped query API and versioned static metadata.",
+        "使用固定版本的查詢 API 與具版本的靜態中繼資料。",
       ),
       link: "/developers",
       action: tx("Read API docs", "查看 API 文件"),
@@ -57,7 +57,7 @@ export function Home({data}: {data: AppData}) {
     ["/docs", tx("Docs", "文件"), tx("methods, rights, and documentation", "方法、權利與文件")],
     ["/downloads", tx("Downloads", "資料下載"), tx("prepared formats", "準備好的格式")],
     ["/models", tx("Language models", "語言模型"), tx("MT and ASR registry", "翻譯與語音辨識登錄")],
-    ["/developers", tx("API and clients", "API 與用戶端"), tx("build with the bank", "使用語料庫開發")],
+    ["/developers", tx("API", "API"), tx("queries and metadata", "查詢與中繼資料")],
   ] as const;
 
   return (

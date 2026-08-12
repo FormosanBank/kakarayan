@@ -16,8 +16,10 @@ export const DATASET_FIELD_INFO = [
   ["audio", "Audio references, offsets, and availability", "音訊參照、時間偏移與可用狀態"],
 ] as const;
 
-export const DATASET_FIELDS = DATASET_FIELD_INFO.map(([field]) => field);
-export const ESSENTIAL_DATASET_FIELDS = [
+export type DatasetField = (typeof DATASET_FIELD_INFO)[number][0];
+
+export const DATASET_FIELDS: DatasetField[] = DATASET_FIELD_INFO.map(([field]) => field);
+export const ESSENTIAL_DATASET_FIELDS: DatasetField[] = [
   "id",
   "standard",
   "original",

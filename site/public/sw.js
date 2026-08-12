@@ -23,6 +23,7 @@ self.addEventListener("fetch", (event) => {
   const shellRequest =
     request.mode === "navigate" ||
     url.pathname.includes("/assets/") ||
+    /\/api\/v1\/[^/]+\.json$/u.test(url.pathname) ||
     /\/(icon\.svg|manifest\.webmanifest|robots\.txt|sitemap\.xml)$/u.test(url.pathname);
   if (!shellRequest) return;
   event.respondWith(

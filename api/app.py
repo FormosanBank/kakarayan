@@ -51,6 +51,12 @@ def _record(event: str, **values: object) -> None:
     LOGGER.info(json.dumps({"event": event, **values}, separators=(",", ":"), sort_keys=True))
 
 
+def _spreadsheet_safe(value: object) -> object:
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return f"'{value}"
+    return value
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     configured = settings or Settings.from_environment()
 
@@ -441,7 +447,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 output, fieldnames=fields, delimiter=delimiter, lineterminator="\n"
             )
             writer.writeheader()
-            writer.writerows(result["items"])
+            writer.writerows(
+                {field: _spreadsheet_safe(row[field]) for field in fields}
+                for row in result["items"]
+            )
             media_type = "text/tab-separated-values" if format == "tsv" else "text/csv"
         body = output.getvalue().encode()
         if len(body) > 5 * 1024 * 1024:

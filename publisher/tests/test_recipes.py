@@ -7,8 +7,14 @@ from typing import cast
 import pytest
 from jsonschema import ValidationError
 
-from publisher.build import build_release
+from publisher.build import build_release, validate_document
 from publisher.recipes import load_recipe, resolve_recipe, write_recipe_export
+
+
+def test_frontend_recipe_fixture_validates() -> None:
+    root = Path(__file__).resolve().parents[2]
+    recipe = json.loads((root / "tests" / "fixtures" / "export-recipe.json").read_text())
+    validate_document(recipe, root / "schemas" / "export-recipe.schema.json")
 
 
 def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
