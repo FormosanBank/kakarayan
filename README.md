@@ -1,124 +1,142 @@
 # Kakarayan
 
-Kakarayan is the public web interface and publication toolkit for
-[FormosanBank](https://github.com/FormosanBank/FormosanBank). It serves community learners,
-linguists, educators, and developers without requiring a paid backend.
+Kakarayan is the public search, learning, research, download, and API interface for
+[FormosanBank](https://github.com/FormosanBank/FormosanBank).
 
-The primary application is a static React site for GitHub Pages. Corpus search, selected
-exports, study decks, orthography tools, and recordings run in the browser. An optional
-read-only FastAPI service adds convenient corpus queries when a no-cost Hugging Face Space
-is available. The site remains useful when that service and every model service are offline.
+FormosanBank XML is canonical. Kakarayan turns one pinned public source commit into an
+immutable SQLite query model, small static catalogues, prepared research downloads, and a
+release manifest with checksums and rights decisions.
 
-FormosanBank XML is canonical. Everything Kakarayan publishes is a versioned, checksummed,
-rebuildable projection of one exact public FormosanBank commit.
+## Architecture
 
-## What is included
+Kakarayan has three application parts:
 
-- Separate word dictionary and sentence search across original and FormosanBank standard
-  forms, tokens, phonology, translations, and morpheme glosses. Users can search in either
-  the selected Formosan language or an available translation language and follow matches
-  in either direction.
-- Corpus and language catalogues that keep Seediq and Truku as separate display identities.
-- A bounded dataset builder, deterministic linguistic summaries in a Worker, and CSV, TSV,
-  JSON, JSON Lines, Parquet, plain text, interlinear, audio-reference, and reproducible
-  recipe exports for browser selections.
-- Ten curated whole-release downloads for common database, tabular, spreadsheet, CLDF,
-  text, metadata, and time-aligned workflows. Specific selections belong in the browser
-  dataset builder.
-- Learner tools with cited words and sentences, private local cards, deterministic spaced
-  repetition, backup/restore, Anki TSV, local recording, and reviewed orthography tables.
-  Cards can be saved only from dictionary or sentence results.
-- Optional direct-browser FormosanBank MT and ASR calls with explicit consent and visible
-  third-party boundaries.
-- A versioned static JSON API, optional read-only live API, and JavaScript, Python, and R
-  clients.
-- An embedded FormosanBank documentation reader on the public HTTPS site, with curated
-  guide sections, corpus-specific deep links, and an external fallback for local previews.
-- Public-repository noncommercial distribution policy, stricter corpus overrides, source
-  locators, checksums, release pinning, and deterministic synthetic-fixture tests.
+- `site/`: the React interface, browser-local study cards, recordings, MT and ASR tools.
+- `api/`: the required public, read-only FastAPI query service.
+- `publisher/`: the deterministic XML projection and release builder.
 
-The earlier Django and PostgreSQL dictionary application remains in the repository. It is
-useful as an optional server-backed development surface and behavioral reference, but it is
-not required by the public static site.
+The browser requests small dictionary, concordance, record-detail, summary, preview, and
+finite-export responses from the query API. It does not download corpus indexes or scan the
+corpus locally. Static catalogues, documentation, and prepared downloads remain usable if
+the query service is unavailable.
+
+See [docs/architecture.md](docs/architecture.md) and [docs/api.md](docs/api.md).
 
 ## Repository map
 
 ```text
-site/                 React, TypeScript, Vite, PWA, Workers, unit tests, and Playwright checks
-publisher/            deterministic XML projection, packages, manifests, and verification
-schemas/              versioned JSON Schema contracts
-content/              reviewed learning-content registry and contribution boundary
-api/                  optional bounded read-only FastAPI service and Docker Space source
-clients/              JavaScript, Python/CLI, and R clients
-tests/fixtures/       invented public-repository fixture with no private corpus material
-corpus/, config/      preserved Django/PostgreSQL application
-.github/workflows/    CI and guarded Pages, data-release, and Space workflows
-docs/                 architecture, data, API, operations, rights, privacy, and learning
+api/                  read-only HTTP API, query store, activation, and tests
+content/              reviewed learning-content registry
+docs/                 current architecture, contracts, and runbooks
+publisher/            source projection, artifacts, manifests, and verification
+schemas/              release, static API, content, and export-recipe contracts
+site/                 React interface, local learner state, unit tests, and Playwright
+tests/fixtures/       invented public data and shared semantic fixtures
+.github/workflows/    CI, publication, API deployment, and Pages deployment
 ```
 
-Generated corpus data belongs under `build/` and is ignored by Git. Full FormosanBank
-projections must never be committed to this repository.
+Generated corpus data belongs under `build/` and is ignored by Git. Do not commit a full
+FormosanBank projection to this repository.
 
 ## Requirements
 
-- Python 3.13 and [uv](https://docs.astral.sh/uv/)
+- Python 3.13
+- [uv](https://docs.astral.sh/uv/)
 - Node.js 22 and npm
-- R for the R client check
-- PostgreSQL 16 for the preserved Django test suite
-- Docker for the optional API image check
+- Chromium for the focused browser suite
+- Docker only for the API image check
 
-Install the locked Python and frontend dependencies:
+Install the locked dependencies:
 
 ```bash
 uv sync --locked --all-groups
 npm ci --prefix site
 ```
 
-## Quick local preview with invented data
+## Run locally with invented data
 
-Use a new output path for every publisher run. The publisher refuses to overwrite existing
-output. Include the small prepared packages so every public tool has data to display.
+Build the small test release and assemble its static metadata:
 
 ```bash
 uv run python -m publisher.fixture_cli \
   --output build/fixture-release \
   --include-prepared
-uv run python -m publisher.verify_release --release build/fixture-release
+uv run python -m publisher.verify_release \
+  --release build/fixture-release
 uv run python -m publisher.assemble_site \
   --release build/fixture-release \
   --public site/public
-npm --prefix site run build
-uv run python -m publisher.verify_site --site site/dist
-npm --prefix site run preview -- --host 127.0.0.1
 ```
 
-Open `http://127.0.0.1:4173/kakarayan/`. The `/kakarayan/` subpath matches the production
-GitHub Pages project path.
-
-The Guide route opens the canonical GitBook in a new tab during this HTTP preview. GitBook
-allows the embedded reader only when Kakarayan is served over HTTPS, as it is on GitHub
-Pages.
-
-This fixture is intentionally tiny. It contains two invented Amis sentences in
-`TestCorpus`. Try `lima`, `waco`, `toki`, or `rima` in Lookup or Learn. In Research, choose
-Amis before previewing or exporting. Downloads contains small synthetic packages for
-testing the interface, not FormosanBank research data.
-
-To rebuild locally, remove only the generated, ignored output directories you intend to
-replace: `build/fixture-release`, `site/public/api`, `site/public/data`, and `site/dist`.
-
-## Build from the public FormosanBank repository
-
-Start with a clean public checkout and pin its exact commit:
+Start the query API in one terminal:
 
 ```bash
-git clone https://github.com/FormosanBank/FormosanBank.git build/formosanbank
-SOURCE_COMMIT="$(git -C build/formosanbank rev-parse HEAD)"
+KAKARAYAN_DB_PATH=build/fixture-release/formosanbank.sqlite \
+KAKARAYAN_RELEASE_MANIFEST_PATH=build/fixture-release/release-manifest.json \
+KAKARAYAN_CORS_ORIGINS=http://127.0.0.1:5173 \
+uv run uvicorn api.app:app --host 127.0.0.1 --port 8000
+```
 
+Start the site in another terminal:
+
+```bash
+VITE_KAKARAYAN_API_URL=http://127.0.0.1:8000 \
+npm --prefix site run dev -- --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:5173/kakarayan/`.
+
+Publisher outputs are immutable. If the named fixture or public API directory already
+exists, list and remove only these generated targets before rebuilding:
+
+```bash
+for target in build/fixture-release site/public/api site/dist; do
+  if test -e "$target"; then
+    printf '%s\n' "$target"
+    rm -r -- "$target"
+  fi
+done
+```
+
+## Checks
+
+Run the pull-request checks locally:
+
+```bash
+uv run ruff format --check api publisher
+uv run ruff check .
+uv run mypy api publisher
+uv run pytest api/tests publisher/tests
+uv run pip-audit --local --progress-spinner=off
+
+npm --prefix site audit --audit-level=high
+npm --prefix site run lint
+npm --prefix site run typecheck
+npm --prefix site test
+npm --prefix site run build
+uv run python -m publisher.verify_site --site site/dist
+```
+
+After building the fixture, assembling `site/public`, and building `site/dist`, install
+Chromium once and run the browser contract journey:
+
+```bash
+npx --prefix site playwright install chromium
+npm --prefix site run test:e2e -- --project=desktop-chromium
+```
+
+The unfiltered Playwright command runs the wider Chromium, Firefox, WebKit, and mobile
+matrix used by the scheduled check.
+
+## Build a public release
+
+Use a clean local FormosanBank checkout at the exact intended commit:
+
+```bash
 uv run python -m publisher.cli \
-  --repo build/formosanbank \
+  --repo /absolute/path/to/FormosanBank \
   --output build/data-release \
-  --source-commit "$SOURCE_COMMIT" \
+  --source-commit <40-character-commit> \
   --refresh-models \
   --compress-database \
   --release-only
@@ -128,130 +146,24 @@ uv run python -m publisher.verify_release \
   --max-artifact-mib 2048
 ```
 
-The release profile builds research packages and the immutable SQLite snapshot, then keeps
-only assets that can be uploaded to one flat GitHub Release. Its manifest records the
-GitHub asset name and immutable URL for every file. The Pages profile omits bulk tables and
-the live-API database:
+The publisher refuses a dirty source checkout, a source mismatch, an existing nonempty
+output, malformed XML, invalid schemas, failed integrity checks, and disallowed release
+rights.
 
-```bash
-uv run python -m publisher.cli \
-  --repo build/formosanbank \
-  --output build/pages-release \
-  --source-commit "$SOURCE_COMMIT" \
-  --refresh-models \
-  --site-only
+Production publication and deployment use the guarded workflows documented in
+[docs/publication.md](docs/publication.md). The required order is data release, query API,
+then Pages.
 
-uv run python -m publisher.verify_release --release build/pages-release
-uv run python -m publisher.assemble_site \
-  --release build/pages-release \
-  --public site/public \
-  --download-manifest build/data-release/release-manifest.json
-npm --prefix site run build
-uv run python -m publisher.verify_site --site site/dist
-npm --prefix site run preview -- --host 127.0.0.1
-```
+## Public boundaries
 
-Open `http://127.0.0.1:4173/kakarayan/` to use the complete public corpus locally. This
-profile is much larger than the fixture because it generates the browser search indexes
-for every public corpus. It still needs no local server beyond Vite's static preview and no
-paid backend.
+- The query API is public, read-only, bounded, and release-scoped.
+- Study cards stay in IndexedDB and can be backed up by the user.
+- Recordings remain local unless the user explicitly submits one to a named ASR service.
+- MT and ASR are external Hugging Face integrations with consent, timeouts, and cancellation.
+- Prepared data retains corpus-specific rights, citations, provenance, and checksums.
+- Kakarayan software and project-produced materials use
+  [CC BY-NC 4.0](LICENSE.md), subject to upstream terms for corpus materials.
 
-Publication workflows additionally require reviewed, machine-readable rights decisions.
-Every corpus discovered in the canonical public FormosanBank checkout receives a reviewed
-noncommercial distribution entry. An explicit metadata override can impose a stricter
-source or community rule. Pages also requires the matching data release to be published,
-then imports its validated manifest so the download interface cannot link to a draft or a
-different corpus commit.
-
-## Checks
-
-Publisher, API, and Python client:
-
-```bash
-uv run pytest publisher/tests api/tests clients/python/tests
-uv run ruff format --check corpus config publisher
-uv run ruff check .
-uv run mypy corpus config publisher api clients/python/kakarayan_client
-```
-
-Static application:
-
-```bash
-npm --prefix site run lint
-npm --prefix site run typecheck
-npm --prefix site test
-npm --prefix site run build
-npm --prefix site run test:e2e
-npm --prefix site audit --audit-level=high
-```
-
-JavaScript, Python, and R clients:
-
-```bash
-npm --prefix clients/javascript test
-uv run pytest clients/python/tests
-uv build clients/python --out-dir build/python-client
-R CMD build clients/R
-R CMD check --no-manual --no-build-vignettes kakarayan_*.tar.gz
-```
-
-The complete Django suite needs PostgreSQL:
-
-```bash
-docker compose up -d db
-DATABASE_URL=postgres://kakarayan:kakarayan@127.0.0.1:5432/kakarayan \
-  uv run pytest
-```
-
-CI supplies PostgreSQL and also builds the API container.
-
-## Publication boundaries
-
-- Pull requests run checks only. They cannot deploy Pages, create releases, or access the
-  Hugging Face credential.
-- `deploy-pages.yml` runs for relevant `main` changes, published `data-fb-*` releases, or an
-  explicit dispatch. It verifies the release's saved browser bundle, checks rights, enforces
-  a 900 MiB site budget and 50 MiB file budget, reruns production browser checks, and deploys
-  one saved Pages artifact without rebuilding the corpus.
-- `publish-data.yml` defaults to a dry run. A real dispatch rechecks all artifact bytes and
-  rights in a separate write-enabled job, then creates a draft GitHub release. It never
-  publishes that draft automatically.
-- `deploy-api.yml` is manual, environment-gated, and accepts only a published immutable data
-  release. It pins that release in the Docker Space source.
-- Kakarayan original work is licensed under CC BY-NC 4.0. Corpus records retain the
-  displayed FormosanBank, source, citation, and community terms.
-- The browser MT and ASR tools use the catalogued public FormosanBank Hugging Face Spaces
-  directly. They need no repository secret or Kakarayan backend.
-
-Repository administrators must enable Pages with GitHub Actions before the first deploy.
-See [publication operations](docs/publication.md) for the exact launch order and current
-settings status.
-
-## Documentation
-
-- [Architecture](docs/architecture.md)
-- [Data model and formats](docs/data-and-formats.md)
-- [Static and live APIs](docs/api.md)
-- [Publication operations](docs/publication.md)
-- [Rights, citation, and privacy](docs/rights-citation-privacy.md)
-- [Learning tools and model services](docs/learning-and-models.md)
-- [Original Django dictionary application](docs/legacy-django.md)
-
-The implementation contract and durable work record are in
-[`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md), [`GOAL.md`](GOAL.md), and
-[`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md).
-
-## Corrections and responsible use
-
-Corpus records are attestations from named sources, not universal grammar rules. Machine
-translation and ASR are drafts, not expert corrections. Original and FormosanBank standard
-orthography are always distinct fields.
-
-For a correction, rights concern, attribution issue, or takedown request, open an issue in
-the [Kakarayan repository](https://github.com/FormosanBank/kakarayan/issues) and identify
-the release ID, corpus, source path, and record ID. Do not include private personal
-information in a public issue.
-
-Public FormosanBank corpus data is available for noncommercial use under the displayed
-central, corpus-specific, upstream-source, citation, and community terms. A stricter term
-controls for the affected material.
+Use the private GitHub advisory form for security reports. Use
+[docs/rights-citation-privacy.md](docs/rights-citation-privacy.md) for attribution, rights,
+privacy, correction, or takedown concerns.

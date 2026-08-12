@@ -1,177 +1,125 @@
 # Rights, citation, and privacy
 
-## Rights are data
+FormosanBank combines material from different sources. Kakarayan preserves central,
+corpus-specific, component, citation, community, and upstream terms rather than assigning
+one blanket license to every record.
 
-FormosanBank contains material from different sources with different terms. Kakarayan uses
-the public FormosanBank repository as the approved source set for noncommercial
-distribution, while preserving central, corpus, upstream-source, citation, and community
-terms.
+## Rights records
 
-Kakarayan keeps a machine-readable rights entry per corpus. Each entry records:
-
-- A stable rights ID and corpus name.
-- Redistribution status.
-- Commercial-use status.
-- Attribution text.
-- License expression when one is supported by evidence.
-- Evidence URLs.
-- Notes.
-- Review status and review date.
-
-Current status values are intentionally explicit:
+Each corpus has a machine-readable rights entry with a stable ID, redistribution and
+commercial-use decisions, attribution, evidence URLs, notes, review status, and review
+date. Supported publication states are:
 
 - `allowed`
 - `restricted`
 - `metadata_only`
 - `review_required`
 
-Each corpus discovered in the canonical public checkout defaults to `allowed`,
-`noncommercial`, and `reviewed` for Kakarayan publication. A reviewed entry in
-`publisher/metadata/rights.json` may apply a stricter rule. Artifacts fail closed when such
-an override is unreviewed or does not allow redistribution.
+The public repository profile is noncommercial. A more specific reviewed source notice can
+make a corpus stricter. Publication fails closed when an applicable decision is unreviewed
+or does not permit the requested artifact scope.
 
-## Evidence precedence
-
-Reviewers should apply the most specific applicable evidence:
+Review evidence in this order:
 
 1. Record or component notice.
 2. Corpus README, dataset card, license, or source notice.
-3. Central FormosanBank terms, AI-use addendum, and notices.
-4. The project-level public-repository noncommercial profile.
+3. Central FormosanBank terms, addenda, and notices.
+4. Project-level public-repository policy.
 
-Stricter specific evidence is not weakened by a general repository notice.
+The most specific stricter evidence controls.
 
-## Publication behavior
+## Publication scopes
 
-Every artifact records the rights IDs it contains, whether it is publishable, and the exact
-blocking reasons. Browser download controls show those states.
+Every artifact records its rights IDs, publishability, and blocking reasons. Production
+requires approved rights for:
 
-Production workflows require approved decisions for their artifact scope:
+- `site-metadata` for the small public catalogues;
+- `release-core` for the immutable query read model and provenance core;
+- `prepared-download` for research packages.
 
-- Pages checks `site-query-data`.
-- Data publication checks `site-query-data`, `release-core`, and `prepared-download`.
-- The optional API accepts only a published data release.
+The query API serves only a published and activated release. The UI repeats the applicable
+corpus rights and citations for records and downloads. These checks support responsible
+publication but are not legal advice.
 
-This is a technical safety gate, not legal advice. A reviewer remains responsible for the
-encoded conclusion.
-
-Canonical packages include exact source XML, source paths, a source manifest, and the
-applicable rights entry. Prepared multi-file formats include a package note and metadata.
-Audio exports contain references unless separate rights allow redistribution of media.
-
-## Kakarayan license
+## Project license
 
 Kakarayan's original software, documentation, interface text, and project-produced assets
-use [CC BY-NC 4.0](../LICENSE.md) unless a file or directory says otherwise. Canonical
-FormosanBank records and third-party material retain their supplied terms. The Kakarayan
-license cannot grant rights FormosanBank does not hold, and a stricter source-specific term
-controls for the affected material.
+use [CC BY-NC 4.0](../LICENSE.md) unless a file or directory states otherwise. Canonical
+FormosanBank records and third-party materials retain their own terms. Kakarayan cannot
+grant rights that FormosanBank or an upstream source does not hold.
 
 ## Citation
 
 A reproducible citation should include:
 
-- Kakarayan.
-- FormosanBank.
-- The Kakarayan release ID.
-- The exact FormosanBank source commit.
-- The corpus name and its supplied citation.
-- Source path and record ID for quoted examples.
-- Access date for a changing public interface.
-- The checksum and filename for a downloaded artifact when relevant.
+- Kakarayan and the release ID;
+- the exact FormosanBank source commit;
+- corpus name and supplied corpus citation;
+- source path and record ID for a quoted example;
+- access date for the changing public interface;
+- artifact filename and SHA-256 for downloaded data.
 
 Suggested generic form:
 
 ```text
 FormosanBank contributors. Kakarayan release <release-id>, derived from
-FormosanBank commit <40-character-commit>, corpus <corpus>, record <record-id>,
-<source-path>. Accessed <date>.
+FormosanBank commit <commit>, corpus <corpus>, record <record-id>, <source-path>.
+Accessed <date>.
 ```
 
-This template does not replace corpus-specific attribution or citation text. Preserve all
-citations and copyright notices supplied by the source.
+This does not replace corpus-specific attribution. Preserve all supplied citation and
+copyright notices.
 
 ## Corrections and takedowns
 
-Open a Kakarayan GitHub issue for a transcription correction, language or dialect label,
-translation concern, attribution problem, sensitive item, rights question, or takedown
-request. Include:
+Open a Kakarayan issue for transcription, language, dialect, translation, attribution,
+sensitive-data, rights, or takedown concerns. Include the release ID, corpus, source path,
+record ID, and a concise description.
 
-- Release ID.
-- Corpus.
-- Source path.
-- Record or XML ID.
-- A concise description.
+Do not post private personal information in a public issue. Ask a FormosanBank maintainer
+for a private channel when the report itself is sensitive. Maintainers may withdraw an
+asset or release when required, while recording a non-sensitive reason. A later correction
+does not silently rewrite the provenance of an earlier immutable release.
 
-Do not post private personal information in a public issue. If the report itself is
-sensitive, contact a FormosanBank maintainer through the contact method listed by the
-organization or repository.
+## Browser-local data
 
-Removing material from a future release must not rewrite the provenance record of a prior
-immutable release. Maintainers may withdraw a published asset or release when required and
-should record the reason without exposing sensitive detail.
-
-## Browser privacy
-
-Kakarayan does not require accounts and does not send study history to a Kakarayan server.
+Kakarayan has no learner accounts and sends no deck history to its query API.
 
 Stored locally:
 
-- Saved corpus cards.
-- Spaced-repetition state.
-- Interface preferences.
+- saved corpus cards;
+- review state;
+- interface preferences.
 
-Recordings remain in the active browser tab unless the user downloads them. Users can
-export a card backup and delete browser storage through their browser. Clearing site data
-removes local study records unless the user downloaded a backup.
+Recordings remain in the active tab unless the user downloads them or explicitly submits
+one to ASR. Microphone access requires a user action and browser permission. Users can
+export a deck backup; clearing site storage removes unexported local data.
 
-Microphone access begins only after a user action and browser permission. Recordings stay
-on the device until the user explicitly invokes an optional ASR action. The recording tool
-supports local playback, download, and deletion.
+## External models
 
-## Third-party model requests
+Optional MT and ASR actions send only the chosen text or audio directly to the named public
+Hugging Face service after consent. The interface identifies the provider, the transferred
+data, possible provider logging, and the risk of incorrect output.
 
-Optional MT and ASR actions send only the selected text or audio directly from the browser
-to the named public Hugging Face Space. Before the first request, the interface identifies:
+Kakarayan does not proxy or store model input. Cancellation stops the browser request but
+cannot promise deletion of bytes already received by the provider.
 
-- The provider and service.
-- What data will leave the browser.
-- That the service may log infrastructure metadata under its own terms.
-- That output may be incorrect.
+## Query privacy and security
 
-Kakarayan does not proxy, store, or log the request. Canceling stops the browser request but
-cannot promise deletion of data already received by a third party.
+The query API is public, read-only, release-scoped, and bounded. It opens an activated
+SQLite database in immutable read-only mode and uses fixed parameterized SQL. It has no
+accounts, write route, arbitrary SQL, user-controlled URL fetch, upload, or regular
+expression route.
 
-## Security posture
+Operational records include the route template, status, duration, response size, and
+release ID. They do not include the URL query string, raw query, sentence text, recording,
+or model input. CORS uses exact configured origins without credentials.
 
-The static site has no authentication or privileged backend. Its content security policy
-limits sources required by the application and optional model calls.
+The service worker caches only the small application shell and static metadata. It does not
+cache query responses, audio, downloads, or model requests.
 
-Browser regular-expression search uses a bounded RE2 implementation rather than the native
-backtracking expression engine. Pattern length, record scope, and result count are capped.
-DuckDB-Wasm runs in a local Worker only for bounded export and receives no network URL from
-the user.
+## Security reports
 
-The live API:
-
-- Downloads only from a configured HTTPS release manifest.
-- Enforces response and database size limits.
-- Verifies checksums before use.
-- Opens SQLite immutable and read-only.
-- Uses fixed SQL templates and bounded query steps.
-- Uses exact CORS origins.
-- Has no user URL fetch, write route, arbitrary SQL, regex, or upload.
-- Disables access logs to avoid recording query text.
-
-Publication actions are pinned, production environments can require approval, and secrets
-are available only to the manual Space deployment job.
-
-## Project-scoped web signals
-
-A GitHub Pages project cannot control the root of `formosanbank.github.io`. Project-scoped
-robots, text-and-data-mining, or rights files cannot truthfully claim control over the
-whole origin.
-
-If organization-wide signals are required, the owner of the organization site or a custom
-domain must install them at the origin root. Kakarayan should document that external action
-and continue to carry rights metadata in its own manifests and pages.
+Use the private GitHub security advisory form linked from [SECURITY.md](../SECURITY.md) for
+software vulnerabilities. Use the correction and takedown process above for corpus or
+rights issues.

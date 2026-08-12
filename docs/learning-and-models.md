@@ -1,187 +1,59 @@
-# Learning tools and model services
+# Learning and model tools
 
-## Learning principles
+Kakarayan combines cited corpus examples with browser-local study and optional public MT
+and ASR services. Corpus lookup does not depend on model availability.
 
-Kakarayan defaults to Amis because the initial collaborator feedback is Amis-centered. The
-same lookup and study flows work for every language with compatible public corpus data.
+## Study deck
 
-The learner interface separates three kinds of material:
+Users can save dictionary entries and sentence records to an IndexedDB deck. A card keeps
+its FormosanBank release, corpus, source path, record ID, Formosan form, translation, and
+review state. Cards therefore remain traceable even after the public site advances to a new
+release.
 
-1. Attested corpus examples with exact source provenance.
-2. Human-reviewed teaching or orthography content with named review metadata.
-3. Machine output labeled as an unreviewed draft.
+Review scheduling and interface preferences stay in the browser. Users can export a JSON
+backup and restore it on another browser. Clearing site storage removes unexported cards.
 
-The interface does not present an attestation as a universal grammar rule and does not
-present model output as a correction or community endorsement.
+## Pronunciation and recording
 
-## Dictionary and sentence lookup
+Microphone access begins only after a direct user action and browser permission. A
+recording remains in page memory for local playback, download, or deletion. Kakarayan does
+not upload it to its query service.
 
-Dictionary meanings and sentence search share one lookup page and one explicit lookup-type
-toggle over the same immutable shards. Dictionary mode matches a word or morpheme and shows
-word-level glosses or single-word record translations. Sentences mode returns records
-containing the selected word or matching another chosen tier. Both modes let the user
-choose a Formosan source language and an available translation language for that exact
-scope, then explicitly choose which side to search. Translation-to-Formosan dictionary
-queries trace matching word and morpheme meanings back to their attested Formosan forms.
-Sentence queries match whole words, prefixes, substrings, bounded fuzzy forms, or scoped
-regular expressions in the selected sentence translation. Legacy dictionary and sentence
-URLs remain compatible, but new links use the unified lookup route.
-
-Results show:
-
-- Standard and original forms separately.
-- Available translation language labels.
-- Corpus and dialect.
-- Source XML link pinned to the release commit.
-- Record ID.
-- Local save action.
-
-The source link remains the authority when a simplified card cannot display every XML tier.
-
-## Local study deck
-
-Saved records become local study cards pinned to the release that supplied them. Review
-state uses a deterministic small spaced-repetition schedule. The learner chooses a grade,
-which updates interval and due time on the device.
-
-The deck supports:
-
-- Due-card review.
-- Recognition and production directions.
-- New, learning, review, and due queue counts.
-- Cited words and sentences saved directly from lookup results.
-- JSON backup.
-- Validated JSON restore.
-- Anki-compatible TSV and ordinary CSV export.
-- Formula-safe text fields.
-- Explicit single-card and full local reset controls.
-
-There is no login, cloud synchronization, leaderboard, or hidden learner telemetry.
-
-## Pronunciation recording
-
-The browser MediaRecorder API captures a learner's voice after explicit microphone
-permission. A recording or selected local audio file can be played, downloaded, deleted,
-or optionally sent for ASR. Type, size, and duration are checked before upload. The
-configured endpoint, available model card, license, provider, and limitation notice remain
-visible.
-
-An optional trusted reference can be compared with the automatic hypothesis using plain
-word edit counts. This is explicitly labeled as text comparison rather than pronunciation
-scoring. The hypothesis can be copied or downloaded. It cannot be added to the study deck,
-which accepts cited dictionary and sentence records only.
-
-Recording availability depends on browser support and permission. A lack of recording or
-ASR capability does not disable corpus examples or the study deck.
-
-## Orthography
-
-The orthography tool projects public reviewed FormosanBank conversion tables. It:
-
-- Names the language and table.
-- Lists dialect outputs.
-- Applies longer input patterns before shorter ones.
-- Preserves unsupported characters.
-- Shows the pinned source commit and source table path.
-
-It is labeled as orthographic conversion, not phonetic transcription or universal spelling
-correction.
+ASR submission is a separate explicit action. The interface names the provider, describes
+what leaves the device, and requests consent before the first submission.
 
 ## Machine translation and ASR
 
-Model tools call configured public FormosanBank Hugging Face Spaces directly from the
-browser. The application does not contain a token and does not depend on a Kakarayan
-backend.
+The published model catalogue identifies available FormosanBank Hugging Face services,
+language and dialect coverage, tasks, licenses, limitations, and routes. The browser calls
+the named provider directly.
 
-The interaction includes:
+Model requests:
 
-- Explicit third-party consent before sending content.
-- Named destination and task.
-- Cold-start messaging.
-- Cancellation.
-- Timeout and failure states.
-- Preservation of the user's source input when a call fails.
-- Clear draft labeling on output.
+- require explicit consent;
+- reject oversized text or audio before upload;
+- have timeouts and cancellation;
+- show sleeping, connecting, running, success, cancellation, and failure states;
+- validate provider output before presenting it;
+- do not silently retry indefinitely.
 
-Free public Spaces may sleep, change, rate-limit, or become unavailable. These tools are
-optional enhancements.
+Model output may be wrong and is not a replacement for a speaker, teacher, corpus citation,
+or reviewed linguistic analysis. A sleeping external service can take much longer than an
+ordinary corpus query.
 
-## Model catalogue
+## Orthography
 
-The publisher reads only the official public Hugging Face API for the FormosanBank
-organization when `--refresh-models` is used. The catalogue records:
+Orthography tools use reviewed static conversion tables from the current release. They
+apply the longest mapping once without cascading replacements. The interface does not infer
+an orthography or dialect that the source did not supply.
 
-- Repository and task.
-- Public URL.
-- Model-card license or `unknown`.
-- Languages.
-- Translation direction where discoverable from the repository name.
-- Last modified time.
-- Training-lineage notice visible in public metadata.
-- General limitations.
-- Optional browser service ID.
+## Failure isolation
 
-Known public Spaces are listed with task, URL, API URL, availability state, and a
-third-party notice. Browser-callable services also record the Gradio API name and supported
-languages. `available` means the official Hub API reported a running Space with a ready
-domain at catalogue refresh time. `unchecked` is used by deterministic offline fixtures or
-when current runtime state was not fetched.
+- A model outage does not disable corpus lookup.
+- A query outage does not remove saved cards, recordings already in the tab, documentation,
+  catalogues, orthography tables, or prepared downloads.
+- A static release mismatch prevents mixed corpus data from being shown.
+- No learner account or Kakarayan write API exists in v1.
 
-Private training data is not accessed, copied, indexed, or packaged. If a public model card
-mentions private training lineage, Kakarayan displays that disclosure.
-
-## Human-reviewed learning content
-
-The current release supplies corpus-based learning tools, orthography tables, and the
-validated `content/manifest.json` publication boundary. The manifest intentionally contains
-no lesson entries yet. The site says so and links to the contribution requirements instead
-of inventing a course. A lesson, grammar explanation, correction rule, or vocabulary set
-must not be added as anonymous prose.
-
-Reviewed material should record:
-
-- Stable content ID.
-- Language and dialect scope.
-- Author.
-- Community or linguistic reviewer.
-- Review date and version.
-- Source citations.
-- Rights or license.
-- Intended learner level.
-- Orthography convention.
-- Known limitations or regional variation.
-
-English and Traditional Chinese versions require equivalent review. Machine translation
-may help drafting but cannot be published as reviewed teaching content without human
-approval.
-
-## LLM and retrieval extensions
-
-A future grammar assistant, vector index, MCP server, or retrieval tool should use the same
-release and provenance contracts:
-
-- Retrieve from public, reviewed sources only.
-- Return source paths, record IDs, release ID, and citations.
-- Keep attested examples separate from generated explanations.
-- State uncertainty and variation.
-- Never treat corpus frequency as a prescriptive grammar rule.
-- Keep private data and personal learner data outside the index.
-- Apply the same rights filter as downloadable artifacts.
-
-Such a service would require a separate security, cost, evaluation, and governance review.
-It is not implied by the current no-backend static site.
-
-## Evaluation with collaborators
-
-Learner feedback should cover:
-
-- Whether search terminology is understandable without linguistic training.
-- Whether original and standard labels make sense.
-- Whether examples help produce or understand real Amis.
-- Whether source and dialect information is visible but not distracting.
-- Whether local card and recording controls feel trustworthy.
-- Whether model consent and draft warnings are clear.
-- Which reviewed lesson or grammar features would be most valuable next.
-
-Community and language-expert review should guide terminology, content priority, dialect
-presentation, and claims of correctness.
+Privacy and third-party boundaries are detailed in
+[rights-citation-privacy.md](rights-citation-privacy.md).
