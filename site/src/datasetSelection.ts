@@ -5,7 +5,7 @@ export const DATASET_FIELD_INFO = [
   ["text_id", "Identifier of the containing text", "所屬文本的識別碼"],
   ["standard", "FormosanBank standardized form", "FormosanBank 標準化形式"],
   ["original", "Source orthography without replacement", "未替換的來源書寫"],
-  ["translations", "All translations with XML language tags", "具有 XML 語言標籤的所有翻譯"],
+  ["translations", "Sentence translations with XML language tags", "具有 XML 語言標籤的句子翻譯"],
   ["tokens", "Ordered surface token sequence", "依序排列的表層詞元"],
   ["phonology", "Available phonological tiers", "可用的音韻層級"],
   ["glosses", "Word and morpheme translation tiers", "詞與語素翻譯層級"],
@@ -13,7 +13,7 @@ export const DATASET_FIELD_INFO = [
   ["corpus_id", "Source corpus identifier", "來源語料庫識別碼"],
   ["dialect", "Dialect label supplied by the source", "來源提供的方言標籤"],
   ["source_path", "Path to the canonical public XML", "權威公開 XML 的路徑"],
-  ["audio", "Audio references, offsets, and availability", "音訊參照、時間偏移與可用狀態"],
+  ["audio", "Audio file and URL references", "音訊檔案與網址參照"],
 ] as const;
 
 export type DatasetField = (typeof DATASET_FIELD_INFO)[number][0];

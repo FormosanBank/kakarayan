@@ -11,6 +11,7 @@ from typing import Any, cast
 
 from jsonschema import Draft202012Validator
 
+from api.dataset_fields import DatasetField, project_record
 from api.search import MatchMode, matches
 from publisher.build import BuildError
 
@@ -142,22 +143,6 @@ def _record_lines(release: Path) -> Iterator[str]:
                         yield line.decode("utf-8")
 
 
-def _value(record: dict[str, Any], field: str) -> object:
-    if field == "translations":
-        return " | ".join(f"{item['xml_lang']}:{item['text']}" for item in record["translations"])
-    if field == "tokens":
-        return " ".join(item["surface"] for item in record["tokens"])
-    if field == "phonology":
-        return " | ".join(item["text"] for item in record["phonology"])
-    if field == "glosses":
-        return " | ".join(
-            item["text"] for item in record["tier_translations"] if item["owner_type"] != "sentence"
-        )
-    if field == "audio":
-        return " | ".join(item["url"] or item["file"] or item["source"] for item in record["audio"])
-    return record[field]
-
-
 def _spreadsheet_safe(value: object, enabled: bool) -> object:
     if enabled and isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
         return f"'{value}"
@@ -171,26 +156,34 @@ def write_recipe_export(
 ) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     export_format = recipe["format"]
+    fields = cast(list[DatasetField], recipe["fields"])
     if export_format == "jsonl":
         output.write_text(
             "".join(
-                json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
+                json.dumps(
+                    project_record(record, fields),
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                + "\n"
                 for record in records
             ),
             encoding="utf-8",
             newline="\n",
         )
         return
-    fields = recipe["fields"]
     delimiter = "\t" if export_format == "tsv" else ","
     with output.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields, delimiter=delimiter, lineterminator="\n")
         writer.writeheader()
         for record in records:
+            projected = project_record(record, fields)
             writer.writerow(
                 {
                     field: _spreadsheet_safe(
-                        _value(record, field), bool(recipe["spreadsheet_safe"])
+                        projected[field],
+                        bool(recipe["spreadsheet_safe"]),
                     )
                     for field in fields
                 }

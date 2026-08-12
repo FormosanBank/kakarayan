@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from api.app import _spreadsheet_safe, create_app
 from api.config import Settings
+from api.dataset_fields import project_record
 
 
 def release_path(client: TestClient, path: str) -> str:
@@ -231,6 +232,7 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         ("field", "id"),
         ("field", "standard"),
         ("field", "translations"),
+        ("field", "glosses"),
         ("max_rows", "1"),
     ]
     preview = client.get(release_path(client, "datasets/preview"), params=params)
@@ -238,14 +240,19 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert preview.json()["estimated_rows"] == 2
     assert preview.json()["returned_rows"] == 1
     assert preview.json()["truncated"] is True
-    assert list(preview.json()["items"][0]) == ["id", "standard", "translations"]
+    item = preview.json()["items"][0]
+    assert list(item) == ["id", "standard", "translations", "glosses"]
+    assert "FIVE" not in item["translations"]
+    assert "FIVE" in item["glosses"]
+    detail = client.get(release_path(client, f"sentences/{item['id']}")).json()
+    assert item == project_record(detail, ["id", "standard", "translations", "glosses"])
 
     exported = client.get(
         release_path(client, "datasets/export"), params=[*params, ("format", "tsv")]
     )
     assert exported.status_code == 200
     assert exported.headers["x-kakarayan-row-count"] == "1"
-    assert exported.text.startswith("id\tstandard\ttranslations\n")
+    assert exported.text.startswith("id\tstandard\ttranslations\tglosses\n")
 
     unbounded = client.get(
         release_path(client, "datasets/export"),

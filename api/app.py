@@ -21,17 +21,11 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
+from api.dataset_fields import DATASET_FIELDS, DatasetField
 from api.errors import ApiError, api_error_handler, validation_error_handler
 from api.release import ReleaseError, load_release
 from api.search import MatchMode
-from api.store import (
-    DATASET_FIELDS,
-    CorpusStore,
-    DatasetField,
-    FrequencySort,
-    SearchDirection,
-    TierRequirement,
-)
+from api.store import CorpusStore, FrequencySort, SearchDirection, TierRequirement
 
 LOGGER = logging.getLogger("kakarayan.api")
 _FAILURE_HEADER = "X-Kakarayan-Internal-Failure"

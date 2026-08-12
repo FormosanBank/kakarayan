@@ -64,7 +64,7 @@ process to materialize a full corpus selection.
 | `dialect` | Source dialect label |
 | `source_path` | Canonical public XML path |
 | `tokens` | Ordered surface token sequence |
-| `audio` | Available audio references and offsets |
+| `audio` | Audio file and URL references |
 | `phonology` | Available phonological tiers |
 | `glosses` | Word and morpheme translation tiers |
 
