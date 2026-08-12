@@ -3,10 +3,12 @@ from __future__ import annotations
 import gzip
 import json
 import logging
+import sqlite3
 
 from fastapi.testclient import TestClient
 
-from api.app import _spreadsheet_safe
+from api.app import _spreadsheet_safe, create_app
+from api.config import Settings
 
 
 def release_path(client: TestClient, path: str) -> str:
@@ -50,6 +52,8 @@ def test_record_summary_then_detail(client: TestClient) -> None:
     assert len(gzip.compress(result.content)) <= 100 * 1024
     summary = result.json()["items"][0]
     assert "words" not in summary
+    assert summary["translation_count"] == len(summary["translations"])
+    assert summary["summary_truncated"] is False
     sentence = client.get(release_path(client, f"sentences/{summary['id']}"))
     assert sentence.status_code == 200
     body = sentence.json()
@@ -61,6 +65,29 @@ def test_record_summary_then_detail(client: TestClient) -> None:
     text = client.get(release_path(client, f"texts/{body['parent_id']}"))
     assert text.json()["source_path"] == "Corpora/TestCorpus/XML/fixture.xml"
     assert text.json()["sentence_count"] == 2
+
+
+def test_summary_is_bounded_without_truncating_record_detail(settings: Settings) -> None:
+    complete_text = "x" * 5000
+    with sqlite3.connect(settings.database_path) as connection:
+        sentence_id = connection.execute(
+            "SELECT owner_id FROM forms WHERE owner_type = 'sentence' AND text = 'lima waco'"
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE forms SET text = ? WHERE owner_type = 'sentence' AND owner_id = ?",
+            (complete_text, sentence_id),
+        )
+    with TestClient(create_app(settings)) as client:
+        result = client.get(
+            release_path(client, "concordance"),
+            params={"q": "lima", "language_id": "lang_amis", "match": "exact"},
+        )
+        summary = result.json()["items"][0]
+        assert summary["summary_truncated"] is True
+        assert len(summary["standard"]) == 480
+        assert summary["standard"].endswith("…")
+        detail = client.get(release_path(client, f"sentences/{summary['id']}")).json()
+        assert detail["standard"] == complete_text
 
 
 def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:

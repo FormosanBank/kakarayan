@@ -388,6 +388,9 @@ export function SearchResultCard({
       <button className="button button--quiet" onClick={() => setOpen(true)} disabled={open}>
         {open ? tx("Loading record…", "正在載入記錄…") : tx("Open full record", "開啟完整記錄")}
       </button>
+      {summary.summary_truncated && (
+        <small>{tx("Summary shortened. Open the full record for every tier.", "摘要已縮短。開啟完整記錄以查看所有層級。")}</small>
+      )}
       {error && <p className="callout callout--error">{error}</p>}
     </article>
   );

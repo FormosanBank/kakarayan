@@ -80,6 +80,14 @@ def _fast_database_check(path: Path) -> dict[str, Any]:
                 "audio",
                 "tokens",
                 "publication_metadata",
+                "tier_scope",
+                "dictionary_terms",
+                "formosan_vocabulary",
+                "formosan_vocabulary_fts",
+                "translation_vocabulary",
+                "translation_vocabulary_fts",
+                "summary_cache",
+                "translation_language_cache",
             }
             if not required.issubset(table_names):
                 raise ReleaseError("SQLite release is missing required tables")

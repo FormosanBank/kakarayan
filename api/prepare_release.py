@@ -17,7 +17,8 @@ from typing import Any, BinaryIO, cast
 from api.release import ReleaseError
 
 _BUFFER_SIZE = 1024 * 1024
-_MAX_BYTES = 5_000_000_000
+_MAX_ARTIFACT_BYTES = 2_000_000_000
+_MAX_DATABASE_BYTES = 8 * 1024 * 1024 * 1024
 
 
 def _sha256(path: Path) -> str:
@@ -88,12 +89,12 @@ def _acquire(source: str, target: Path, expected_bytes: int) -> None:
                 with urllib.request.urlopen(request, timeout=120) as response:
                     if not response.geturl().startswith("https://"):
                         raise ReleaseError("Artifact redirected away from HTTPS")
-                    written = _copy_limited(response, output, _MAX_BYTES)
+                    written = _copy_limited(response, output, _MAX_ARTIFACT_BYTES)
             elif parsed.scheme:
                 raise ReleaseError("Artifact source must be a local path or HTTPS URL")
             else:
                 with Path(source).resolve().open("rb") as input_stream:
-                    written = _copy_limited(input_stream, output, _MAX_BYTES)
+                    written = _copy_limited(input_stream, output, _MAX_ARTIFACT_BYTES)
             output.flush()
             os.fsync(output.fileno())
         if written != expected_bytes:
@@ -132,7 +133,7 @@ def prepare_release(manifest_source: str, database_path: Path, active_manifest: 
             with source_stream:
                 while chunk := source_stream.read(_BUFFER_SIZE):
                     expanded += len(chunk)
-                    if expanded > _MAX_BYTES:
+                    if expanded > _MAX_DATABASE_BYTES:
                         raise ReleaseError("Expanded database exceeds the activation size limit")
                     digest.update(chunk)
                     output.write(chunk)

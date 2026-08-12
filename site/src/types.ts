@@ -240,6 +240,8 @@ export interface SentenceSummary {
   standard: string;
   original: string;
   translations: Translation[];
+  translation_count: number;
+  summary_truncated: boolean;
   audio_count: number;
 }
 

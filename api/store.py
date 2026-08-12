@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
@@ -46,19 +47,46 @@ DATASET_FIELDS: tuple[DatasetField, ...] = (
     "source_path",
     "audio",
 )
+SUMMARY_FORM_MAX_CHARS = 480
+SUMMARY_TRANSLATION_MAX_CHARS = 320
+SUMMARY_TRANSLATION_LIMIT = 3
+DICTIONARY_EXAMPLE_LIMIT = 2
+
+
+def _bounded_text(value: object, maximum: int) -> tuple[str, bool]:
+    text = str(value)
+    if len(text) <= maximum:
+        return text, False
+    return f"{text[: maximum - 1]}…", True
 
 
 def _like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _predicate(column: str, query: str, match: MatchMode) -> tuple[str, str]:
-    escaped = _like(query)
+def _predicate(
+    column: str,
+    query: str,
+    match: MatchMode,
+    vocabulary: Literal["formosan", "translation"],
+) -> tuple[str, tuple[str, ...]]:
     if match == "exact":
-        return f"{column} = ?", query
+        return f"{column} = ?", (query,)
     if match == "prefix":
-        return f"{column} LIKE ? ESCAPE '\\'", f"{escaped}%"
-    return f"{column} LIKE ? ESCAPE '\\'", f"%{escaped}%"
+        return f"{column} >= ? AND {column} < ?", (query, f"{query}\U0010ffff")
+    table = f"{vocabulary}_vocabulary"
+    if len(query) < 3:
+        return (
+            f"{column} IN (SELECT value FROM {table} WHERE value LIKE ? ESCAPE '\\')",
+            (f"%{_like(query)}%",),
+        )
+    fts_table = f"{table}_fts"
+    phrase = f'"{query.replace(chr(34), chr(34) * 2)}"'
+    return (
+        f"{column} IN (SELECT v.value FROM {fts_table} search "
+        f"JOIN {table} v ON v.rowid = search.rowid WHERE {fts_table} MATCH ?)",
+        (phrase,),
+    )
 
 
 def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -158,6 +186,68 @@ class CorpusStore:
             clauses.append(f"{alias}.dialect = ?")
             parameters.append(dialect)
         return clauses, parameters
+
+    @classmethod
+    def _candidate_sentences(
+        cls,
+        *,
+        normalized: str,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+    ) -> tuple[str, tuple[object, ...]]:
+        scope, scope_parameters = cls._scope(language_id, corpus_id, dialect)
+        where = " AND ".join(scope)
+        if direction == "formosan":
+            token_clause, token_parameters = _predicate(
+                "tok.normalized", normalized, match, "formosan"
+            )
+            form_clause, form_parameters = _predicate("f.normalized", normalized, match, "formosan")
+            sql = f"""
+                SELECT tok.sentence_id
+                FROM tokens tok INDEXED BY tokens_normalized
+                JOIN sentences s ON s.id = tok.sentence_id
+                JOIN texts t ON t.id = s.parent_id
+                WHERE {where} AND {token_clause}
+                UNION
+                SELECT ts.sentence_id
+                FROM forms f INDEXED BY forms_normalized
+                JOIN tier_scope ts
+                  ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id
+                JOIN sentences s ON s.id = ts.sentence_id
+                JOIN texts t ON t.id = s.parent_id
+                WHERE {where} AND f.owner_type <> 'sentence' AND {form_clause}
+            """
+            return sql, (
+                *scope_parameters,
+                *token_parameters,
+                *scope_parameters,
+                *form_parameters,
+            )
+        translation_clause, translation_parameters = _predicate(
+            "tr.normalized", normalized, match, "translation"
+        )
+        language_clause = " AND tr.xml_lang = ?" if translation_language else ""
+        language_parameters: tuple[object, ...] = (
+            (translation_language,) if translation_language else ()
+        )
+        sql = f"""
+            SELECT DISTINCT ts.sentence_id
+            FROM translations tr
+            JOIN tier_scope ts
+              ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+            JOIN sentences s ON s.id = ts.sentence_id
+            JOIN texts t ON t.id = s.parent_id
+            WHERE {where} AND {translation_clause}{language_clause}
+        """
+        return sql, (
+            *scope_parameters,
+            *translation_parameters,
+            *language_parameters,
+        )
 
     @staticmethod
     def _tiers(
@@ -317,12 +407,28 @@ class CorpusStore:
         for row in rows:
             identifier = str(row["id"])
             standard, original = CorpusStore._forms_by_kind(forms[identifier])
+            standard, standard_truncated = _bounded_text(standard, SUMMARY_FORM_MAX_CHARS)
+            original, original_truncated = _bounded_text(original, SUMMARY_FORM_MAX_CHARS)
+            sentence_translations = translations[identifier]
+            summary_translations = []
+            translation_truncated = len(sentence_translations) > SUMMARY_TRANSLATION_LIMIT
+            for item in sentence_translations[:SUMMARY_TRANSLATION_LIMIT]:
+                summary = dict(item)
+                summary["text"], shortened = _bounded_text(
+                    item["text"], SUMMARY_TRANSLATION_MAX_CHARS
+                )
+                translation_truncated = translation_truncated or shortened
+                summary_translations.append(summary)
             result.append(
                 {
                     **row,
                     "standard": standard,
                     "original": original,
-                    "translations": translations[identifier],
+                    "translations": summary_translations,
+                    "translation_count": len(sentence_translations),
+                    "summary_truncated": (
+                        standard_truncated or original_truncated or translation_truncated
+                    ),
                     "audio_count": audio_counts[identifier],
                 }
             )
@@ -334,23 +440,13 @@ class CorpusStore:
         language_id: str,
         corpus_id: str | None,
     ) -> list[dict[str, Any]]:
-        clauses, parameters = self._scope(language_id, corpus_id, None)
         with self.connect() as connection:
             return [
                 dict(row)
                 for row in connection.execute(
-                    f"""
-                    SELECT tr.xml_lang, COUNT(DISTINCT ts.sentence_id) AS records
-                    FROM translations tr
-                    JOIN tier_scope_view ts
-                      ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
-                    JOIN sentences s ON s.id = ts.sentence_id
-                    JOIN texts t ON t.id = s.parent_id
-                    WHERE {" AND ".join(clauses)} AND tr.xml_lang <> ''
-                    GROUP BY tr.xml_lang
-                    ORDER BY tr.xml_lang
-                    """,
-                    parameters,
+                    "SELECT xml_lang, records FROM translation_language_cache "
+                    "WHERE language_id = ? AND corpus_id = ? ORDER BY xml_lang",
+                    (language_id, corpus_id or ""),
                 )
             ]
 
@@ -400,7 +496,9 @@ class CorpusStore:
                     (*parameters, headword),
                 )
             ]
-        sentence_ids = list(dict.fromkeys(str(row["sentence_id"]) for row in rows))[:3]
+        sentence_ids = list(dict.fromkeys(str(row["sentence_id"]) for row in rows))[
+            :DICTIONARY_EXAMPLE_LIMIT
+        ]
         owner_ids = {str(row["owner_id"]) for row in rows if row.get("owner_id")}
         if owner_ids:
             placeholders = ",".join("?" for _ in owner_ids)
@@ -506,33 +604,35 @@ class CorpusStore:
             ]
         )
         position = _cursor_position(cursor, fingerprint, 1)
-        cursor_clause = "WHERE headword > ?" if position else ""
-        cursor_parameters: tuple[object, ...] = (str(position[0]),) if position else ()
         scope, scope_parameters = self._scope(language_id, corpus_id, dialect)
         if direction == "formosan":
-            token_clause, token_value = _predicate("tok.normalized", normalized, match)
-            form_clause, form_value = _predicate("f.normalized", normalized, match)
-            candidates = f"""
-                SELECT tok.normalized AS headword, tok.surface AS display_form
-                FROM tokens tok JOIN sentences s ON s.id = tok.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(scope)} AND {token_clause}
-                UNION ALL
-                SELECT f.normalized AS headword, f.text AS display_form
-                FROM forms f
-                JOIN tier_scope_view ts ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id
-                JOIN sentences s ON s.id = ts.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(scope)} AND f.owner_type <> 'sentence' AND {form_clause}
+            clauses = ["d.language_id = ?"]
+            parameters: tuple[object, ...] = (language_id,)
+            if corpus_id:
+                clauses.append("d.corpus_id = ?")
+                parameters += (corpus_id,)
+            if dialect:
+                clauses.append("d.dialect = ?")
+                parameters += (dialect,)
+            match_clause, match_parameters = _predicate("d.headword", normalized, match, "formosan")
+            clauses.append(match_clause)
+            parameters += match_parameters
+            if position:
+                clauses.append("d.headword > ?")
+                parameters += (str(position[0]),)
+            sql = f"""
+                SELECT d.headword, MIN(d.display_form) AS display_form,
+                       SUM(d.occurrences) AS occurrences,
+                       SUM(d.variant_count) AS variant_count
+                FROM dictionary_terms d
+                WHERE {" AND ".join(clauses)}
+                GROUP BY d.headword
+                ORDER BY d.headword LIMIT ?
             """
-            parameters = (
-                *scope_parameters,
-                token_value,
-                *scope_parameters,
-                form_value,
-            )
         else:
-            translation_clause, translation_value = _predicate("tr.normalized", normalized, match)
+            translation_clause, translation_parameters = _predicate(
+                "tr.normalized", normalized, match, "translation"
+            )
             language_clause = "AND tr.xml_lang = ?" if translation_language else ""
             language_parameters: tuple[object, ...] = (
                 (translation_language,) if translation_language else ()
@@ -566,25 +666,29 @@ class CorpusStore:
             """
             branch_parameters = (
                 *scope_parameters,
-                translation_value,
+                *translation_parameters,
                 *language_parameters,
             )
             parameters = (*branch_parameters, *branch_parameters, *branch_parameters)
-        sql = f"""
-            WITH candidates AS ({candidates}), grouped AS (
-              SELECT headword, MIN(display_form) AS display_form,
-                     COUNT(*) AS occurrences, COUNT(DISTINCT display_form) AS variant_count
-              FROM candidates WHERE headword <> '' GROUP BY headword
-            )
-            SELECT * FROM grouped {cursor_clause}
-            ORDER BY headword LIMIT ?
-        """
+            cursor_clause = "WHERE headword > ?" if position else ""
+            cursor_parameters: tuple[object, ...] = (str(position[0]),) if position else ()
+            parameters += cursor_parameters
+            sql = f"""
+                WITH candidates AS ({candidates}), grouped AS (
+                  SELECT headword, MIN(display_form) AS display_form,
+                         COUNT(*) AS occurrences,
+                         COUNT(DISTINCT display_form) AS variant_count
+                  FROM candidates WHERE headword <> '' GROUP BY headword
+                )
+                SELECT * FROM grouped {cursor_clause}
+                ORDER BY headword LIMIT ?
+            """
         with self.connect() as connection:
             rows = [
                 dict(row)
                 for row in connection.execute(
                     sql,
-                    (*parameters, *cursor_parameters, limit + 1),
+                    (*parameters, limit + 1),
                 )
             ]
             items = []
@@ -677,29 +781,17 @@ class CorpusStore:
             ]
         )
         position = _cursor_position(cursor, fingerprint, 3)
-        clauses, parameters = self._scope(language_id, corpus_id, dialect)
-        if direction == "formosan":
-            token_clause, token_value = _predicate("tok.normalized", normalized, match)
-            form_clause, form_value = _predicate("f.normalized", normalized, match)
-            clauses.append(
-                "(EXISTS (SELECT 1 FROM tokens tok WHERE tok.sentence_id = s.id "
-                f"AND {token_clause}) OR EXISTS (SELECT 1 FROM forms f "
-                "JOIN tier_scope_view ts ON ts.owner_type = f.owner_type "
-                "AND ts.owner_id = f.owner_id "
-                f"WHERE ts.sentence_id = s.id AND {form_clause}))"
-            )
-            parameters.extend((token_value, form_value))
-        else:
-            translation_clause, translation_value = _predicate("tr.normalized", normalized, match)
-            language_clause = " AND tr.xml_lang = ?" if translation_language else ""
-            clauses.append(
-                "EXISTS (SELECT 1 FROM translations tr JOIN tier_scope_view ts "
-                "ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id "
-                f"WHERE ts.sentence_id = s.id AND {translation_clause}{language_clause})"
-            )
-            parameters.append(translation_value)
-            if translation_language:
-                parameters.append(translation_language)
+        candidates, candidate_parameters = self._candidate_sentences(
+            normalized=normalized,
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+        )
+        clauses: list[str] = []
+        parameters: list[object] = []
         self._tier_requirements(clauses, requirements)
         if position:
             source_path, ordinal, identifier = position
@@ -719,14 +811,17 @@ class CorpusStore:
                 dict(row)
                 for row in connection.execute(
                     f"""
+                    WITH candidate_ids AS ({candidates})
                     SELECT s.id, s.parent_id AS text_id, s.xml_id, s.position, s.token_count,
                            t.corpus_id, t.language_id, t.language, t.dialect,
                            t.source_path, t.citation
-                    FROM sentences s JOIN texts t ON t.id = s.parent_id
-                    WHERE {" AND ".join(clauses)}
+                    FROM candidate_ids candidate
+                    JOIN sentences s ON s.id = candidate.sentence_id
+                    JOIN texts t ON t.id = s.parent_id
+                    WHERE {" AND ".join(clauses) if clauses else "1 = 1"}
                     ORDER BY t.source_path, s.position, s.id LIMIT ?
                     """,
-                    (*parameters, limit + 1),
+                    (*candidate_parameters, *parameters, limit + 1),
                 )
             ]
             items = self._sentence_summaries(connection, rows[:limit])
@@ -814,6 +909,21 @@ class CorpusStore:
         dialect: str | None,
         limit: int,
     ) -> dict[str, Any]:
+        if not dialect:
+            with self.connect() as connection:
+                cached = connection.execute(
+                    "SELECT value_json FROM summary_cache WHERE language_id = ? AND corpus_id = ?",
+                    (language_id, corpus_id or ""),
+                ).fetchone()
+            if cached:
+                result = json.loads(str(cached[0]))
+                for key in (
+                    "source_frequencies",
+                    "normalized_frequencies",
+                    "translation_frequencies",
+                ):
+                    result[key] = result[key][:limit]
+                return {"release_id": self.release_id, **result}
         clauses, parameters = self._scope(language_id, corpus_id, dialect)
         where = " AND ".join(clauses)
         with self.connect() as connection:
@@ -914,37 +1024,29 @@ class CorpusStore:
         translation_language: str | None,
         match: MatchMode,
         requirements: Sequence[TierRequirement],
-    ) -> tuple[list[str], list[object]]:
-        clauses, parameters = self._scope(language_id, corpus_id, dialect)
+    ) -> tuple[str | None, list[str], list[object]]:
         normalized = (
             normalize_surface(q or "") if direction == "formosan" else normalize_text(q or "")
         )
         if q is not None and not normalized:
             raise ApiError(422, "invalid_parameter", "The query is empty after normalization")
-        if normalized and direction == "formosan":
-            token_clause, token_value = _predicate("tok.normalized", normalized, match)
-            form_clause, form_value = _predicate("f.normalized", normalized, match)
-            clauses.append(
-                "(EXISTS (SELECT 1 FROM tokens tok WHERE tok.sentence_id = s.id "
-                f"AND {token_clause}) OR EXISTS (SELECT 1 FROM forms f "
-                "JOIN tier_scope_view ts ON ts.owner_type = f.owner_type "
-                "AND ts.owner_id = f.owner_id "
-                f"WHERE ts.sentence_id = s.id AND {form_clause}))"
+        if normalized:
+            candidates, candidate_parameters = self._candidate_sentences(
+                normalized=normalized,
+                language_id=language_id,
+                corpus_id=corpus_id,
+                dialect=dialect,
+                direction=direction,
+                translation_language=translation_language,
+                match=match,
             )
-            parameters.extend((token_value, form_value))
-        elif normalized:
-            translation_clause, translation_value = _predicate("tr.normalized", normalized, match)
-            language_clause = " AND tr.xml_lang = ?" if translation_language else ""
-            clauses.append(
-                "EXISTS (SELECT 1 FROM translations tr JOIN tier_scope_view ts "
-                "ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id "
-                f"WHERE ts.sentence_id = s.id AND {translation_clause}{language_clause})"
-            )
-            parameters.append(translation_value)
-            if translation_language:
-                parameters.append(translation_language)
+            clauses: list[str] = []
+            parameters = list(candidate_parameters)
+        else:
+            candidates = None
+            clauses, parameters = self._scope(language_id, corpus_id, dialect)
         self._tier_requirements(clauses, requirements)
-        return clauses, parameters
+        return candidates, clauses, parameters
 
     @staticmethod
     def _dataset_projection(fields: Sequence[DatasetField]) -> str:
@@ -1016,7 +1118,7 @@ class CorpusStore:
     ) -> dict[str, Any]:
         if not fields or any(field not in DATASET_FIELDS for field in fields):
             raise ApiError(422, "invalid_parameter", "Choose at least one supported dataset field")
-        clauses, parameters = self._dataset_clauses(
+        candidates, clauses, parameters = self._dataset_clauses(
             language_id=language_id,
             corpus_id=corpus_id,
             dialect=dialect,
@@ -1026,25 +1128,26 @@ class CorpusStore:
             match=match,
             requirements=requirements,
         )
-        where = " AND ".join(clauses)
+        where = " AND ".join(clauses) if clauses else "1 = 1"
+        prefix = f"WITH candidate_ids AS ({candidates})" if candidates else ""
+        source = (
+            "candidate_ids candidate JOIN sentences s ON s.id = candidate.sentence_id "
+            "JOIN texts t ON t.id = s.parent_id"
+            if candidates
+            else "sentences s JOIN texts t ON t.id = s.parent_id"
+        )
         projection = self._dataset_projection(fields)
         with self.connect() as connection:
-            estimated_rows = int(
-                connection.execute(
-                    f"SELECT COUNT(*) FROM sentences s JOIN texts t ON t.id = s.parent_id "
-                    f"WHERE {where}",
-                    parameters,
-                ).fetchone()[0]
-            )
             rows = [
                 dict(row)
                 for row in connection.execute(
-                    f"SELECT {projection} FROM sentences s "
-                    f"JOIN texts t ON t.id = s.parent_id WHERE {where} "
+                    f"{prefix} SELECT {projection}, COUNT(*) OVER() AS _estimated_rows "
+                    f"FROM {source} WHERE {where} "
                     "ORDER BY t.source_path, s.position, s.id LIMIT ?",
                     (*parameters, max_rows),
                 )
             ]
+        estimated_rows = int(rows[0].pop("_estimated_rows")) if rows else 0
         return {
             "release_id": self.release_id,
             "estimated_rows": estimated_rows,

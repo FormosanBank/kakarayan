@@ -215,7 +215,7 @@ def _write_projection(
 def _add_indexes(connection: sqlite3.Connection) -> None:
     statements = (
         "CREATE UNIQUE INDEX texts_id ON texts(id)",
-        "CREATE INDEX texts_scope ON texts(corpus_id, language_id, dialect)",
+        "CREATE INDEX texts_scope ON texts(language_id, corpus_id, dialect, source_path, id)",
         "CREATE UNIQUE INDEX sentences_id ON sentences(id)",
         "CREATE INDEX sentences_parent ON sentences(parent_id, position)",
         "CREATE UNIQUE INDEX words_id ON words(id)",
@@ -223,18 +223,40 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX morphemes_id ON morphemes(id)",
         "CREATE INDEX morphemes_parent ON morphemes(parent_id, position)",
         "CREATE INDEX forms_owner ON forms(owner_type, owner_id, position)",
-        "CREATE INDEX forms_normalized ON forms(normalized)",
+        "CREATE INDEX forms_normalized ON forms(normalized, owner_type, owner_id, position)",
         "CREATE INDEX phonology_owner ON phonology(owner_type, owner_id, position)",
         "CREATE INDEX translations_owner ON translations(owner_type, owner_id, position)",
-        "CREATE INDEX translations_normalized ON translations(normalized)",
+        "CREATE INDEX translations_normalized "
+        "ON translations(normalized, xml_lang, owner_type, owner_id, position)",
         "CREATE INDEX audio_owner ON audio(owner_type, owner_id, position)",
-        "CREATE INDEX tokens_normalized ON tokens(normalized)",
+        "CREATE INDEX tokens_normalized ON tokens(normalized, sentence_id, position, word_id)",
         "CREATE INDEX tokens_sentence ON tokens(sentence_id, position)",
+        "CREATE INDEX tokens_word ON tokens(word_id, sentence_id, normalized, position)",
     )
     for statement in statements:
         connection.execute(statement)
     connection.executescript(
         """
+        CREATE TABLE tier_scope (
+          owner_type TEXT NOT NULL,
+          owner_id TEXT NOT NULL,
+          sentence_id TEXT NOT NULL,
+          PRIMARY KEY (owner_type, owner_id)
+        ) WITHOUT ROWID;
+
+        INSERT INTO tier_scope
+        SELECT 'sentence', id, id FROM sentences;
+
+        INSERT INTO tier_scope
+        SELECT 'word', id, parent_id FROM words;
+
+        INSERT INTO tier_scope
+        SELECT 'morpheme', m.id, w.parent_id
+        FROM morphemes m JOIN words w ON w.id = m.parent_id;
+
+        CREATE INDEX tier_scope_sentence
+        ON tier_scope(sentence_id, owner_type, owner_id);
+
         CREATE VIEW sentence_view AS
         SELECT
           s.id AS sentence_id,
@@ -282,15 +304,206 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
         JOIN sentence_view sv ON sv.sentence_id = tok.sentence_id;
 
         CREATE VIEW tier_scope_view AS
-        SELECT 'sentence' AS owner_type, s.id AS owner_id, s.id AS sentence_id
-        FROM sentences s
+        SELECT owner_type, owner_id, sentence_id FROM tier_scope;
+
+        CREATE TABLE formosan_vocabulary(value TEXT PRIMARY KEY NOT NULL);
+
+        INSERT INTO formosan_vocabulary
+        SELECT normalized FROM tokens WHERE normalized <> ''
+        UNION
+        SELECT normalized FROM forms
+        WHERE normalized <> '' AND owner_type <> 'sentence';
+
+        CREATE VIRTUAL TABLE formosan_vocabulary_fts USING fts5(
+          value,
+          content='formosan_vocabulary',
+          content_rowid='rowid',
+          tokenize='trigram'
+        );
+
+        INSERT INTO formosan_vocabulary_fts(formosan_vocabulary_fts) VALUES('rebuild');
+
+        CREATE TABLE translation_vocabulary(value TEXT PRIMARY KEY NOT NULL);
+
+        INSERT INTO translation_vocabulary
+        SELECT DISTINCT normalized FROM translations WHERE normalized <> '';
+
+        CREATE VIRTUAL TABLE translation_vocabulary_fts USING fts5(
+          value,
+          content='translation_vocabulary',
+          content_rowid='rowid',
+          tokenize='trigram'
+        );
+
+        INSERT INTO translation_vocabulary_fts(translation_vocabulary_fts) VALUES('rebuild');
+
+        CREATE TABLE dictionary_terms (
+          language_id TEXT NOT NULL,
+          corpus_id TEXT NOT NULL,
+          dialect TEXT NOT NULL,
+          headword TEXT NOT NULL,
+          display_form TEXT NOT NULL,
+          occurrences INTEGER NOT NULL,
+          variant_count INTEGER NOT NULL
+        );
+
+        INSERT INTO dictionary_terms
+        WITH candidates AS (
+          SELECT t.language_id, t.corpus_id, t.dialect,
+                 tok.normalized AS headword, tok.surface AS display_form
+          FROM tokens tok
+          JOIN sentences s ON s.id = tok.sentence_id
+          JOIN texts t ON t.id = s.parent_id
+          WHERE tok.normalized <> ''
+          UNION ALL
+          SELECT t.language_id, t.corpus_id, t.dialect,
+                 f.normalized AS headword, f.text AS display_form
+          FROM forms f
+          JOIN tier_scope ts
+            ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id
+          JOIN sentences s ON s.id = ts.sentence_id
+          JOIN texts t ON t.id = s.parent_id
+          WHERE f.owner_type <> 'sentence' AND f.normalized <> ''
+        )
+        SELECT language_id, corpus_id, dialect, headword,
+               MIN(display_form), COUNT(*), COUNT(DISTINCT display_form)
+        FROM candidates
+        GROUP BY language_id, corpus_id, dialect, headword;
+
+        CREATE UNIQUE INDEX dictionary_terms_scope
+        ON dictionary_terms(language_id, corpus_id, dialect, headword);
+
+        CREATE INDEX dictionary_terms_lookup
+        ON dictionary_terms(language_id, headword, corpus_id, dialect);
+
+        ANALYZE;
+        """
+    )
+
+
+def _add_summary_cache(connection: sqlite3.Connection) -> None:
+    """Precompute the immutable language and corpus summaries used by the UI."""
+    connection.execute(
+        "CREATE TABLE summary_cache ("
+        "language_id TEXT NOT NULL, corpus_id TEXT NOT NULL, value_json TEXT NOT NULL, "
+        "PRIMARY KEY (language_id, corpus_id)) WITHOUT ROWID"
+    )
+    pairs = [
+        (str(row[0]), str(row[1]))
+        for row in connection.execute(
+            "SELECT DISTINCT language_id, corpus_id FROM texts ORDER BY language_id, corpus_id"
+        )
+    ]
+    scopes = sorted({(language_id, "") for language_id, _ in pairs} | set(pairs))
+    for language_id, corpus_id in scopes:
+        clauses = ["t.language_id = ?"]
+        parameters: list[object] = [language_id]
+        if corpus_id:
+            clauses.append("t.corpus_id = ?")
+            parameters.append(corpus_id)
+        where = " AND ".join(clauses)
+        sentence_count = int(
+            connection.execute(
+                "SELECT COUNT(*) FROM sentences s JOIN texts t ON t.id = s.parent_id "
+                f"WHERE {where}",
+                parameters,
+            ).fetchone()[0]
+        )
+        token_count, source_types, normalized_types = connection.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT tok.surface), COUNT(DISTINCT tok.normalized) "
+            "FROM tokens tok JOIN sentences s ON s.id = tok.sentence_id "
+            f"JOIN texts t ON t.id = s.parent_id WHERE {where}",
+            parameters,
+        ).fetchone()
+        source = [
+            {"value": str(row[0]), "count": int(row[1])}
+            for row in connection.execute(
+                "SELECT tok.surface, COUNT(*) AS count FROM tokens tok "
+                "JOIN sentences s ON s.id = tok.sentence_id "
+                f"JOIN texts t ON t.id = s.parent_id WHERE {where} "
+                "GROUP BY tok.surface ORDER BY count DESC, tok.surface LIMIT 100",
+                parameters,
+            )
+        ]
+        normalized = [
+            {"value": str(row[0]), "count": int(row[1])}
+            for row in connection.execute(
+                "SELECT tok.normalized, COUNT(*) AS count FROM tokens tok "
+                "JOIN sentences s ON s.id = tok.sentence_id "
+                f"JOIN texts t ON t.id = s.parent_id WHERE {where} "
+                "GROUP BY tok.normalized ORDER BY count DESC, tok.normalized LIMIT 100",
+                parameters,
+            )
+        ]
+        translations = [
+            {"value": str(row[0]), "count": int(row[1])}
+            for row in connection.execute(
+                "SELECT tr.normalized, COUNT(*) AS count FROM translations tr "
+                "JOIN tier_scope ts "
+                "ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id "
+                "JOIN sentences s ON s.id = ts.sentence_id "
+                f"JOIN texts t ON t.id = s.parent_id WHERE {where} AND tr.normalized <> '' "
+                "GROUP BY tr.normalized ORDER BY count DESC, tr.normalized LIMIT 100",
+                parameters,
+            )
+        ]
+        distributions = [
+            {
+                "value": f"{row[0]} · {row[1] or 'unknown'}",
+                "count": int(row[2]),
+            }
+            for row in connection.execute(
+                "SELECT t.corpus_id, t.dialect, COUNT(*) AS count FROM sentences s "
+                f"JOIN texts t ON t.id = s.parent_id WHERE {where} "
+                "GROUP BY t.corpus_id, t.dialect "
+                "ORDER BY count DESC, t.corpus_id, t.dialect",
+                parameters,
+            )
+        ]
+        value = {
+            "sentences": sentence_count,
+            "tokens": int(token_count),
+            "source_types": int(source_types),
+            "normalized_types": int(normalized_types),
+            "source_frequencies": source,
+            "normalized_frequencies": normalized,
+            "translation_frequencies": translations,
+            "distributions": distributions,
+        }
+        connection.execute(
+            "INSERT INTO summary_cache(language_id, corpus_id, value_json) VALUES (?, ?, ?)",
+            (
+                language_id,
+                corpus_id,
+                json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            ),
+        )
+    connection.executescript(
+        """
+        CREATE TABLE translation_language_cache (
+          language_id TEXT NOT NULL,
+          corpus_id TEXT NOT NULL,
+          xml_lang TEXT NOT NULL,
+          records INTEGER NOT NULL,
+          PRIMARY KEY (language_id, corpus_id, xml_lang)
+        ) WITHOUT ROWID;
+
+        INSERT INTO translation_language_cache
+        WITH scoped AS (
+          SELECT t.language_id, t.corpus_id, tr.xml_lang,
+                 COUNT(DISTINCT ts.sentence_id) AS records
+          FROM translations tr
+          JOIN tier_scope ts
+            ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+          JOIN sentences s ON s.id = ts.sentence_id
+          JOIN texts t ON t.id = s.parent_id
+          WHERE tr.xml_lang <> ''
+          GROUP BY t.language_id, t.corpus_id, tr.xml_lang
+        )
+        SELECT language_id, corpus_id, xml_lang, records FROM scoped
         UNION ALL
-        SELECT 'word' AS owner_type, w.id AS owner_id, w.parent_id AS sentence_id
-        FROM words w
-        UNION ALL
-        SELECT 'morpheme' AS owner_type, m.id AS owner_id, w.parent_id AS sentence_id
-        FROM morphemes m
-        JOIN words w ON w.id = m.parent_id;
+        SELECT language_id, '', xml_lang, SUM(records)
+        FROM scoped GROUP BY language_id, xml_lang;
         """
     )
 
@@ -686,6 +899,7 @@ def build_release(
                     f"{projection.source_path}: {warning}" for warning in projection.warnings
                 )
         _add_indexes(connection)
+        _add_summary_cache(connection)
         connection.commit()
         _validate_sqlite(connection)
         catalog = _build_catalog(
