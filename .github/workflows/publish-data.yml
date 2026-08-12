@@ -170,6 +170,50 @@ jobs:
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Validated $RELEASE_ID from FormosanBank $SOURCE_COMMIT"
 
+      - name: Benchmark the complete query release
+        shell: bash
+        run: |
+          mkdir -p build/active-release
+          uv run python -m api.prepare_release \
+            --manifest build/data-release/release-manifest.json \
+            --database build/active-release/formosanbank.sqlite \
+            --activate build/active-release/release-manifest.json
+          KAKARAYAN_DB_PATH=build/active-release/formosanbank.sqlite \
+          KAKARAYAN_RELEASE_MANIFEST_PATH=build/active-release/release-manifest.json \
+            uv run uvicorn api.app:app \
+              --host 127.0.0.1 --port 8000 --no-access-log \
+              > "$RUNNER_TEMP/kakarayan-api.log" 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8000/readyz > /dev/null; then
+              break
+            fi
+            if ! kill -0 "$API_PID" 2>/dev/null; then
+              cat "$RUNNER_TEMP/kakarayan-api.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/readyz
+          uv run python -m api.benchmark \
+            --base-url http://127.0.0.1:8000 \
+            --cases tests/fixtures/query-benchmark.json \
+            --output build/query-benchmark.json \
+            --network-profile "GitHub Actions loopback, full release"
+          kill "$API_PID"
+          wait "$API_PID" || true
+          trap - EXIT
+
+      - name: Preserve query benchmark evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: query-benchmark-${{ steps.release.outputs.release_id }}
+          path: build/query-benchmark.json
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Enforce publication rights
         if: ${{ !inputs.dry_run }}
         run: |
