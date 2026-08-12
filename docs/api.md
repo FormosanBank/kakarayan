@@ -130,8 +130,9 @@ Errors use:
 ```json
 {
   "error": {
-    "code": "invalid_request",
-    "message": "Human-readable explanation"
+    "code": "invalid_parameter",
+    "message": "Human-readable explanation",
+    "status": 422
   }
 }
 ```
@@ -147,8 +148,9 @@ service not ready.
 - Readiness and error responses are not treated as immutable data.
 - CORS accepts only configured exact origins and never credentials.
 - The surface is GET-only and uses parameterized SQL templates.
-- Operational records include method, route template, status, duration, bytes, and release
-  ID. They exclude URLs, raw queries, sentence text, recordings, and model input.
+- Operational records include method, route template, status, duration, bytes, release ID,
+  and a failure code when applicable. They exclude URLs, raw queries, sentence text,
+  recordings, and model input.
 
 ## JavaScript example
 

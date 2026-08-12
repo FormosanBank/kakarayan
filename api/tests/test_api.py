@@ -273,3 +273,19 @@ def test_request_records_use_route_templates_without_raw_queries(
     assert request["status"] == 200
     assert "duration_ms" in request
     assert secret_query not in caplog.text
+
+    client.get(
+        release_path(client, "dictionary"),
+        params={"q": "x" * 257, "language_id": "lang_amis"},
+    )
+    failure = next(
+        item
+        for item in (
+            json.loads(record.message)
+            for record in caplog.records
+            if record.name == "kakarayan.api" and record.message.startswith("{")
+        )
+        if item.get("event") == "request" and item.get("failure_code") == "invalid_parameter"
+    )
+    assert failure["status"] == 422
+    assert secret_query not in caplog.text

@@ -34,6 +34,7 @@ from api.store import (
 )
 
 LOGGER = logging.getLogger("kakarayan.api")
+_FAILURE_HEADER = "X-Kakarayan-Internal-Failure"
 PageSize = Annotated[int, Query(ge=1, le=100)]
 LanguageId = Annotated[str, Query(min_length=1, max_length=128)]
 OptionalCorpus = Annotated[str | None, Query(max_length=128)]
@@ -107,18 +108,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(ApiError)
     async def handle_api_error(request: Request, error: ApiError) -> JSONResponse:
-        return await api_error_handler(request, error)
+        response = await api_error_handler(request, error)
+        response.headers[_FAILURE_HEADER] = error.code
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(
         request: Request, error: RequestValidationError
     ) -> JSONResponse:
-        return await validation_error_handler(request, error)
+        response = await validation_error_handler(request, error)
+        response.headers[_FAILURE_HEADER] = "invalid_parameter"
+        return response
 
     @app.exception_handler(sqlite3.Error)
     async def database_error(_request: Request, _error: sqlite3.Error) -> JSONResponse:
         error = ApiError(500, "database_error", "The release query could not be completed")
-        return JSONResponse(status_code=error.status, content=error.body())
+        return JSONResponse(
+            status_code=error.status,
+            content=error.body(),
+            headers={_FAILURE_HEADER: error.code},
+        )
 
     @app.middleware("http")
     async def request_record(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -128,6 +137,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         release_id = current.release_id if isinstance(current, CorpusStore) else None
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
+        failure_code = response.headers.get(_FAILURE_HEADER)
+        if failure_code:
+            del response.headers[_FAILURE_HEADER]
         if release_id:
             response.headers["X-Kakarayan-Release"] = release_id
         route = request.scope.get("route")
@@ -146,6 +158,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else "gte500",
             response_bytes=int(response.headers.get("content-length", 0)),
             release_id=release_id,
+            failure_code=failure_code,
         )
         return response
 
