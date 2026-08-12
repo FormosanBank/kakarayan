@@ -257,6 +257,7 @@ export interface DictionaryEntry {
   variants: string[];
   corpus_ids: string[];
   examples: SentenceSummary[];
+  summary_truncated: boolean;
 }
 
 export interface PageResult<T> {

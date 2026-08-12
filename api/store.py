@@ -51,6 +51,9 @@ SUMMARY_FORM_MAX_CHARS = 480
 SUMMARY_TRANSLATION_MAX_CHARS = 320
 SUMMARY_TRANSLATION_LIMIT = 3
 DICTIONARY_EXAMPLE_LIMIT = 2
+DICTIONARY_MEANING_LIMIT = 12
+DICTIONARY_PRONUNCIATION_LIMIT = 8
+DICTIONARY_VALUE_MAX_CHARS = 320
 
 
 def _bounded_text(value: object, maximum: int) -> tuple[str, bool]:
@@ -58,6 +61,18 @@ def _bounded_text(value: object, maximum: int) -> tuple[str, bool]:
     if len(text) <= maximum:
         return text, False
     return f"{text[: maximum - 1]}…", True
+
+
+def _bounded_values(
+    values: Sequence[str], *, maximum_items: int, maximum_chars: int
+) -> tuple[list[str], bool]:
+    result = []
+    truncated = len(values) > maximum_items
+    for value in values[:maximum_items]:
+        bounded, shortened = _bounded_text(value, maximum_chars)
+        result.append(bounded)
+        truncated = truncated or shortened
+    return result, truncated
 
 
 def _like(value: str) -> str:
@@ -436,15 +451,22 @@ class CorpusStore:
                 )
                 translation_truncated = translation_truncated or shortened
                 summary_translations.append(summary)
+            summary_row = dict(row)
+            summary_row["citation"], citation_truncated = _bounded_text(
+                row.get("citation", ""), 800
+            )
             result.append(
                 {
-                    **row,
+                    **summary_row,
                     "standard": standard,
                     "original": original,
                     "translations": summary_translations,
                     "translation_count": len(sentence_translations),
                     "summary_truncated": (
-                        standard_truncated or original_truncated or translation_truncated
+                        standard_truncated
+                        or original_truncated
+                        or translation_truncated
+                        or citation_truncated
                     ),
                     "audio_count": audio_counts[identifier],
                 }
@@ -513,9 +535,9 @@ class CorpusStore:
                     (*parameters, headword),
                 )
             ]
-        sentence_ids = list(dict.fromkeys(str(row["sentence_id"]) for row in rows))[
-            :DICTIONARY_EXAMPLE_LIMIT
-        ]
+        candidate_sentence_ids = list(dict.fromkeys(str(row["sentence_id"]) for row in rows))
+        sentence_ids = candidate_sentence_ids[:DICTIONARY_EXAMPLE_LIMIT]
+        evidence_truncated = len(candidate_sentence_ids) > DICTIONARY_EXAMPLE_LIMIT
         owner_ids = {str(row["owner_id"]) for row in rows if row.get("owner_id")}
         if owner_ids:
             placeholders = ",".join("?" for _ in owner_ids)
@@ -539,7 +561,7 @@ class CorpusStore:
                 for row in connection.execute(
                     f"SELECT DISTINCT text FROM translations "
                     f"WHERE owner_id IN ({placeholders}){language_clause} AND text <> '' "
-                    "ORDER BY position LIMIT 12",
+                    "ORDER BY position LIMIT 13",
                     (*owner_ids, *language_parameters),
                 )
             ]
@@ -547,7 +569,7 @@ class CorpusStore:
                 str(row[0])
                 for row in connection.execute(
                     f"SELECT DISTINCT text FROM phonology WHERE owner_id IN ({placeholders}) "
-                    "AND text <> '' ORDER BY position LIMIT 8",
+                    "AND text <> '' ORDER BY position LIMIT 9",
                     tuple(owner_ids),
                 )
             ]
@@ -560,7 +582,7 @@ class CorpusStore:
                 for row in connection.execute(
                     f"SELECT DISTINCT text FROM translations WHERE owner_type = 'sentence' "
                     f"AND owner_id IN ({placeholders}){language_clause} AND text <> '' "
-                    "ORDER BY position LIMIT 12",
+                    "ORDER BY position LIMIT 13",
                     (*sentence_ids, *language_parameters),
                 )
             ]
@@ -582,7 +604,27 @@ class CorpusStore:
                 )
             ]
             examples = self._sentence_summaries(connection, example_rows)
-        variants = list(dict.fromkeys(str(row["value"]) for row in rows if row.get("value")))[:8]
+        meanings, shortened = _bounded_values(
+            meanings,
+            maximum_items=DICTIONARY_MEANING_LIMIT,
+            maximum_chars=DICTIONARY_VALUE_MAX_CHARS,
+        )
+        evidence_truncated = evidence_truncated or shortened
+        pronunciations, shortened = _bounded_values(
+            pronunciations,
+            maximum_items=DICTIONARY_PRONUNCIATION_LIMIT,
+            maximum_chars=DICTIONARY_VALUE_MAX_CHARS,
+        )
+        evidence_truncated = evidence_truncated or shortened
+        raw_variants = list(dict.fromkeys(str(row["value"]) for row in rows if row.get("value")))
+        variants, shortened = _bounded_values(
+            raw_variants, maximum_items=8, maximum_chars=DICTIONARY_VALUE_MAX_CHARS
+        )
+        evidence_truncated = (
+            evidence_truncated
+            or shortened
+            or any(bool(example["summary_truncated"]) for example in examples)
+        )
         corpus_ids = list(dict.fromkeys(str(row["corpus_id"]) for row in rows))
         return {
             "meanings": meanings,
@@ -590,6 +632,7 @@ class CorpusStore:
             "variants": variants,
             "corpus_ids": corpus_ids,
             "examples": examples,
+            "summary_truncated": evidence_truncated,
         }
 
     def dictionary(

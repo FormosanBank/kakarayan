@@ -71,6 +71,7 @@ def test_record_summary_then_detail(client: TestClient) -> None:
 
 def test_summary_is_bounded_without_truncating_record_detail(settings: Settings) -> None:
     complete_text = "x" * 5000
+    complete_gloss = "g" * 5000
     with sqlite3.connect(settings.database_path) as connection:
         sentence_id = connection.execute(
             "SELECT owner_id FROM forms WHERE owner_type = 'sentence' AND text = 'lima waco'"
@@ -78,6 +79,10 @@ def test_summary_is_bounded_without_truncating_record_detail(settings: Settings)
         connection.execute(
             "UPDATE forms SET text = ? WHERE owner_type = 'sentence' AND owner_id = ?",
             (complete_text, sentence_id),
+        )
+        connection.execute(
+            "UPDATE translations SET text = ? WHERE owner_type = 'morpheme' AND text = 'FIVE'",
+            (complete_gloss,),
         )
     with TestClient(create_app(settings)) as client:
         result = client.get(
@@ -90,6 +95,14 @@ def test_summary_is_bounded_without_truncating_record_detail(settings: Settings)
         assert summary["standard"].endswith("…")
         detail = client.get(release_path(client, f"sentences/{summary['id']}")).json()
         assert detail["standard"] == complete_text
+        assert any(item["text"] == complete_gloss for item in detail["tier_translations"])
+        dictionary = client.get(
+            release_path(client, "dictionary"),
+            params={"q": "lima", "language_id": "lang_amis", "match": "exact"},
+        ).json()["items"][0]
+        assert dictionary["summary_truncated"] is True
+        assert len(dictionary["meanings"][0]) == 320
+        assert dictionary["meanings"][0].endswith("…")
 
 
 def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
@@ -97,6 +110,7 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     dictionary = client.get(url, params={"q": "li", "language_id": "lang_amis", "match": "prefix"})
     assert dictionary.status_code == 200
     assert dictionary.json()["items"][0]["headword"] == "lima"
+    assert dictionary.json()["items"][0]["summary_truncated"] is False
 
     reverse = client.get(
         url,
