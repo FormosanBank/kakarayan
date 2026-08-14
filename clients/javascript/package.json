@@ -21,7 +21,7 @@
     "test": "npm run build && node --test dist/index.test.js"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.2.0",
     "typescript": "~5.9.3"
   },
   "license": "CC-BY-NC-4.0",
