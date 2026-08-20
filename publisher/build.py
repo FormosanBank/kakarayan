@@ -141,9 +141,9 @@ def _timestamp(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _release_id(source: Source) -> str:
+def _release_id(source: Source, application_commit: str) -> str:
     date = _timestamp(source.committed_at).strftime("%Y%m%d")
-    return f"fb-{date}-{source.commit[:8]}"
+    return f"fb-{date}-{source.commit[:6]}{application_commit[:6]}"
 
 
 def _json_bytes(value: object) -> bytes:
@@ -851,7 +851,7 @@ def build_release(
     output = output.resolve()
     _prepare_output(output)
     schema_dir = schemas or Path(__file__).resolve().parents[1] / "schemas"
-    release_id = _release_id(source)
+    release_id = _release_id(source, kakarayan_commit)
     generated_at = _timestamp(source.committed_at).isoformat().replace("+00:00", "Z")
     xml_paths = list(discover_xml(repo))
     corpus_names = sorted({path.relative_to(repo).parts[1] for path in xml_paths})

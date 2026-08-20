@@ -31,7 +31,10 @@ full nested sentence only when the user expands it.
 
 ## Release identity
 
-Every release has an ID derived from its FormosanBank source commit. Its manifest records:
+Every release has an ID derived from both its FormosanBank source commit and the Kakarayan
+publisher commit. The final twelve hexadecimal characters combine the first six characters
+of each revision. This keeps a rebuilt projection immutable and distinct when publisher
+logic changes without a new corpus commit. Its manifest records:
 
 - the exact FormosanBank commit;
 - the Kakarayan commit that produced it;

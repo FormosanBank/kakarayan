@@ -16,7 +16,7 @@ from jsonschema import ValidationError
 from openpyxl import load_workbook
 
 from publisher import PUBLIC_DOWNLOAD_PATHS
-from publisher.build import BuildError, build_release
+from publisher.build import BuildError, Source, _release_id, build_release
 from publisher.cldf_export import write_cldf_package
 from publisher.format_aligned import write_aligned_package
 from publisher.verify_release import verify_release
@@ -30,11 +30,26 @@ def _tree_checksums(root: Path) -> dict[str, str]:
     }
 
 
+def test_release_identity_includes_source_and_application_revisions() -> None:
+    source = Source(
+        repository="FormosanBank/FormosanBank",
+        commit="1" * 40,
+        committed_at="2024-01-02T03:04:05Z",
+    )
+
+    assert _release_id(source, "2" * 40) == "fb-20240102-111111222222"
+    assert _release_id(source, "3" * 40) == "fb-20240102-111111333333"
+
+
 def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path: Path) -> None:
     first = build_release(public_repo, tmp_path / "one")
     second = build_release(public_repo, tmp_path / "two")
 
     assert first.release_id.startswith("fb-20240102-")
+    manifest = json.loads((first.output / "release-manifest.json").read_text(encoding="utf-8"))
+    assert first.release_id.endswith(
+        f"{first.source.commit[:6]}{manifest['kakarayan']['commit'][:6]}"
+    )
     assert first.counts["texts"] == 1
     assert first.counts["tokens"] == 4
     assert first.warnings == ()
