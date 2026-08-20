@@ -152,7 +152,7 @@
       },
       "require_items": true,
       "maximum_first_ms": 1500,
-      "maximum_p95_ms": 300,
+      "maximum_p95_ms": 400,
       "maximum_gzip_bytes": 102400
     },
     {

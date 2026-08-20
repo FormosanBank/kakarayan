@@ -54,10 +54,14 @@ Dispatch **Build and publish a data release** on `main` with:
 
 The workflow resolves the source ref once, captures one model catalogue, parses the source
 once, and builds one complete release. It verifies schemas, SQLite, checksums, artifact
-inventory, source identity, and rights. A real run transfers the already verified output to
-the protected `data-release` job and creates `data-<release-id>` as a draft GitHub release.
-The release ID includes both the source and Kakarayan publisher revisions, and a real run
-refuses an existing immutable release tag before starting the expensive corpus build.
+inventory, source identity, and rights. The full-release query benchmark runs after the first
+verified build and before the deterministic rebuild so a performance failure stops early.
+Indexed searches retain a 300 ms loopback p95 budget. The one-character Chinese substring
+case has a 400 ms budget because trigram indexes require at least three characters. A real
+run transfers the already verified output to the protected `data-release` job and creates
+`data-<release-id>` as a draft GitHub release. The release ID includes both the source and
+Kakarayan publisher revisions, and a real run refuses an existing immutable release tag
+before starting the expensive corpus build.
 
 Inspect the draft before publication:
 
