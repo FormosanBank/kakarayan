@@ -1,0 +1,9 @@
+{$KAKARAYAN_HOSTNAME} {
+	encode zstd gzip
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	reverse_proxy api:7860
+}

@@ -54,6 +54,12 @@ jobs:
       - name: Build the query API container
         run: docker build --file api/Dockerfile .
 
+      - name: Validate the Lightsail service definition
+        env:
+          KAKARAYAN_HOSTNAME: 203-0-113-10.sslip.io
+          KAKARAYAN_CORS_ORIGINS: https://formosanbank.github.io
+        run: docker compose --file deploy/lightsail/compose.yaml config --quiet
+
   site:
     name: Site, contract journey, and accessibility
     runs-on: ubuntu-latest
