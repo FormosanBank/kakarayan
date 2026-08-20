@@ -27,6 +27,7 @@ jobs:
       contents: read
     outputs:
       source_commit: ${{ steps.source.outputs.source_commit }}
+      release_id: ${{ steps.source.outputs.release_id }}
     env:
       SOURCE_REF: ${{ inputs.source_ref }}
     steps:
@@ -60,8 +61,29 @@ jobs:
             https://github.com/FormosanBank/FormosanBank.git
           git -C build/formosanbank fetch --depth=1 origin "$SOURCE_REF"
           SOURCE_COMMIT="$(git -C build/formosanbank rev-parse FETCH_HEAD)"
+          SOURCE_TIMESTAMP="$(git -C build/formosanbank show -s --format=%cI "$SOURCE_COMMIT")"
+          SOURCE_DATE="$(date --utc --date="$SOURCE_TIMESTAMP" +%Y%m%d)"
+          RELEASE_ID="fb-${SOURCE_DATE}-${SOURCE_COMMIT:0:6}${GITHUB_SHA:0:6}"
           echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Resolved FormosanBank $SOURCE_REF to $SOURCE_COMMIT"
+          echo "Resolved Kakarayan release identity $RELEASE_ID"
+
+      - name: Refuse an existing release identity before a real build
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.source.outputs.release_id }}
+        shell: bash
+        run: |
+          EXISTING_RELEASE_ID="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"data-$RELEASE_ID\") | .id"
+          )"
+          if [[ -n "$EXISTING_RELEASE_ID" ]]; then
+            echo "Release data-$RELEASE_ID already exists; immutable release tags cannot be reused."
+            exit 1
+          fi
 
       - name: Capture one public model catalogue
         run: |
@@ -105,6 +127,7 @@ jobs:
       release_id: ${{ steps.release.outputs.release_id }}
     env:
       SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
+      EXPECTED_RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
     steps:
       - name: Check out Kakarayan
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -193,6 +216,10 @@ jobs:
         id: release
         run: |
           RELEASE_ID="$(jq -r .release_id build/data-release/release-manifest.json)"
+          if [[ "$RELEASE_ID" != "$EXPECTED_RELEASE_ID" ]]; then
+            echo "Built $RELEASE_ID, expected $EXPECTED_RELEASE_ID."
+            exit 1
+          fi
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Validated $RELEASE_ID from FormosanBank $SOURCE_COMMIT"
 

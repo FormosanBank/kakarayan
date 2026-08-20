@@ -56,6 +56,8 @@ The workflow resolves the source ref once, captures one model catalogue, parses 
 once, and builds one complete release. It verifies schemas, SQLite, checksums, artifact
 inventory, source identity, and rights. A real run transfers the already verified output to
 the protected `data-release` job and creates `data-<release-id>` as a draft GitHub release.
+The release ID includes both the source and Kakarayan publisher revisions, and a real run
+refuses an existing immutable release tag before starting the expensive corpus build.
 
 Inspect the draft before publication:
 
