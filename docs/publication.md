@@ -1,247 +1,195 @@
-# Publication operations
+# Publication and deployment
+
+Kakarayan publishes one immutable data release, activates that exact release in the required
+query API, and then deploys the matching static site. The order is intentional:
+
+Production-scale validation results for the current v1 architecture are recorded in
+[v1-evidence.md](v1-evidence.md).
+
+```text
+FormosanBank commit -> draft data release -> published data release
+                    -> query API ready on that release
+                    -> Pages built against that API release
+```
+
+Pages must not deploy a site that points at a missing or different query release.
 
 ## Repository configuration
 
-The repository contains the CC BY-NC 4.0 license, reviewed public-repository corpus policy,
-Pages workflow, data-release workflow, and direct-browser MT and ASR service configuration.
-Repository administrators still control settings that a writer cannot change:
+An administrator configures these once:
 
-1. In **Settings > Pages**, set the source to **GitHub Actions**.
-2. Give the `github-pages` environment custom deployment policies for the `main` branch
-   and `data-fb-*` tags. The tag policy is required because publishing a data release
-   triggers Pages from that immutable release tag.
-3. Require maintainer approval for the `data-release` environment.
-4. In **Settings > Code security**, enable the dependency graph. This is repository
-   metadata analysis and does not run a corpus build.
+1. Set **Settings > Pages > Build and deployment > Source** to **GitHub Actions**.
+2. Create the `data-release` environment and require the intended maintainer approval.
+3. Keep the `github-pages` environment restricted to `main`.
+4. Choose one query API host. For Lightsail, follow [lightsail.md](lightsail.md). For the
+   guarded Hugging Face deployment, create the `hugging-face-space` environment, set its
+   `HF_SPACE_REPO` variable to `owner/name`, and add a narrowly scoped `HF_TOKEN` secret.
+5. After the selected API is ready, set repository variable `KAKARAYAN_API_URL` to its
+   public HTTPS base URL.
+6. Enable the dependency graph when an administrator is available. It improves dependency
+   review but is not a runtime deployment requirement.
 
-The existing public `FormosanBank/formosan-mt` and `FormosanBank/formosan_asr` Spaces need
-no Kakarayan secret. The optional corpus REST API is separate. If maintainers want it, they
-must create a public Hugging Face Docker Space, set `HF_SPACE_REPO`, add a narrowly scoped
-`HF_TOKEN`, and protect the `hugging-face-space` environment.
+The software license must remain present as `LICENSE` or `LICENSE.md`.
 
-### Current external state
+## Pull request checks
 
-Checked on 2026-08-10:
+`.github/workflows/ci.yml` runs:
 
-- Pages uses GitHub Actions and is public at `https://formosanbank.github.io/kakarayan/`.
-- The `data-release` and `github-pages` environments exist. The Pages environment accepts
-  `main` and `data-fb-*` release tags.
-- A reviewed software license and the first immutable data release are published.
-- The dependency graph remains unavailable, so dependency review reports a warning and
-  skips instead of blocking unrelated checks.
-- The public MT and ASR Spaces have configured browser routes at `/translate` and
-  `/transcribe`.
+- Python formatting, lint, typing, API and publisher tests, and dependency audit;
+- a generic API Docker image build;
+- frontend audit, lint, typing, unit tests, production build, and site verification;
+- one Chromium contract and accessibility journey;
+- pull-request dependency review when repository metadata is available.
 
-### Publication order
+The full Chromium, Firefox, WebKit, and mobile matrix runs on the scheduled check rather
+than duplicating platform-neutral routes on every pull request. Full corpus publication and
+performance evidence belong to release validation, not ordinary PR CI.
 
-1. Merge reviewed Kakarayan changes to `main`.
-2. Dispatch `publish-data.yml` once with `dry_run: false` and the intended FormosanBank ref.
-3. Inspect the resulting draft release, source commit, rights catalogue, checksums, counts,
-   research exports, and `site-release.tar`.
-4. Publish that exact draft without replacing any asset. The release event deploys Pages
-   automatically from the verified browser bundle.
-5. Verify the public URL, downloads, lookup routes, static API, and model consent flows.
+## Build and publish a data release
 
-A dry run remains available for policy review, but it is not a required precursor to a real
-run. A real run performs the same validation before it creates a draft, so running both
-would duplicate the expensive corpus build.
+Dispatch **Build and publish a data release** on `main` with:
 
-## Continuous integration
+- `source_ref`: the exact intended FormosanBank ref or 40-character commit;
+- `dry_run: true` for a validation-only build, or `false` to prepare a draft release.
 
-`.github/workflows/ci.yml` runs on pull requests and pushes to `main`. Feature branches use
-the pull-request run rather than launching a second identical push run.
+The workflow resolves the source ref once, captures one model catalogue, parses the source
+once, and builds one complete release. It verifies schemas, SQLite, checksums, artifact
+inventory, source identity, and rights. A real run transfers the already verified output to
+the protected `data-release` job and creates `data-<release-id>` as a draft GitHub release.
 
-It checks:
+Inspect the draft before publication:
 
-- Ruff formatting and lint.
-- Mypy.
-- Full pytest with PostgreSQL 16.
-- Publisher determinism and release verification with invented fixtures.
-- API container build.
-- Frontend lint, types, unit tests, npm audit, build, and site budgets.
-- Chromium mobile plus Chromium, Firefox, and WebKit desktop Playwright routes, compressed
-  search, bounded RE2, Worker summaries, Parquet signatures, and serious WCAG violations.
-- JavaScript, Python, and R clients.
-- Pull request dependency changes.
+- source and Kakarayan commits;
+- counts and warnings;
+- rights decisions and blocked artifacts;
+- `release-manifest.json` and `SHA256SUMS`;
+- `formosanbank.sqlite.gz` compressed and expanded identity;
+- `site-metadata.zip`;
+- curated prepared downloads and sizes.
 
-Actions and the PostgreSQL service image are pinned to immutable digests or commits.
-Pull requests receive read-only repository permission and no deployment credential.
+Publish the draft without changing or replacing its assets. An existing release tag must
+never be reused for different bytes.
 
-## GitHub Pages
+## Deploy the query API
 
-`deploy-pages.yml` runs after relevant site changes reach `main`, when a Kakarayan data
-release is published, or by explicit dispatch. A manual dispatch can select a published
-release ID; otherwise the workflow uses the newest published release that contains a
-verified Pages bundle.
+For the small Tokyo Lightsail proof of concept, follow
+[the Lightsail runbook](lightsail.md). It builds the same generic API image, activates
+the published release into a host-mounted data directory, and puts Caddy HTTPS in front
+of the service. Continue with Pages only after `/readyz` reports the selected release.
+
+After publishing the data release, dispatch **Deploy query API to Hugging Face** with its
+release ID. The workflow:
+
+1. Requires a published, non-prerelease GitHub data release.
+2. Requires its manifest and compressed SQLite asset.
+3. Assembles a minimal Docker Space pinned to the immutable release manifest URL.
+4. Replaces the configured Space contents and pushes one release commit.
+
+The container runs `api.prepare_release` while the image is built. Download, expansion,
+checksum verification, and SQLite integrity checks therefore finish before the serving
+process starts. Uvicorn starts from only the local active database and manifest.
+
+Wait until:
+
+```bash
+curl --fail --silent "$KAKARAYAN_API_URL/readyz"
+```
+
+returns the selected release ID.
+
+## Deploy Pages
+
+Dispatch **Deploy GitHub Pages** with the same release ID. A relevant push to `main` also
+attempts deployment using the newest compatible release.
 
 The workflow:
 
-1. Checks that the Kakarayan software license is present.
-2. Selects a published, non-prerelease data release with `site-release.tar`.
-3. Verifies the bundle size and checksum against the published release manifest.
-4. Safely extracts the bundle and verifies every static API, search shard, search index,
-   checksum, source commit, count, and rights decision.
-5. Imports the release's prepared-download catalogue and assembles the Vite public tree.
-6. Builds the application, verifies the Pages size budgets, and runs the production
-   Chromium smoke and accessibility suite.
-7. Uploads one Pages artifact and deploys those exact saved bytes.
+1. Selects a published release containing `site-metadata.zip`.
+2. Downloads only its manifest and static metadata package.
+3. Verifies the package checksum, safe ZIP paths, size limits, schemas, and release IDs.
+4. Assembles `site/public/api` plus curated download metadata.
+5. Requires the configured API `/readyz` to match the selected release.
+6. Builds and verifies the site under a 10 MiB total and 2 MiB per-file budget.
+7. Runs the production Chromium contract and accessibility journey.
+8. Uploads and deploys the exact verified Pages artifact.
 
-The full Chromium, Firefox, WebKit, mobile, unit, lint, type, and audit suite remains in CI.
-Deployment does not repeat those checks or parse the FormosanBank XML again.
+Pages contains no corpus index, record shard, query database, or prepared bulk dataset.
 
-The build budget is 900 MiB total and 50 MiB for any one file. Bulk downloads never enter
-the Pages artifact.
+## Local full-release rehearsal
 
-## Data release
-
-`publish-data.yml` is manual and defaults to `dry_run: true`.
-
-A dry run performs both public-corpus builds and all release verification with a read-only
-token. It creates no release and transfers no large artifact to a write-enabled job.
-
-A real run additionally:
-
-1. Resolves the FormosanBank ref once and captures one public model catalogue.
-2. Builds all research formats and browser search data in parallel from those immutable
-   inputs. The slower research job determines wall-clock time; the browser build no longer
-   runs afterward in Pages.
-3. Checks the software license and requires site, core, and prepared artifact rights.
-4. Packs the browser release deterministically as `site-release.tar`.
-5. Transfers both validated outputs to the separately permissioned `data-release`
-   environment, joins their manifests, and verifies every byte and rights decision again.
-6. Creates `data-<release-id>` as a draft GitHub release.
-7. Uploads every manifest-named SQLite, metadata, prepared asset, and Pages bundle.
-8. Uploads the release manifest last and compares the complete remote asset set, sizes,
-   and available server-side digests with the local validated output.
-
-Verification rejects any individual release asset at 2 GiB or larger, matching GitHub's
-per-asset limit. Large logical datasets are compressed or partitioned into smaller assets.
-
-The workflow never publishes the draft. A maintainer must inspect its notes, assets,
-checksums, rights, and source commit before publishing it in GitHub.
-
-If a run fails after draft creation, keep the draft for diagnosis or delete that exact
-draft through the GitHub interface. Do not reuse its tag for different bytes.
-
-## Optional corpus API Space
-
-`deploy-api.yml` is manual and accepts a release ID. It:
-
-1. Checks the software license and environment configuration.
-2. Requires a published, non-prerelease `data-<release-id>`.
-3. Downloads its manifest and SQLite file.
-4. Verifies the database checksum.
-5. Assembles a minimal Docker Space with the exact immutable manifest URL.
-6. Builds the Docker image.
-7. Clones the configured Space, replaces its application files, commits, and pushes with
-   lease protection.
-
-No Hugging Face secret is exposed to pull requests or ordinary CI. This workflow is not
-used by browser MT or ASR, which call the existing public FormosanBank Spaces directly.
-
-The API can sleep under a free hosting plan. The site must continue to present the static
-API and browser search as the reliable path.
-
-## Local production rehearsal
-
-Use a clean public checkout and new output directories:
+Use a clean FormosanBank checkout and new output paths:
 
 ```bash
-SOURCE_COMMIT="$(git -C build/formosanbank rev-parse HEAD)"
-
-uv run python - <<'PY'
-import json
-from pathlib import Path
-
-from publisher.model_catalog import build_model_catalog
-
-Path("build/models.json").write_text(
-    json.dumps(build_model_catalog(), ensure_ascii=False, sort_keys=True) + "\n",
-    encoding="utf-8",
-)
-PY
+SOURCE_COMMIT="$(git -C /absolute/path/to/FormosanBank rev-parse HEAD)"
 
 uv run python -m publisher.cli \
-  --repo build/formosanbank \
-  --output build/pages-release \
-  --source-commit "$SOURCE_COMMIT" \
-  --model-catalog build/models.json \
-  --site-only
-
-uv run python -m publisher.cli \
-  --repo build/formosanbank \
+  --repo /absolute/path/to/FormosanBank \
   --output build/data-release \
   --source-commit "$SOURCE_COMMIT" \
-  --model-catalog build/models.json \
+  --refresh-models \
   --compress-database \
   --release-only
 
-uv run python -m publisher.verify_release --release build/pages-release
-uv run python -m publisher.verify_release --release build/data-release
-uv run python -m publisher.site_bundle pack \
-  --release build/pages-release \
-  --output build/site-release.tar
-uv run python -m publisher.site_bundle attach \
+uv run python -m publisher.verify_release \
   --release build/data-release \
-  --bundle build/site-release.tar
-uv run python -m publisher.assemble_site \
-  --release build/pages-release \
-  --public site/public \
-  --download-manifest build/data-release/release-manifest.json
-npm --prefix site run build
-uv run python -m publisher.verify_site --site site/dist
-npm --prefix site run test:e2e
+  --max-artifact-mib 2048
 ```
 
-The live API verifies and expands the deterministic gzip snapshot at startup.
+Activate it outside the release directory:
 
-For a repeated determinism check, capture one public model-catalog document and supply the
-same bytes to both builds with `--model-catalog path/to/models.json`. `--model-catalog` and
-`--refresh-models` are mutually exclusive. This separates external Hugging Face metadata
-changes from publisher determinism and records the exact catalogue input under test.
+```bash
+uv run python -m api.prepare_release \
+  --manifest build/data-release/release-manifest.json \
+  --database build/active/formosanbank.sqlite \
+  --activate build/active/release-manifest.json
+```
 
-## Release verification
+Start the API with the two active paths, extract `site-metadata.zip` with
+`publisher.extract_metadata`, assemble Pages with `publisher.assemble_site`, and require
+`/readyz` to match before building the site. The concise invented-data commands are in the
+root [README](../README.md).
 
-`publisher.verify_release` requires:
+## Verification commands
 
-- A valid release manifest schema.
-- No duplicate or unsafe paths.
-- An exact match between the file tree, manifest, and `SHA256SUMS`.
-- Every file size and SHA-256 to match.
-- A valid immutable SQLite database when present.
-- Valid gzip and uncompressed search checksums.
-- Correct search record counts.
-- Optional publication approval for one or more artifact scopes.
+```bash
+uv run python -m publisher.verify_release --release build/data-release
+uv run python -m publisher.verify_site --site site/dist
+uv run pytest api/tests publisher/tests
+npm --prefix site test
+npm --prefix site run test:e2e -- --project=desktop-chromium
+```
 
-`publisher.verify_site` requires:
+Release verification checks exact file inventory, safe paths, schemas, sizes, checksums,
+SQLite identity, and requested rights scopes. Static-site verification checks required
+shell files, every static metadata envelope, and strict size budgets.
 
-- The application shell, 404 redirect, web manifest, service worker, metadata, and search
-  manifest.
-- An exact shard set.
-- Total and per-file size budgets.
+## Rollback
 
-## Rollback and recovery
+Data releases are immutable. Keep the prior published release available.
 
-Pages deployments are immutable artifacts. Roll back by dispatching `deploy-pages.yml`
-with a known good published release ID, or by selecting a prior deployment in GitHub Pages.
+1. Dispatch the API workflow with the prior release ID.
+2. Wait for `/readyz` to report that ID.
+3. Dispatch Pages with the same prior release ID.
+4. Verify lookup, record detail, downloads, and static release metadata.
 
-Data releases are immutable. Do not replace assets under an existing release tag. Create a
-new release from a corrected source or publisher commit.
+Do not deploy Pages first and do not replace assets under an existing release tag.
 
-The Space pins one release URL. Roll it back by dispatching `deploy-api.yml` with an earlier
-published release ID.
+## Failure recovery
 
-Generated `build/` output is disposable. Source XML, reviewed metadata, code, and published
-release records are not.
+- A failed data build creates no published release.
+- A failed draft can be inspected or deleted through GitHub; do not reuse its tag with
+  changed bytes.
+- A failed API deployment leaves the previously deployed Space revision available.
+- A failed Pages build does not replace the current Pages deployment.
+- A release mismatch makes the API unready or stops Pages before upload.
+- Generated local `build/` output is disposable; source XML and published releases are not.
 
-## Routine update checklist
+## Routine update
 
-1. Review upstream FormosanBank changes and any stricter corpus rights evidence.
-2. Dispatch one real data workflow run. Use a dry run only when separate policy review
-   requires it.
-3. Inspect counts, warnings, exclusions, sizes, checksums, and changes from the previous
-   release.
-4. Review and publish the draft without changing its assets.
-5. Confirm the release-triggered Pages deployment succeeds.
-6. Optionally update the Space to the published release.
-7. Verify the public site, static metadata, release assets, API readiness, and source links.
+1. Review the intended FormosanBank commit and any changed rights evidence.
+2. Run one real data publication, using dry run only when separate policy review needs it.
+3. Inspect and publish the draft unchanged.
+4. Deploy the API to that release and confirm readiness.
+5. Deploy Pages to that release.
+6. Verify English and Traditional Chinese routes, both lookup directions, detail expansion,
+   research preview/export, downloads, local cards, and MT/ASR consent boundaries.

@@ -38,11 +38,6 @@ def parser() -> argparse.ArgumentParser:
         help="Skip bulk linguist formats but keep core tables and SQLite",
     )
     result.add_argument(
-        "--site-only",
-        action="store_true",
-        help="Keep only static API and compressed search data for GitHub Pages",
-    )
-    result.add_argument(
         "--compress-database",
         action="store_true",
         help="Package SQLite as deterministic gzip for a GitHub data release",
@@ -69,8 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         args.output,
         expected_commit=args.source_commit,
         model_catalog=models,
-        include_prepared=not args.no_prepared and not args.site_only,
-        site_only=args.site_only,
+        include_prepared=not args.no_prepared,
         compress_database=args.compress_database,
         release_only=args.release_only,
         application_commit=args.kakarayan_commit,

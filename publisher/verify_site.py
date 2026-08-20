@@ -22,7 +22,6 @@ def verify_site(root: Path, *, total_limit: int, file_limit: int) -> dict[str, i
         "sitemap.xml",
         "sw.js",
         "api/v1/meta.json",
-        "api/v1/search/manifest.json",
     )
     for relative in required:
         if not (root / relative).is_file():
@@ -44,31 +43,14 @@ def verify_site(root: Path, *, total_limit: int, file_limit: int) -> dict[str, i
             raise VerificationError(
                 f"Static API response does not match its schema: {path.relative_to(root)}: {error}"
             ) from error
-    search = json.loads(
-        (root / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")
-    )["data"]
-    expected = {f"data/{shard['path']}" for shard in search["shards"]}
-    actual = {
-        path.relative_to(root).as_posix()
-        for path in (root / "data" / "search" / "shards").rglob("*.json.gz")
-    }
-    if actual != expected:
-        raise VerificationError("Assembled search shard set does not match its manifest")
-    expected_indexes = {f"data/{entry['path']}" for entry in search["indexes"]}
-    actual_indexes = {
-        path.relative_to(root).as_posix()
-        for path in (root / "data" / "search" / "indexes").rglob("*.json.gz")
-    }
-    if actual_indexes != expected_indexes:
-        raise VerificationError("Assembled search index set does not match its manifest")
     return {"files": len(files), "bytes": total, "largest_file_bytes": largest}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--site", required=True, type=Path)
-    parser.add_argument("--total-limit-mib", type=int, default=900)
-    parser.add_argument("--file-limit-mib", type=int, default=50)
+    parser.add_argument("--total-limit-mib", type=int, default=10)
+    parser.add_argument("--file-limit-mib", type=int, default=2)
     args = parser.parse_args(argv)
     result = verify_site(
         args.site,

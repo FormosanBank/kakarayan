@@ -1,37 +1,56 @@
-"""FastAPI application exposing bounded read-only corpus queries."""
+"""FastAPI application for one immutable FormosanBank release."""
 
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
+import json
+import logging
 import sqlite3
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
+from api.dataset_fields import DATASET_FIELDS, DatasetField
 from api.errors import ApiError, api_error_handler, validation_error_handler
 from api.release import ReleaseError, load_release
-from api.store import CorpusStore, FrequencySort, MatchMode, SearchField
+from api.search import MatchMode
+from api.store import CorpusStore, FrequencySort, SearchDirection, TierRequirement
 
+LOGGER = logging.getLogger("kakarayan.api")
+_FAILURE_HEADER = "X-Kakarayan-Internal-Failure"
 PageSize = Annotated[int, Query(ge=1, le=100)]
 LanguageId = Annotated[str, Query(min_length=1, max_length=128)]
 OptionalCorpus = Annotated[str | None, Query(max_length=128)]
 OptionalDialect = Annotated[str | None, Query(max_length=128)]
 Cursor = Annotated[str | None, Query(max_length=512)]
+ReleaseId = Annotated[str, Path(min_length=1, max_length=128)]
 
 
-def _cache(response: Response, seconds: int) -> None:
-    response.headers["Cache-Control"] = f"public, max-age={seconds}"
+def _cache(response: Response, *, immutable: bool = False) -> None:
+    response.headers["Cache-Control"] = (
+        "public, max-age=31536000, immutable" if immutable else "public, max-age=300"
+    )
 
 
-def _query_cache(response: Response) -> None:
-    response.headers["Cache-Control"] = "private, max-age=60"
+def _record(event: str, **values: object) -> None:
+    LOGGER.info(json.dumps({"event": event, **values}, separators=(",", ":"), sort_keys=True))
+
+
+def _spreadsheet_safe(value: object) -> object:
+    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return f"'{value}"
+    return value
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -41,23 +60,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.store = None
         app.state.startup_error = None
+        started = time.perf_counter()
         try:
             state = await asyncio.to_thread(load_release, configured)
             app.state.store = CorpusStore(state, configured.query_step_limit)
+            _record(
+                "startup",
+                status="ready",
+                release_id=state.manifest["release_id"],
+                duration_ms=round((time.perf_counter() - started) * 1000),
+            )
         except (OSError, ValueError, ReleaseError, sqlite3.Error) as error:
             app.state.startup_error = str(error)
+            _record(
+                "startup",
+                status="failed",
+                failure_code=type(error).__name__,
+                duration_ms=round((time.perf_counter() - started) * 1000),
+            )
         yield
 
     app = FastAPI(
         title="Kakarayan FormosanBank API",
-        summary="Read-only access to a pinned public FormosanBank release",
-        description=(
-            "Bounded corpus lookup over a checksummed SQLite snapshot. "
-            "The service has no write endpoints and accepts no remote resource parameters."
-        ),
+        summary="Read-only access to one pinned public FormosanBank release",
         version="1.0.0",
         lifespan=lifespan,
-        license_info={"name": "Software license pending maintainer approval"},
+        license_info={
+            "name": "CC BY-NC 4.0",
+            "url": "https://creativecommons.org/licenses/by-nc/4.0/",
+        },
     )
     app.add_middleware(
         CORSMiddleware,
@@ -67,162 +98,218 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Accept", "If-None-Match", "X-Kakarayan-Client"],
         max_age=86400,
     )
+    app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
 
     @app.exception_handler(ApiError)
     async def handle_api_error(request: Request, error: ApiError) -> JSONResponse:
-        return await api_error_handler(request, error)
+        response = await api_error_handler(request, error)
+        response.headers[_FAILURE_HEADER] = error.code
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(
-        request: Request,
-        error: RequestValidationError,
+        request: Request, error: RequestValidationError
     ) -> JSONResponse:
-        return await validation_error_handler(request, error)
+        response = await validation_error_handler(request, error)
+        response.headers[_FAILURE_HEADER] = "invalid_parameter"
+        return response
 
     @app.exception_handler(sqlite3.Error)
     async def database_error(_request: Request, _error: sqlite3.Error) -> JSONResponse:
         error = ApiError(500, "database_error", "The release query could not be completed")
-        return JSONResponse(status_code=error.status, content=error.body())
+        return JSONResponse(
+            status_code=error.status,
+            content=error.body(),
+            headers={_FAILURE_HEADER: error.code},
+        )
 
     @app.middleware("http")
-    async def release_header(
-        request: Request,
-        call_next: RequestResponseEndpoint,
-    ) -> Response:
+    async def request_record(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        started = time.perf_counter()
         response = await call_next(request)
-        store = getattr(request.app.state, "store", None)
-        if isinstance(store, CorpusStore):
-            response.headers["X-Kakarayan-Release"] = str(store.metadata("meta")["release_id"])
+        current = getattr(request.app.state, "store", None)
+        release_id = current.release_id if isinstance(current, CorpusStore) else None
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
+        failure_code = response.headers.get(_FAILURE_HEADER)
+        if failure_code:
+            del response.headers[_FAILURE_HEADER]
+        if release_id:
+            response.headers["X-Kakarayan-Release"] = release_id
+        route = request.scope.get("route")
+        route_path = getattr(route, "path", request.url.path)
+        duration_ms = round((time.perf_counter() - started) * 1000)
+        _record(
+            "request",
+            method=request.method,
+            route=route_path,
+            status=response.status_code,
+            duration_ms=duration_ms,
+            duration_bucket="lt100"
+            if duration_ms < 100
+            else "lt500"
+            if duration_ms < 500
+            else "gte500",
+            response_bytes=int(response.headers.get("content-length", 0)),
+            release_id=release_id,
+            failure_code=failure_code,
+        )
         return response
 
     def store(request: Request) -> CorpusStore:
         current = getattr(request.app.state, "store", None)
         if not isinstance(current, CorpusStore):
             raise ApiError(
-                503,
-                "service_not_ready",
-                "The release has not passed startup validation",
+                503, "service_not_ready", "The release has not passed startup validation"
             )
         return current
 
+    def release_store(request: Request, release_id: str) -> CorpusStore:
+        current = store(request)
+        current.require_release(release_id)
+        return current
+
     @app.get("/healthz", tags=["service"])
-    async def health() -> dict[str, str]:
+    def health() -> dict[str, str]:
         return {"status": "alive"}
 
     @app.get("/readyz", tags=["service"])
-    async def ready(request: Request, response: Response) -> dict[str, str]:
+    def ready(request: Request, response: Response) -> dict[str, str]:
         current = store(request)
+        current.check_ready()
         response.headers["Cache-Control"] = "no-store"
-        return {
-            "status": "ready",
-            "release_id": str(current.metadata("meta")["release_id"]),
-        }
+        return {"status": "ready", "release_id": current.release_id}
 
     @app.get("/v1/meta", tags=["catalogue"])
-    async def meta(request: Request, response: Response) -> dict:
-        _cache(response, 300)
+    def meta(request: Request, response: Response) -> dict:
+        _cache(response)
         return store(request).metadata("meta")
 
     @app.get("/v1/languages", tags=["catalogue"])
-    async def languages(request: Request, response: Response) -> list[dict]:
-        _cache(response, 300)
+    def languages(request: Request, response: Response) -> list[dict]:
+        _cache(response)
         return store(request).metadata("languages")
 
-    @app.get("/v1/languages/{language_id}", tags=["catalogue"])
-    async def language(
-        request: Request,
-        response: Response,
-        language_id: Annotated[str, Path(min_length=1, max_length=128)],
-    ) -> dict:
-        _cache(response, 300)
-        return store(request).language(language_id)
-
     @app.get("/v1/corpora", tags=["catalogue"])
-    async def corpora(request: Request, response: Response) -> list[dict]:
-        _cache(response, 300)
+    def corpora(request: Request, response: Response) -> list[dict]:
+        _cache(response)
         return store(request).metadata("corpora")
 
-    @app.get("/v1/corpora/{corpus_id}", tags=["catalogue"])
-    async def corpus(
-        request: Request,
-        response: Response,
-        corpus_id: Annotated[str, Path(min_length=1, max_length=128)],
-    ) -> dict:
-        _cache(response, 300)
-        return store(request).corpus(corpus_id)
+    @app.get("/v1/downloads", tags=["catalogue"])
+    def downloads(request: Request, response: Response) -> dict:
+        _cache(response)
+        return store(request).downloads()
 
-    @app.get("/v1/texts/{text_id}", tags=["records"])
-    async def text(
-        request: Request,
-        response: Response,
-        text_id: Annotated[str, Path(min_length=1, max_length=128)],
-    ) -> dict:
-        _query_cache(response)
-        return store(request).text(text_id)
+    @app.get("/v1/rights", tags=["catalogue"])
+    def rights(request: Request, response: Response) -> dict:
+        _cache(response)
+        return store(request).metadata("rights")
 
-    @app.get("/v1/sentences/{sentence_id}", tags=["records"])
-    async def sentence(
-        request: Request,
-        response: Response,
-        sentence_id: Annotated[str, Path(min_length=1, max_length=128)],
-    ) -> dict:
-        _query_cache(response)
-        return store(request).sentence(sentence_id)
+    @app.get("/v1/models", tags=["catalogue"])
+    def models(request: Request, response: Response) -> dict:
+        _cache(response)
+        return store(request).metadata("models")
 
-    @app.get("/v1/dictionary", tags=["query"])
-    async def dictionary(
+    @app.get("/v1/releases/{release_id}/languages/{language_id}", tags=["catalogue"])
+    def language(
+        request: Request, response: Response, release_id: ReleaseId, language_id: str
+    ) -> dict:
+        _cache(response, immutable=True)
+        return release_store(request, release_id).language(language_id)
+
+    @app.get("/v1/releases/{release_id}/corpora/{corpus_id}", tags=["catalogue"])
+    def corpus(request: Request, response: Response, release_id: ReleaseId, corpus_id: str) -> dict:
+        _cache(response, immutable=True)
+        return release_store(request, release_id).corpus(corpus_id)
+
+    @app.get("/v1/releases/{release_id}/texts/{text_id}", tags=["records"])
+    def text(request: Request, response: Response, release_id: ReleaseId, text_id: str) -> dict:
+        _cache(response, immutable=True)
+        return release_store(request, release_id).text(text_id)
+
+    @app.get("/v1/releases/{release_id}/sentences/{sentence_id}", tags=["records"])
+    def sentence(
+        request: Request, response: Response, release_id: ReleaseId, sentence_id: str
+    ) -> dict:
+        _cache(response, immutable=True)
+        return release_store(request, release_id).sentence(sentence_id)
+
+    @app.get("/v1/releases/{release_id}/translation-languages", tags=["query"])
+    def translation_languages(
         request: Request,
         response: Response,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+    ) -> list[dict]:
+        _cache(response, immutable=True)
+        return release_store(request, release_id).translation_languages(
+            language_id=language_id, corpus_id=corpus_id
+        )
+
+    @app.get("/v1/releases/{release_id}/dictionary", tags=["query"])
+    def dictionary(
+        request: Request,
+        response: Response,
+        release_id: ReleaseId,
         q: Annotated[str, Query(min_length=1, max_length=256)],
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
         match: MatchMode = "exact",
         limit: PageSize = 25,
         cursor: Cursor = None,
     ) -> dict:
-        _query_cache(response)
-        return store(request).dictionary(
+        _cache(response, immutable=True)
+        return release_store(request, release_id).dictionary(
             q=q,
             language_id=language_id,
             corpus_id=corpus_id,
             dialect=dialect,
+            direction=direction,
+            translation_language=translation_language,
             match=match,
             limit=limit,
             cursor=cursor,
         )
 
-    @app.get("/v1/concordance", tags=["query"])
-    async def concordance(
+    @app.get("/v1/releases/{release_id}/concordance", tags=["query"])
+    def concordance(
         request: Request,
         response: Response,
+        release_id: ReleaseId,
         q: Annotated[str, Query(min_length=1, max_length=256)],
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
-        field: SearchField = "any",
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
         match: MatchMode = "exact",
+        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
         limit: PageSize = 25,
         cursor: Cursor = None,
     ) -> dict:
-        _query_cache(response)
-        return store(request).concordance(
+        _cache(response, immutable=True)
+        return release_store(request, release_id).concordance(
             q=q,
             language_id=language_id,
             corpus_id=corpus_id,
             dialect=dialect,
-            field=field,
+            direction=direction,
+            translation_language=translation_language,
             match=match,
+            requirements=requirement or (),
             limit=limit,
             cursor=cursor,
         )
 
-    @app.get("/v1/frequencies", tags=["query"])
-    async def frequencies(
+    @app.get("/v1/releases/{release_id}/frequencies", tags=["query"])
+    def frequencies(
         request: Request,
         response: Response,
+        release_id: ReleaseId,
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
@@ -232,8 +319,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: PageSize = 25,
         cursor: Cursor = None,
     ) -> dict:
-        _query_cache(response)
-        return store(request).frequencies(
+        _cache(response, immutable=True)
+        return release_store(request, release_id).frequencies(
             language_id=language_id,
             corpus_id=corpus_id,
             dialect=dialect,
@@ -244,20 +331,146 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             cursor=cursor,
         )
 
-    @app.get("/v1/downloads", tags=["catalogue"])
-    async def downloads(request: Request, response: Response) -> dict:
-        _cache(response, 300)
-        return store(request).downloads()
+    @app.get("/v1/releases/{release_id}/summaries", tags=["query"])
+    def summaries(
+        request: Request,
+        response: Response,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+        dialect: OptionalDialect = None,
+        limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    ) -> dict:
+        _cache(response, immutable=True)
+        return release_store(request, release_id).summaries(
+            language_id=language_id, corpus_id=corpus_id, dialect=dialect, limit=limit
+        )
 
-    @app.get("/v1/rights", tags=["catalogue"])
-    async def rights(request: Request, response: Response) -> dict:
-        _cache(response, 300)
-        return store(request).metadata("rights")
+    def dataset_result(
+        request: Request,
+        release_id: str,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirement: list[TierRequirement] | None,
+        field: list[DatasetField] | None,
+        max_rows: int,
+    ) -> dict:
+        return release_store(request, release_id).dataset(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirement or (),
+            fields=field or DATASET_FIELDS,
+            max_rows=max_rows,
+        )
 
-    @app.get("/v1/models", tags=["catalogue"])
-    async def models(request: Request, response: Response) -> dict:
-        _cache(response, 300)
-        return store(request).metadata("models")
+    @app.get("/v1/releases/{release_id}/datasets/preview", tags=["datasets"])
+    def dataset_preview(
+        request: Request,
+        response: Response,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+        dialect: OptionalDialect = None,
+        q: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
+        match: MatchMode = "exact",
+        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        field: Annotated[list[DatasetField] | None, Query()] = None,
+        max_rows: Annotated[int, Query(ge=1, le=25)] = 12,
+    ) -> dict:
+        _cache(response, immutable=True)
+        return dataset_result(
+            request,
+            release_id,
+            language_id,
+            corpus_id,
+            dialect,
+            q,
+            direction,
+            translation_language,
+            match,
+            requirement,
+            field,
+            max_rows,
+        )
+
+    @app.get(
+        "/v1/releases/{release_id}/datasets/export",
+        tags=["datasets"],
+        response_model=None,
+    )
+    def dataset_export(
+        request: Request,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+        dialect: OptionalDialect = None,
+        q: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
+        match: MatchMode = "exact",
+        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        field: Annotated[list[DatasetField] | None, Query()] = None,
+        max_rows: Annotated[int, Query(ge=1, le=1000)] = 1000,
+        format: Literal["csv", "tsv", "jsonl"] = "csv",
+    ) -> Response:
+        current = release_store(request, release_id)
+        current.assert_export_allowed(language_id, corpus_id)
+        result = dataset_result(
+            request,
+            release_id,
+            language_id,
+            corpus_id,
+            dialect,
+            q,
+            direction,
+            translation_language,
+            match,
+            requirement,
+            field,
+            max_rows,
+        )
+        fields = result["fields"]
+        output = io.StringIO(newline="")
+        if format == "jsonl":
+            for row in result["items"]:
+                output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+            media_type = "application/x-ndjson"
+        else:
+            delimiter = "\t" if format == "tsv" else ","
+            writer = csv.DictWriter(
+                output, fieldnames=fields, delimiter=delimiter, lineterminator="\n"
+            )
+            writer.writeheader()
+            writer.writerows(
+                {field: _spreadsheet_safe(row[field]) for field in fields}
+                for row in result["items"]
+            )
+            media_type = "text/tab-separated-values" if format == "tsv" else "text/csv"
+        body = output.getvalue().encode()
+        if len(body) > 5 * 1024 * 1024:
+            raise ApiError(413, "export_too_large", "The export exceeds the 5 MiB response limit")
+        filename = f"kakarayan-{release_id}.{format}"
+        return Response(
+            body,
+            media_type=media_type,
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-Kakarayan-Row-Count": str(result["returned_rows"]),
+            },
+        )
 
     return app
 

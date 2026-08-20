@@ -19,7 +19,6 @@ def release(public_repo: Path, tmp_path: Path) -> BuildResult:
 @pytest.fixture
 def settings(release: BuildResult) -> Settings:
     return Settings(
-        manifest_url=None,
         manifest_path=release.output / "release-manifest.json",
         database_path=release.output / "formosanbank.sqlite",
         expected_sha256=None,

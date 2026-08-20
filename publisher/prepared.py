@@ -144,8 +144,10 @@ def _package_directory(
     root: Path,
     destination: Path,
     metadata: list[tuple[str, Path]],
+    *,
+    compress: bool = True,
 ) -> None:
-    write_zip(destination, chain(directory_entries(root), metadata))
+    write_zip(destination, chain(directory_entries(root), metadata), compress=compress)
     shutil.rmtree(root)
 
 
@@ -182,6 +184,7 @@ def build_prepared_formats(
     release_id: str,
     source_commit: str,
     rights: dict[str, object],
+    compact_release: bool = False,
 ) -> tuple[dict[str, list[str]], dict[str, object]]:
     prepared = output / "prepared"
     tsv = prepared / "tsv"
@@ -222,6 +225,12 @@ def build_prepared_formats(
         package_metadata=package_metadata,
     )
     (prepared / "jsonl-manifest.json").write_bytes(_bytes(jsonl_manifest))
+    _package_directory(
+        prepared / "jsonl",
+        prepared / "hierarchical-jsonl.zip",
+        package_metadata,
+        compress=False,
+    )
     write_plain_text(database, text)
     _package_directory(text, prepared / "text-exports.zip", package_metadata)
     write_audio_manifest(database, prepared / "audio-manifest.tsv")
@@ -268,36 +277,23 @@ def build_prepared_formats(
     (prepared / "format-exclusions.json").write_bytes(_bytes(exclusions))
 
     all_rights_ids = [str(entry["id"]) for entry in cast(list[dict[str, Any]], rights["entries"])]
-    assignments = _canonical_packages(
-        repo,
-        output,
-        source_commit=source_commit,
-        rights=rights,
+    assignments = (
+        {}
+        if compact_release
+        else _canonical_packages(
+            repo,
+            output,
+            source_commit=source_commit,
+            rights=rights,
+        )
     )
-    rights_by_corpus = {
-        str(entry["corpus"]): str(entry["id"])
-        for entry in cast(list[dict[str, Any]], rights["entries"])
-    }
-    with open_release(database) as connection:
-        corpus_rights = {
-            str(corpus_id): rights_by_corpus[str(corpus_name)]
-            for corpus_id, corpus_name in connection.execute(
-                "SELECT DISTINCT corpus_id, "
-                "substr(source_path, 9, instr(substr(source_path, 9), '/') - 1) "
-                "FROM texts"
-            )
-        }
-    for partition in cast(list[dict[str, Any]], jsonl_manifest["partitions"]):
-        assignments[f"prepared/{partition['path']}"] = [corpus_rights[str(partition["corpus_id"])]]
+    assignments["prepared/hierarchical-jsonl.zip"] = all_rights_ids
     _package_metadata(prepared)
-    (output / "search" / "sentences.jsonl").unlink()
     for path in prepared.rglob("*"):
         if path.is_file():
             assignments.setdefault(path.relative_to(output).as_posix(), all_rights_ids)
     return assignments, {
         "cldf": cldf_counts,
         "aligned": aligned_counts,
-        "canonical_packages": len(
-            [path for path in assignments if path.startswith("prepared/canonical/")]
-        ),
+        "canonical_packages": sum(path.startswith("prepared/canonical/") for path in assignments),
     }

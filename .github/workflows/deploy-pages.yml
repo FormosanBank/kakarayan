@@ -10,15 +10,10 @@ on:
       - "LICENSE"
       - "LICENSE.md"
       - "publisher/assemble_site.py"
-      - "publisher/site_bundle.py"
-      - "publisher/verify_release.py"
-      - "pyproject.toml"
+      - "publisher/extract_metadata.py"
+      - "publisher/verify_site.py"
       - "schemas/**"
       - "site/**"
-      - "uv.lock"
-  release:
-    types:
-      - published
   workflow_dispatch:
     inputs:
       release_id:
@@ -28,13 +23,12 @@ on:
         type: string
 
 concurrency:
-  group: github-pages-production-${{ github.event_name == 'release' && !startsWith(github.event.release.tag_name, 'data-') && github.run_id || 'deploy' }}
+  group: github-pages-production
   cancel-in-progress: true
 
 jobs:
   resolve:
-    name: Resolve published browser data
-    if: ${{ github.event_name != 'release' || startsWith(github.event.release.tag_name, 'data-') }}
+    name: Resolve published release metadata
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -42,8 +36,8 @@ jobs:
     outputs:
       available: ${{ steps.release.outputs.available }}
       tag: ${{ steps.release.outputs.tag }}
+      release_id: ${{ steps.release.outputs.release_id }}
     env:
-      EVENT_TAG: ${{ github.event.release.tag_name || '' }}
       GH_TOKEN: ${{ github.token }}
       REQUESTED_RELEASE: ${{ inputs.release_id || '' }}
     steps:
@@ -51,9 +45,7 @@ jobs:
         id: release
         shell: bash
         run: |
-          if [[ -n "$EVENT_TAG" ]]; then
-            TAG="$EVENT_TAG"
-          elif [[ -n "$REQUESTED_RELEASE" ]]; then
+          if [[ -n "$REQUESTED_RELEASE" ]]; then
             if [[ ! "$REQUESTED_RELEASE" =~ ^fb-[0-9]{8}-[0-9a-f]{7,12}$ ]]; then
               echo "Invalid Kakarayan data release ID."
               exit 1
@@ -66,13 +58,13 @@ jobs:
                   .[]
                   | select(.draft == false and .prerelease == false)
                   | select(.tag_name | startswith("data-"))
-                  | select(any(.assets[]; .name == "site-release.tar"))
+                  | select(any(.assets[]; .name == "site-metadata.zip"))
                 ][0].tag_name // ""
               '
             )"
           fi
           if [[ -z "$TAG" ]]; then
-            echo "::warning::No published data release contains a Pages bundle yet."
+            echo "::warning::No published data release contains site-metadata.zip yet."
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -82,17 +74,14 @@ jobs:
             echo "The selected data release must be published and non-prerelease."
             exit 1
           fi
-          if [[ "$(jq '[.assets[].name == "site-release.tar"] | any' "$RUNNER_TEMP/release.json")" != "true" ]]; then
-            if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-              echo "::warning::$TAG predates fast Pages bundles; skipping automatic deployment."
-              echo "available=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "$TAG does not contain site-release.tar."
+          if [[ "$(jq '[.assets[].name == "site-metadata.zip"] | any' "$RUNNER_TEMP/release.json")" != "true" ]]; then
+            echo "$TAG does not contain site-metadata.zip."
             exit 1
           fi
+          RELEASE_ID="${TAG#data-}"
           echo "available=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Selected $TAG"
 
   build:
@@ -107,16 +96,24 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
+      RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
+      VITE_KAKARAYAN_API_URL: ${{ vars.KAKARAYAN_API_URL }}
+      PLAYWRIGHT_API_MODE: remote
     steps:
       - name: Check out Kakarayan
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
 
-      - name: Require an approved software license
+      - name: Require approved deployment configuration
+        shell: bash
         run: |
           if [[ ! -f LICENSE && ! -f LICENSE.md ]]; then
-            echo "Production deployment is disabled until maintainers add an approved software license."
+            echo "Production deployment requires the approved software license."
+            exit 1
+          fi
+          if [[ ! "$VITE_KAKARAYAN_API_URL" =~ ^https://[^[:space:]]+$ ]]; then
+            echo "Configure the KAKARAYAN_API_URL repository variable with the HTTPS query API base URL."
             exit 1
           fi
 
@@ -142,24 +139,35 @@ jobs:
           uv sync --locked --all-groups
           npm ci --prefix site
 
-      - name: Download the published browser bundle
+      - name: Download the published metadata package
         run: |
           mkdir -p build/published-release
           gh release download "$RELEASE_TAG" \
             --pattern release-manifest.json \
-            --pattern site-release.tar \
+            --pattern site-metadata.zip \
             --dir build/published-release
 
-      - name: Verify and extract the published browser bundle
+      - name: Verify and assemble the published site data
         run: |
-          uv run python -m publisher.site_bundle extract \
+          uv run python -m publisher.extract_metadata \
             --manifest build/published-release/release-manifest.json \
-            --bundle build/published-release/site-release.tar \
+            --archive build/published-release/site-metadata.zip \
             --output build/site-release
           uv run python -m publisher.assemble_site \
             --release build/site-release \
             --public site/public \
             --download-manifest build/published-release/release-manifest.json
+
+      - name: Require the matching query release
+        shell: bash
+        run: |
+          READY="$(curl --fail --silent --show-error \
+            --connect-timeout 5 --max-time 20 \
+            "$VITE_KAKARAYAN_API_URL/readyz")"
+          if [[ "$(jq -r .release_id <<<"$READY")" != "$RELEASE_ID" ]]; then
+            echo "The query service is not serving $RELEASE_ID. Deploy it before Pages."
+            exit 1
+          fi
 
       - name: Build and verify the production site
         run: |

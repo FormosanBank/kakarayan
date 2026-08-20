@@ -7,8 +7,14 @@ from typing import cast
 import pytest
 from jsonschema import ValidationError
 
-from publisher.build import build_release
+from publisher.build import build_release, validate_document
 from publisher.recipes import load_recipe, resolve_recipe, write_recipe_export
+
+
+def test_frontend_recipe_fixture_validates() -> None:
+    root = Path(__file__).resolve().parents[2]
+    recipe = json.loads((root / "tests" / "fixtures" / "export-recipe.json").read_text())
+    validate_document(recipe, root / "schemas" / "export-recipe.schema.json")
 
 
 def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
@@ -18,8 +24,12 @@ def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
         "selection": {
             "query": "lima",
             "match": "exact",
+            "query_field": "formosan",
+            "translation_language": "",
             "language_ids": ["lang_amis"],
             "corpus_ids": [],
+            "dialects": [],
+            "requirements": [],
             "record_ids": [],
             "max_rows": 100,
             "record_unit": "sentence",
@@ -40,7 +50,7 @@ def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
 
 
 def test_recipe_resolves_and_exports(public_repo: Path, tmp_path: Path) -> None:
-    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    release = build_release(public_repo, tmp_path / "release")
     document = _recipe(release.release_id)
     path = tmp_path / "recipe.json"
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -56,16 +66,18 @@ def test_recipe_resolves_and_exports(public_repo: Path, tmp_path: Path) -> None:
     assert "sentence.wav" not in output.read_text(encoding="utf-8-sig")
     assert output.read_text(encoding="utf-8-sig").endswith("\n")
 
-    parquet_recipe = _recipe(release.release_id, "parquet")
-    parquet_output = tmp_path / "selection.parquet"
-    write_recipe_export(records, parquet_recipe, parquet_output)
-    assert parquet_output.read_bytes()[:4] == b"PAR1"
+    second = tmp_path / "selection-again.csv"
+    write_recipe_export(records, loaded, second)
+    assert output.read_bytes() == second.read_bytes()
 
-    word_recipe = _recipe(release.release_id)
-    cast(dict[str, object], word_recipe["selection"])["record_unit"] = "word"
-    word_records = resolve_recipe(release.output, word_recipe)
-    assert [record["xml_id"] for record in word_records] == ["w-one", "w-two"]
-    assert word_records[0]["standard"] == "lima"
+    loaded["format"] = "jsonl"
+    loaded["fields"] = ["id", "standard", "translations", "glosses"]
+    jsonl = tmp_path / "selection.jsonl"
+    write_recipe_export(records, loaded, jsonl)
+    row = json.loads(jsonl.read_text())
+    assert list(row) == ["glosses", "id", "standard", "translations"]
+    assert row["translations"] == "eng:A fictional translated line."
+    assert row["glosses"] == "FIVE"
 
 
 def test_recipe_runs_against_release_only_hierarchical_packages(
@@ -87,26 +99,17 @@ def test_recipe_matches_from_translation_back_to_formosan(
     public_repo: Path,
     tmp_path: Path,
 ) -> None:
-    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    release = build_release(public_repo, tmp_path / "release")
     document = _recipe(release.release_id)
     selection = cast(dict[str, object], document["selection"])
     selection.update(
         {
             "query": "fictional",
-            "match": "exact",
+            "match": "contains",
             "query_field": "translation",
             "translation_language": "eng",
         }
     )
-    records = resolve_recipe(release.output, document)
-    assert [record["xml_id"] for record in records] == ["s-one"]
-
-    selection["query"] = "fictional!"
-    records = resolve_recipe(release.output, document)
-    assert [record["xml_id"] for record in records] == ["s-one"]
-
-    selection["query"] = "fictonal"
-    selection["match"] = "fuzzy"
     records = resolve_recipe(release.output, document)
     assert [record["xml_id"] for record in records] == ["s-one"]
 

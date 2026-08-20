@@ -11,7 +11,7 @@ from pathlib import Path
 
 from lxml import etree
 
-from corpus.ingestion.normalize import normalize_gloss, normalize_surface, tokenize
+from api.search import normalize_surface, normalize_text, tokenize
 from publisher.identifiers import dimension_id, record_id
 from publisher.languages import resolve_language
 
@@ -221,7 +221,7 @@ def _tier_row(
                     "kind": element.get("kindOf", ""),
                     "version": element.get("ver", ""),
                     "notes": element.get("notes", ""),
-                    "normalized": normalize_gloss(text),
+                    "normalized": normalize_text(text),
                     "attributes_json": _attributes_json(element),
                     "inline_markup_json": _inline_markup_json(element),
                 }

@@ -1,11 +1,11 @@
-import type {SearchRecord} from "./types";
+import type {TierRequirement} from "./types";
 
 export const DATASET_FIELD_INFO = [
   ["id", "Stable identifier for each exported row", "每一列的穩定識別碼"],
   ["text_id", "Identifier of the containing text", "所屬文本的識別碼"],
   ["standard", "FormosanBank standardized form", "FormosanBank 標準化形式"],
   ["original", "Source orthography without replacement", "未替換的來源書寫"],
-  ["translations", "All translations with XML language tags", "具有 XML 語言標籤的所有翻譯"],
+  ["translations", "Sentence translations with XML language tags", "具有 XML 語言標籤的句子翻譯"],
   ["tokens", "Ordered surface token sequence", "依序排列的表層詞元"],
   ["phonology", "Available phonological tiers", "可用的音韻層級"],
   ["glosses", "Word and morpheme translation tiers", "詞與語素翻譯層級"],
@@ -13,11 +13,13 @@ export const DATASET_FIELD_INFO = [
   ["corpus_id", "Source corpus identifier", "來源語料庫識別碼"],
   ["dialect", "Dialect label supplied by the source", "來源提供的方言標籤"],
   ["source_path", "Path to the canonical public XML", "權威公開 XML 的路徑"],
-  ["audio", "Audio references, offsets, and availability", "音訊參照、時間偏移與可用狀態"],
+  ["audio", "Audio file and URL references", "音訊檔案與網址參照"],
 ] as const;
 
-export const DATASET_FIELDS = DATASET_FIELD_INFO.map(([field]) => field);
-export const ESSENTIAL_DATASET_FIELDS = [
+export type DatasetField = (typeof DATASET_FIELD_INFO)[number][0];
+
+export const DATASET_FIELDS: DatasetField[] = DATASET_FIELD_INFO.map(([field]) => field);
+export const ESSENTIAL_DATASET_FIELDS: DatasetField[] = [
   "id",
   "standard",
   "original",
@@ -28,13 +30,6 @@ export const ESSENTIAL_DATASET_FIELDS = [
   "source_path",
 ];
 
-export type TierRequirement =
-  | "translation"
-  | "audio"
-  | "phonology"
-  | "interlinear"
-  | "unclear";
-
 export const TIER_REQUIREMENTS: Array<[TierRequirement, string]> = [
   ["translation", "translation"],
   ["audio", "audio evidence"],
@@ -42,44 +37,3 @@ export const TIER_REQUIREMENTS: Array<[TierRequirement, string]> = [
   ["interlinear", "word or morpheme analysis"],
   ["unclear", "an unclear annotation"],
 ];
-
-export function recordMeetsFilters(
-  record: SearchRecord,
-  dialects: string[],
-  requirements: TierRequirement[],
-): boolean {
-  if (dialects.length && !dialects.includes(record.dialect || "unknown")) return false;
-  return requirements.every((requirement) => {
-    if (requirement === "translation") return record.translations.length > 0;
-    if (requirement === "audio") return record.audio.length > 0;
-    if (requirement === "phonology") return record.phonology.length > 0;
-    if (requirement === "interlinear") {
-      return (
-        record.words.length > 0 ||
-        record.tier_translations.some((item) => item.owner_type !== "sentence")
-      );
-    }
-    return [...record.forms, ...record.phonology, ...record.tier_translations].some(
-      (item) => item.unclear > 0,
-    );
-  });
-}
-
-export function datasetFieldValue(record: SearchRecord, field: string): string {
-  if (field === "translations") {
-    return record.translations.map((item) => `${item.xml_lang}: ${item.text}`).join(" | ");
-  }
-  if (field === "tokens") return record.tokens.map((item) => item.surface).join(" ");
-  if (field === "phonology") return record.phonology.map((item) => item.text).join(" | ");
-  if (field === "glosses") {
-    return record.tier_translations.map((item) => item.text).join(" | ");
-  }
-  if (field === "audio") {
-    return record.audio
-      .map((item) => item.file || item.url || item.source)
-      .filter(Boolean)
-      .join(" | ");
-  }
-  const value = record[field as keyof SearchRecord];
-  return typeof value === "string" ? value : "";
-}

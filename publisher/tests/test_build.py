@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import gzip
 import hashlib
+import io
 import json
 import sqlite3
 import subprocess
@@ -18,6 +18,7 @@ from openpyxl import load_workbook
 from publisher import PUBLIC_DOWNLOAD_PATHS
 from publisher.build import BuildError, build_release
 from publisher.cldf_export import write_cldf_package
+from publisher.format_aligned import write_aligned_package
 from publisher.verify_release import verify_release
 
 
@@ -48,81 +49,6 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert amis["counts"]["sentences"] == 2
     assert amis["dialects"] == ["Xiuguluan"]
     assert "audio" in amis["capabilities"]
-    search_response = json.loads(
-        (first.output / "api" / "v1" / "search" / "manifest.json").read_text(encoding="utf-8")
-    )
-    search_manifest = search_response["data"]
-    assert search_response["api_version"] == "v1"
-    assert search_response["kakarayan"]["commit"]
-    assert search_response["source"]["commit"] == first.source.commit
-    assert search_response["canonical_url"].endswith("/api/v1/search/manifest.json")
-    assert search_manifest["shards"][0]["records"] == 2
-    assert search_manifest["shards"][0]["unit_counts"] == {
-        "audio": 1,
-        "morphemes": 1,
-        "sentences": 2,
-        "texts": 1,
-        "tokens": 4,
-        "words": 2,
-    }
-    assert search_manifest["shards"][0]["language_id"] == "lang_amis"
-    assert search_manifest["shards"][0]["path"].endswith(".json.gz")
-    assert (
-        search_manifest["shards"][0]["uncompressed_bytes"] > search_manifest["shards"][0]["bytes"]
-    )
-    assert len(search_manifest["shards"][0]["uncompressed_sha256"]) == 64
-    assert search_manifest["shards"][0]["part"] == 0
-    assert search_manifest["translation_targets"] == [
-        {
-            "corpus_ids": ["corpus_testcorpus"],
-            "language_ids": ["lang_amis"],
-            "lexical_records": 1,
-            "records": 1,
-            "scopes": [
-                {
-                    "corpus_id": "corpus_testcorpus",
-                    "language_id": "lang_amis",
-                    "lexical_records": 1,
-                    "records": 1,
-                    "sentence_records": 1,
-                }
-            ],
-            "sentence_records": 1,
-            "xml_lang": "eng",
-        },
-        {
-            "corpus_ids": ["corpus_testcorpus"],
-            "language_ids": ["lang_amis"],
-            "lexical_records": 0,
-            "records": 1,
-            "scopes": [
-                {
-                    "corpus_id": "corpus_testcorpus",
-                    "language_id": "lang_amis",
-                    "lexical_records": 0,
-                    "records": 1,
-                    "sentence_records": 1,
-                }
-            ],
-            "sentence_records": 1,
-            "xml_lang": "zho",
-        },
-    ]
-    assert len(search_manifest["indexes"]) == 1
-    search_records = json.loads(
-        gzip.decompress(first.output.joinpath(search_manifest["shards"][0]["path"]).read_bytes())
-    )
-    search_index = json.loads(
-        gzip.decompress(first.output.joinpath(search_manifest["indexes"][0]["path"]).read_bytes())
-    )
-    assert search_index["terms"]["source"]["lima waco"] == [0]
-    assert search_index["terms"]["gloss"]["five"] == [0]
-    first_sentence = search_records[0]
-    assert first_sentence["phonology"][0]["text"] == "lima watso"
-    assert first_sentence["tier_translations"][1]["kind"] == "gloss"
-    assert first_sentence["tier_translations"][1]["owner_type"] == "morpheme"
-    assert first_sentence["words"][0]["class"] == "noun"
-    assert first_sentence["words"][0]["morphemes"][0]["class"] == "root"
     orthography = json.loads(
         (first.output / "api" / "v1" / "orthography.json").read_text(encoding="utf-8")
     )["data"]
@@ -163,23 +89,28 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         assert archive.read(source_path) == (public_repo / source_path).read_bytes()
         assert "rights.json" in archive.namelist()
     with zipfile.ZipFile(first.output / "prepared" / "time-aligned.zip") as archive:
-        assert any(name.endswith(".eaf") for name in archive.namelist())
-        assert any(name.endswith(".TextGrid") for name in archive.namelist())
+        alignment = json.loads(archive.read("alignments.jsonl"))
+        assert alignment["cues"][0]["sentence_id"].startswith("sentence_")
+        assert alignment["cues"][0]["start_ms"] == 1250
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["media_groups"] == 1
+        assert manifest["single_cue_groups"] == 1
+        assert manifest["interchange_groups"] == 0
         assert "README.txt" in archive.namelist()
         assert "rights.json" in archive.namelist()
     with zipfile.ZipFile(first.output / "prepared" / "formosanbank-cldf.zip") as archive:
         assert "Generic-metadata.json" in archive.namelist()
         assert "README.txt" in archive.namelist()
         assert "rights.json" in archive.namelist()
-    jsonl_packages = list((first.output / "prepared" / "jsonl").glob("*.zip"))
-    assert len(jsonl_packages) == 1
-    with zipfile.ZipFile(jsonl_packages[0]) as archive:
-        assert archive.namelist() == [
-            "README.txt",
-            "data-dictionary.json",
-            "part-0000.jsonl",
-            "rights.json",
-        ]
+    with zipfile.ZipFile(first.output / "prepared" / "hierarchical-jsonl.zip") as outer:
+        [partition] = [name for name in outer.namelist() if name.endswith(".zip")]
+        with zipfile.ZipFile(io.BytesIO(outer.read(partition))) as archive:
+            assert archive.namelist() == [
+                "README.txt",
+                "data-dictionary.json",
+                "part-0000.jsonl",
+                "rights.json",
+            ]
 
     with closing(sqlite3.connect(first.output / "formosanbank.sqlite")) as database:
         assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)
@@ -262,10 +193,59 @@ def test_database_can_be_packaged_for_github_releases(
     assert artifact["asset_name"] == "formosanbank.sqlite.gz"
     assert artifact["download_url"].endswith(f"/data-{release.release_id}/formosanbank.sqlite.gz")
     assert not (release.output / "api").exists()
-    assert not (release.output / "search").exists()
+    assert (release.output / "site-metadata.zip").is_file()
+    with zipfile.ZipFile(release.output / "site-metadata.zip") as archive:
+        assert "v1/meta.json" in archive.namelist()
+        assert not any(name.startswith("v1/search/") for name in archive.namelist())
     assert not (release.output / "tables").exists()
     asset_names = [item["asset_name"] for item in manifest["artifacts"]]
     assert len(asset_names) == len(set(asset_names))
+    assert len(asset_names) == 12
+    assert not (release.output / "prepared" / "canonical").exists()
+    assert not (release.output / "prepared" / "jsonl").exists()
+    with zipfile.ZipFile(release.output / "prepared" / "hierarchical-jsonl.zip") as archive:
+        assert any(name.endswith(".zip") for name in archive.namelist())
+    assert not any(
+        (release.output / name).exists()
+        for name in ("catalog.json", "models.json", "orthography.json", "rights.json")
+    )
+
+
+def test_multi_cue_media_gets_interchange_files(public_repo: Path, tmp_path: Path) -> None:
+    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    database = release.output / "formosanbank.sqlite"
+    with closing(sqlite3.connect(database)) as connection:
+        sentence_ids = [
+            row[0] for row in connection.execute("SELECT id FROM sentences ORDER BY id")
+        ]
+        connection.execute(
+            """
+            INSERT INTO audio (
+              id, owner_type, owner_id, position, file, url, start, end,
+              start_raw, end_raw, source, duration, availability_status, attributes_json
+            ) VALUES (?, 'sentence', ?, 0, 'sentence.wav', NULL, 4.0, 5.0,
+                      '4.0', '5.0', NULL, 1.0, 'unknown', '{}')
+            """,
+            ("audio_second_cue", sentence_ids[1]),
+        )
+        connection.commit()
+
+    package = tmp_path / "time-aligned.zip"
+    counts = write_aligned_package(database, package, release.release_id, {"entries": []})
+
+    assert counts == {
+        "media_groups": 1,
+        "single_cue_groups": 0,
+        "interchange_groups": 1,
+        "textgrids": 1,
+        "files": 10,
+    }
+    with zipfile.ZipFile(package) as archive:
+        names = archive.namelist()
+        assert any(name.endswith(".eaf") for name in names)
+        assert any(name.endswith(".TextGrid") for name in names)
+        assert any(name.endswith(".source.vtt") for name in names)
+        assert any(name.endswith(".translation.srt") for name in names)
 
 
 def test_cldf_streams_and_validates_large_source_fields(

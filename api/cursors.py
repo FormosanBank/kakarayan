@@ -1,4 +1,4 @@
-"""Opaque pagination cursors bound to a query."""
+"""Opaque keyset pagination cursors bound to a query."""
 
 from __future__ import annotations
 
@@ -14,29 +14,35 @@ def query_fingerprint(parts: object) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:16]
 
 
-def encode_cursor(offset: int, fingerprint: str) -> str:
+CursorValue = str | int | float
+
+
+def encode_cursor(position: list[CursorValue], fingerprint: str) -> str:
     payload = json.dumps(
-        {"v": 1, "o": offset, "q": fingerprint},
+        {"v": 2, "p": position, "q": fingerprint},
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
     return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
-def decode_cursor(cursor: str | None, fingerprint: str) -> int:
+def decode_cursor(cursor: str | None, fingerprint: str) -> list[CursorValue] | None:
     if not cursor:
-        return 0
+        return None
     try:
         padded = cursor + "=" * (-len(cursor) % 4)
         value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
         if (
-            value.get("v") != 1
+            value.get("v") != 2
             or value.get("q") != fingerprint
-            or not isinstance(value.get("o"), int)
-            or value["o"] < 0
-            or value["o"] > 1_000_000
+            or not isinstance(value.get("p"), list)
+            or len(value["p"]) > 4
+            or any(
+                not isinstance(item, str | int | float) or isinstance(item, bool)
+                for item in value["p"]
+            )
         ):
             raise ValueError
-        return int(value["o"])
+        return value["p"]
     except (ValueError, TypeError, json.JSONDecodeError):
         raise ApiError(400, "invalid_cursor", "The cursor is invalid for this query") from None

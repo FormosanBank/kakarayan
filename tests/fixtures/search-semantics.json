@@ -1,0 +1,96 @@
+{
+  "surface": [
+    {"input": "  Fangcalay,  ", "normalized": "fangcalay"},
+    {"input": "‘Apostrophe’", "normalized": "apostrophe"},
+    {"input": "ʉɬ'lj", "normalized": "ʉɬ'lj"},
+    {"input": "A\u0301", "normalized": "á"},
+    {"input": "，中文。", "normalized": "中文"},
+    {"input": "", "normalized": ""}
+  ],
+  "text": [
+    {"input": "  A   fictional\ntranslated line. ", "normalized": "a fictional translated line."},
+    {"input": "虛構測試句", "normalized": "虛構測試句"},
+    {"input": "MiXeD Case", "normalized": "mixed case"},
+    {"input": "", "normalized": ""}
+  ],
+  "matches": [
+    {"value": "fangcalay", "query": "FANGCALAY", "mode": "exact", "surface": true, "matches": true},
+    {"value": "fangcalay", "query": "fang", "mode": "prefix", "surface": true, "matches": true},
+    {"value": "a fictional translated line", "query": "translated", "mode": "contains", "surface": false, "matches": true},
+    {"value": "虛構測試句", "query": "測試", "mode": "contains", "surface": false, "matches": true},
+    {"value": "lima", "query": "li", "mode": "exact", "surface": true, "matches": false}
+  ],
+  "api": [
+    {
+      "name": "Formosan dictionary exact with punctuation folding",
+      "route": "dictionary",
+      "parameters": {"q": "LIMA!", "language_id": "lang_amis", "match": "exact"},
+      "field": "headword",
+      "expected": ["lima"]
+    },
+    {
+      "name": "Formosan dictionary prefix",
+      "route": "dictionary",
+      "parameters": {"q": "li", "language_id": "lang_amis", "match": "prefix"},
+      "field": "headword",
+      "expected": ["lima"]
+    },
+    {
+      "name": "English morpheme gloss reverse dictionary",
+      "route": "dictionary",
+      "parameters": {
+        "q": "FIVE",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "eng",
+        "match": "exact"
+      },
+      "field": "headword",
+      "expected": ["lima"]
+    },
+    {
+      "name": "Formosan concordance exact",
+      "route": "concordance",
+      "parameters": {"q": "lima", "language_id": "lang_amis", "match": "exact"},
+      "field": "standard",
+      "expected": ["lima waco"]
+    },
+    {
+      "name": "unsegmented sentence-level form remains searchable",
+      "route": "concordance",
+      "parameters": {
+        "q": "TOKI RIMA!",
+        "language_id": "lang_amis",
+        "match": "exact"
+      },
+      "field": "original",
+      "expected": ["toki rima"]
+    },
+    {
+      "name": "English translation reverse concordance",
+      "route": "concordance",
+      "parameters": {
+        "q": "fictional",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "eng",
+        "match": "contains"
+      },
+      "field": "standard",
+      "expected": ["lima waco"]
+    },
+    {
+      "name": "Traditional Chinese Unicode reverse concordance",
+      "route": "concordance",
+      "parameters": {
+        "q": "測試",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "zho",
+        "match": "contains"
+      },
+      "field": "original",
+      "expected": ["toki rima"]
+    }
+  ]
+}

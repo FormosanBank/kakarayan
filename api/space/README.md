@@ -11,5 +11,5 @@ license: other
 # Kakarayan FormosanBank API
 
 Read-only, bounded access to a checksummed public FormosanBank release. The canonical
-project and static fallback are hosted by
+project, static metadata, and prepared downloads are hosted by
 [FormosanBank/kakarayan](https://github.com/FormosanBank/kakarayan).

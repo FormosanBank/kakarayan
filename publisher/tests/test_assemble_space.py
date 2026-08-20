@@ -14,9 +14,11 @@ def test_assemble_space_pins_release(tmp_path: Path) -> None:
 
     dockerfile = (output / "Dockerfile").read_text(encoding="utf-8")
     assert f"data-{release_id}/release-manifest.json" in dockerfile
-    assert "KAKARAYAN_CORS_ORIGINS=https://formosanbank.github.io" in dockerfile
+    assert "prepare_release" in dockerfile
+    assert (output / "pyproject.toml").is_file()
+    assert (output / "uv.lock").is_file()
     assert (output / "README.md").is_file()
-    assert not (output / "tests").exists()
+    assert not (output / "api" / "tests").exists()
 
 
 def test_assemble_space_rejects_invalid_release(tmp_path: Path) -> None:

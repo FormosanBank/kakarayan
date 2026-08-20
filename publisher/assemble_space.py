@@ -1,4 +1,4 @@
-"""Assemble the optional Hugging Face Docker Space from the API source."""
+"""Assemble a pinned Docker Space without runtime release acquisition."""
 
 from __future__ import annotations
 
@@ -15,41 +15,29 @@ _RELEASE_RE = re.compile(r"^fb-[0-9]{8}-[0-9a-f]{7,12}$")
 def assemble_space(source: Path, output: Path, release_id: str) -> None:
     if not _RELEASE_RE.fullmatch(release_id):
         raise BuildError(f"Invalid release ID: {release_id!r}")
-    source = source.resolve()
+    api_source = source.resolve()
+    root = api_source.parent
     output = output.resolve()
     if output.exists() and any(output.iterdir()):
         raise BuildError(f"Space output must be absent or empty: {output}")
     output.mkdir(parents=True, exist_ok=True)
-    for name in (
-        "__init__.py",
-        "app.py",
-        "config.py",
-        "cursors.py",
-        "errors.py",
-        "release.py",
-        "store.py",
-        "requirements.txt",
-        ".dockerignore",
-    ):
-        shutil.copy2(source / name, output / name)
-    shutil.copy2(source / "space" / "README.md", output / "README.md")
-    dockerfile = (source / "Dockerfile").read_text(encoding="utf-8")
-    marker = "ENV PYTHONDONTWRITEBYTECODE=1 \\\n"
+    shutil.copytree(
+        api_source, output / "api", ignore=shutil.ignore_patterns("tests", "__pycache__")
+    )
+    shutil.copy2(root / "pyproject.toml", output / "pyproject.toml")
+    shutil.copy2(root / "uv.lock", output / "uv.lock")
+    shutil.copy2(api_source / "space" / "README.md", output / "README.md")
+    dockerfile = (api_source / "Dockerfile").read_text(encoding="utf-8")
+    marker = 'ARG KAKARAYAN_RELEASE_MANIFEST_URL=""'
     manifest_url = (
         "https://github.com/FormosanBank/kakarayan/releases/download/"
         f"data-{release_id}/release-manifest.json"
     )
-    replacement = (
-        f"ENV KAKARAYAN_RELEASE_MANIFEST_URL={manifest_url} \\\n"
-        "    KAKARAYAN_CORS_ORIGINS=https://formosanbank.github.io \\\n"
-        "    PYTHONDONTWRITEBYTECODE=1 \\\n"
-    )
+    replacement = f'ARG KAKARAYAN_RELEASE_MANIFEST_URL="{manifest_url}"'
     if dockerfile.count(marker) != 1:
-        raise BuildError("API Dockerfile environment marker is missing or ambiguous")
+        raise BuildError("API Dockerfile release marker is missing or ambiguous")
     (output / "Dockerfile").write_text(
-        dockerfile.replace(marker, replacement),
-        encoding="utf-8",
-        newline="\n",
+        dockerfile.replace(marker, replacement), encoding="utf-8", newline="\n"
     )
 
 

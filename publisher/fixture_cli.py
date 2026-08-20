@@ -46,7 +46,6 @@ def build_fixture(output: Path, *, include_prepared: bool = False) -> None:
             output,
             rights_overrides=rights,
             include_prepared=include_prepared,
-            site_only=not include_prepared,
         )
 
 

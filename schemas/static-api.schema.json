@@ -27,8 +27,7 @@
         "orthography",
         "content",
         "downloads",
-        "releases",
-        "search/manifest"
+        "releases"
       ]
     },
     "generated_at": {"type": "string", "format": "date-time"},
@@ -111,12 +110,6 @@
       "properties": {
         "endpoint": {"const": "releases"},
         "data": {"$ref": "#/$defs/releases"}
-      }
-    },
-    {
-      "properties": {
-        "endpoint": {"const": "search/manifest"},
-        "data": {"$ref": "search-manifest.schema.json"}
       }
     }
   ],

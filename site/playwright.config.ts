@@ -1,5 +1,22 @@
 import {defineConfig, devices} from "@playwright/test";
 
+const remoteApi = process.env.PLAYWRIGHT_API_MODE === "remote";
+const siteServer = {
+  command: "npm run preview -- --host 127.0.0.1 --port 4173",
+  url: "http://127.0.0.1:4173/kakarayan/",
+  reuseExistingServer: !process.env.CI,
+};
+const webServers = remoteApi
+  ? [siteServer]
+  : [
+      {
+        command: "cd .. && KAKARAYAN_DB_PATH=build/fixture-release/formosanbank.sqlite KAKARAYAN_RELEASE_MANIFEST_PATH=build/fixture-release/release-manifest.json KAKARAYAN_CORS_ORIGINS=http://127.0.0.1:4173 uv run uvicorn api.app:app --host 127.0.0.1 --port 8000 --no-access-log",
+        url: "http://127.0.0.1:8000/readyz",
+        reuseExistingServer: !process.env.CI,
+      },
+      siteServer,
+    ];
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -10,11 +27,7 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173/kakarayan/",
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "npm run preview -- --host 127.0.0.1 --port 4173",
-    url: "http://127.0.0.1:4173/kakarayan/",
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: webServers,
   projects: [
     {
       name: "desktop-chromium",

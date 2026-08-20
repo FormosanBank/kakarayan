@@ -13,20 +13,19 @@ def _origins(value: str) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class Settings:
-    manifest_url: str | None
-    manifest_path: Path | None
+    manifest_path: Path
     database_path: Path
     expected_sha256: str | None
     cors_origins: tuple[str, ...]
-    max_download_bytes: int = 4_000_000_000
-    query_step_limit: int = 2_000
+    query_step_limit: int = 200_000
 
     @classmethod
     def from_environment(cls) -> Settings:
-        manifest_path = os.environ.get("KAKARAYAN_RELEASE_MANIFEST_PATH")
+        manifest_path = os.environ.get(
+            "KAKARAYAN_RELEASE_MANIFEST_PATH", "/data/active-release.json"
+        )
         return cls(
-            manifest_url=os.environ.get("KAKARAYAN_RELEASE_MANIFEST_URL"),
-            manifest_path=Path(manifest_path).resolve() if manifest_path else None,
+            manifest_path=Path(manifest_path).resolve(),
             database_path=Path(
                 os.environ.get("KAKARAYAN_DB_PATH", "/data/formosanbank.sqlite")
             ).resolve(),
@@ -40,13 +39,5 @@ class Settings:
         )
 
     def validate(self) -> None:
-        sources = int(bool(self.manifest_url)) + int(self.manifest_path is not None)
-        if sources != 1:
-            raise ValueError(
-                "Configure exactly one of KAKARAYAN_RELEASE_MANIFEST_URL or "
-                "KAKARAYAN_RELEASE_MANIFEST_PATH"
-            )
-        if self.manifest_url and not self.manifest_url.startswith("https://"):
-            raise ValueError("Remote release manifests must use HTTPS")
-        if self.max_download_bytes <= 0 or self.query_step_limit <= 0:
+        if self.query_step_limit <= 0:
             raise ValueError("Service resource limits must be positive")

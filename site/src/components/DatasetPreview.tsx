@@ -1,20 +1,16 @@
-import {DATASET_FIELD_INFO, datasetFieldValue} from "../datasetSelection";
+import {DATASET_FIELD_INFO} from "../datasetSelection";
 import {useI18n} from "../i18n";
-import type {RecordUnit} from "../recordUnits";
-import type {SearchRecord} from "../types";
 
 export function DatasetPreview({
   fields,
   languageSelected,
   preview,
   previewBusy,
-  recordUnit,
 }: {
   fields: string[];
   languageSelected: boolean;
-  preview: SearchRecord[];
+  preview: Array<Record<string, string>>;
   previewBusy: boolean;
-  recordUnit: RecordUnit;
 }) {
   const {tx} = useI18n();
   return (
@@ -26,8 +22,8 @@ export function DatasetPreview({
             <p>
               {languageSelected
                 ? tx(
-                    `First ${preview.length} ${recordUnit} rows in deterministic source order.`,
-                    `依可重現來源順序顯示前 ${preview.length} 筆 ${recordUnit} 列。`,
+                    `First ${preview.length} sentence rows in deterministic source order.`,
+                    `依可重現來源順序顯示前 ${preview.length} 筆句子列。`,
                   )
                 : tx("Choose a language to inspect the dataset.", "選擇語言以檢視資料集。")}
             </p>
@@ -49,7 +45,7 @@ export function DatasetPreview({
                 {preview.map((record) => (
                   <tr key={record.id}>
                     {fields.map((field) => (
-                      <td key={field}>{datasetFieldValue(record, field) || "—"}</td>
+                      <td key={field}>{record[field] || "—"}</td>
                     ))}
                   </tr>
                 ))}

@@ -23,25 +23,31 @@
         "corpus_ids",
         "record_ids",
         "max_rows",
-        "record_unit"
+        "record_unit",
+        "query_field",
+        "translation_language",
+        "dialects",
+        "requirements"
       ],
       "properties": {
         "query": {"type": "string", "maxLength": 256},
         "match": {
-          "enum": [
-            "source",
-            "exact",
-            "prefix",
-            "contains",
-            "translation",
-            "phonology",
-            "gloss",
-            "fuzzy",
-            "regex"
-          ]
+          "enum": ["exact", "prefix", "contains"]
         },
         "query_field": {"enum": ["formosan", "translation"]},
         "translation_language": {"type": "string", "maxLength": 35},
+        "dialects": {
+          "type": "array",
+          "items": {"type": "string", "maxLength": 128},
+          "maxItems": 100,
+          "uniqueItems": true
+        },
+        "requirements": {
+          "type": "array",
+          "items": {"enum": ["translation", "audio", "phonology", "interlinear", "unclear"]},
+          "maxItems": 5,
+          "uniqueItems": true
+        },
         "language_ids": {
           "type": "array",
           "items": {"type": "string", "maxLength": 128},
@@ -61,10 +67,8 @@
           "maxItems": 10000,
           "uniqueItems": true
         },
-        "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000000},
-        "record_unit": {
-          "enum": ["text", "sentence", "word", "morpheme", "token", "audio"]
-        }
+        "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "record_unit": {"const": "sentence"}
       },
       "additionalProperties": false
     },
@@ -92,17 +96,7 @@
       "uniqueItems": true
     },
     "format": {
-      "enum": [
-        "csv",
-        "tsv",
-        "json",
-        "jsonl",
-        "parquet",
-        "plain",
-        "interlinear",
-        "audio",
-        "recipe"
-      ]
+      "enum": ["csv", "tsv", "jsonl"]
     },
     "spreadsheet_safe": {"type": "boolean"}
   },

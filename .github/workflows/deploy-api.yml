@@ -1,4 +1,4 @@
-name: Deploy optional Hugging Face API
+name: Deploy query API to Hugging Face
 
 on:
   workflow_dispatch:
@@ -71,31 +71,25 @@ jobs:
         run: |
           TAG="data-$RELEASE_ID"
           gh release view "$TAG" \
-            --json isDraft,isPrerelease,tagName \
+            --json assets,isDraft,isPrerelease,tagName \
             > build-release.json
           if [[ "$(jq -r .isDraft build-release.json)" != "false" ]] \
             || [[ "$(jq -r .isPrerelease build-release.json)" != "false" ]]; then
             echo "The data release must be published and non-prerelease."
             exit 1
           fi
-          mkdir -p build/release-check
-          gh release download "$TAG" \
-            --pattern release-manifest.json \
-            --pattern formosanbank.sqlite.gz \
-            --dir build/release-check
-          expected="$(
-            jq -r '.artifacts[] | select(.path == "formosanbank.sqlite.gz") | .sha256' \
-              build/release-check/release-manifest.json
-          )"
-          echo "$expected  build/release-check/formosanbank.sqlite.gz" | sha256sum --check
+          if [[ "$(jq '[.assets[].name == "release-manifest.json"] | any' build-release.json)" != "true" ]] \
+            || [[ "$(jq '[.assets[].name == "formosanbank.sqlite.gz"] | any' build-release.json)" != "true" ]]; then
+            echo "The published release is missing its manifest or query database."
+            exit 1
+          fi
 
-      - name: Assemble and build the pinned Space
+      - name: Assemble the pinned Space
         run: |
           uv run python -m publisher.assemble_space \
             --source api \
             --output build/space \
             --release-id "$RELEASE_ID"
-          docker build build/space
 
       - name: Update the Hugging Face Space
         shell: bash

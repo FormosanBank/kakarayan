@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "release_id": "fb-20240102-3b367525",
+  "selection": {
+    "query": "five",
+    "match": "contains",
+    "query_field": "translation",
+    "translation_language": "eng",
+    "language_ids": ["lang_amis"],
+    "corpus_ids": ["corpus_testcorpus"],
+    "dialects": ["Xiuguluan"],
+    "requirements": ["translation", "audio"],
+    "record_ids": [],
+    "max_rows": 250,
+    "record_unit": "sentence"
+  },
+  "fields": ["id", "standard", "translations"],
+  "format": "csv",
+  "spreadsheet_safe": true
+}

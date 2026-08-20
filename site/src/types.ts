@@ -126,77 +126,6 @@ export interface ModelCatalog {
   services: ModelService[];
 }
 
-export interface SearchShard {
-  path: string;
-  language_id: string;
-  corpus_id: string;
-  part: number;
-  records: number;
-  unit_counts?: {
-    texts: number;
-    sentences: number;
-    words: number;
-    morphemes: number;
-    tokens: number;
-    audio: number;
-  };
-  bytes: number;
-  uncompressed_bytes: number;
-  sha256: string;
-  uncompressed_sha256: string;
-}
-
-export interface SearchIndex {
-  path: string;
-  language_id: string;
-  corpus_id: string;
-  shards: number;
-  terms: number;
-  bytes: number;
-  uncompressed_bytes: number;
-  sha256: string;
-  uncompressed_sha256: string;
-}
-
-export interface SearchIndexDocument {
-  schema_version: string;
-  release_id: string;
-  language_id: string;
-  corpus_id: string;
-  shards: number;
-  terms: {
-    source_exact: Record<string, number[]>;
-    source: Record<string, number[]>;
-    translation: Record<string, number[]>;
-    phonology: Record<string, number[]>;
-    gloss: Record<string, number[]>;
-    regex: Record<string, number[]>;
-  };
-}
-
-export interface SearchManifest {
-  schema_version: string;
-  release_id: string;
-  record_unit: "sentence";
-  translation_targets: Array<{
-    xml_lang: string;
-    records: number;
-    sentence_records: number;
-    lexical_records: number;
-    language_ids: string[];
-    corpus_ids: string[];
-    scopes: Array<{
-      language_id: string;
-      corpus_id: string;
-      records: number;
-      sentence_records: number;
-      lexical_records: number;
-    }>;
-  }>;
-  shards: SearchShard[];
-  indexes: SearchIndex[];
-}
-
 export interface Translation {
   text: string;
   xml_lang: string;
@@ -287,6 +216,62 @@ export interface SearchRecord {
   }>;
 }
 
+export type SearchDirection = "formosan" | "translation";
+export type MatchMode = "exact" | "prefix" | "contains";
+export type TierRequirement =
+  | "translation"
+  | "audio"
+  | "phonology"
+  | "interlinear"
+  | "unclear";
+
+export interface SentenceSummary {
+  id: string;
+  text_id: string;
+  corpus_id: string;
+  language_id: string;
+  language: string;
+  dialect: string;
+  source_path: string;
+  citation: string;
+  xml_id: string;
+  position: number;
+  token_count: number;
+  standard: string;
+  original: string;
+  translations: Translation[];
+  translation_count: number;
+  summary_truncated: boolean;
+  audio_count: number;
+}
+
+export interface DictionaryEntry {
+  id: string;
+  language_id: string;
+  headword: string;
+  display_form: string;
+  occurrences: number;
+  variant_count: number;
+  meanings: string[];
+  pronunciations: string[];
+  variants: string[];
+  corpus_ids: string[];
+  examples: SentenceSummary[];
+  summary_truncated: boolean;
+}
+
+export interface PageResult<T> {
+  release_id: string;
+  items: T[];
+  next_cursor: string | null;
+}
+
+export interface QueryAvailability {
+  baseUrl: string;
+  available: boolean;
+  error: string;
+}
+
 export interface OrthographyRule {
   input: string;
   outputs: Record<string, string>;
@@ -340,7 +325,7 @@ export interface AppData {
   corpora: Corpus[];
   rights: RightsCatalog;
   models: ModelCatalog;
-  search: SearchManifest;
   orthography: OrthographyCatalog;
   content: LearningContentCatalog;
+  query: QueryAvailability;
 }

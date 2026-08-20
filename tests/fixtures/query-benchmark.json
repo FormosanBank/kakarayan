@@ -1,0 +1,194 @@
+{
+  "schema_version": "1.0.0",
+  "cases": [
+    {
+      "name": "dictionary exact",
+      "path": "/v1/releases/{release_id}/dictionary",
+      "parameters": {
+        "q": "fangcalay",
+        "language_id": "lang_amis",
+        "direction": "formosan",
+        "match": "exact",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "dictionary prefix",
+      "path": "/v1/releases/{release_id}/dictionary",
+      "parameters": {
+        "q": "fang",
+        "language_id": "lang_amis",
+        "direction": "formosan",
+        "match": "prefix",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "dictionary contains",
+      "path": "/v1/releases/{release_id}/dictionary",
+      "parameters": {
+        "q": "ngcal",
+        "language_id": "lang_amis",
+        "direction": "formosan",
+        "match": "contains",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "reverse dictionary",
+      "path": "/v1/releases/{release_id}/dictionary",
+      "parameters": {
+        "q": "good",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "eng",
+        "match": "exact",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "reverse dictionary contains",
+      "path": "/v1/releases/{release_id}/dictionary",
+      "parameters": {
+        "q": "good",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "eng",
+        "match": "contains",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "sentence exact",
+      "path": "/v1/releases/{release_id}/concordance",
+      "parameters": {
+        "q": "fangcalay",
+        "language_id": "lang_amis",
+        "direction": "formosan",
+        "match": "exact",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "sentence prefix",
+      "path": "/v1/releases/{release_id}/concordance",
+      "parameters": {
+        "q": "fang",
+        "language_id": "lang_amis",
+        "direction": "formosan",
+        "match": "prefix",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "sentence contains",
+      "path": "/v1/releases/{release_id}/concordance",
+      "parameters": {
+        "q": "ngcal",
+        "language_id": "lang_amis",
+        "direction": "formosan",
+        "match": "contains",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "reverse sentence",
+      "path": "/v1/releases/{release_id}/concordance",
+      "parameters": {
+        "q": "good",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "eng",
+        "match": "exact",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "short Chinese reverse sentence",
+      "path": "/v1/releases/{release_id}/concordance",
+      "parameters": {
+        "q": "好",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "zho",
+        "match": "contains",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "dataset preview",
+      "path": "/v1/releases/{release_id}/datasets/preview",
+      "parameters": {
+        "q": "fangcalay",
+        "language_id": "lang_amis",
+        "direction": "formosan",
+        "match": "exact",
+        "field": ["id", "standard", "translations"],
+        "max_rows": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "research summary",
+      "path": "/v1/releases/{release_id}/summaries",
+      "parameters": {
+        "language_id": "lang_amis",
+        "limit": 50
+      },
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    }
+  ],
+  "detail": {
+    "name": "sentence detail",
+    "source_case": "sentence exact",
+    "path": "/v1/releases/{release_id}/sentences/{record_id}",
+    "maximum_first_ms": 750,
+    "maximum_p95_ms": 750,
+    "maximum_gzip_bytes": 102400
+  }
+}

@@ -2,8 +2,8 @@
 
 ## Supported code
 
-Security fixes target the current `main` branch and the currently published static site,
-data release, and optional API release.
+Security fixes target the current `main` branch and the currently published site, data
+release, and required query API.
 
 ## Report a vulnerability
 
@@ -21,10 +21,13 @@ For a corpus correction, attribution concern, rights request, or takedown, follo
 
 ## Security boundaries
 
-- The GitHub Pages site has no Kakarayan account or privileged backend.
+- The site has no Kakarayan account, session, or privileged write API.
 - Saved cards and recordings stay in browser storage unless a user explicitly invokes a
   named third-party model service.
-- The optional API is read-only and starts only after release checksum and SQLite integrity
-  verification.
+- The query API is read-only and starts only from an explicitly activated release. Full
+  checksum and SQLite integrity verification occur before process startup.
+- Query work, page size, custom export rows, and export bytes are bounded.
+- Operational records contain route templates and durations, not raw queries, sentence
+  text, recordings, or model input.
 - Pull requests do not receive production deployment secrets.
 - Published data remains subject to FormosanBank and corpus-specific rights.

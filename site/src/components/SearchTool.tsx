@@ -1,57 +1,32 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState, type FormEvent} from "react";
 
-import {
-  matchingIndexes,
-  matchingShards,
-  searchRecords,
-  type SearchDirection,
-  type SearchMode,
-} from "../data";
-import {downloadExport, type ExportFormat} from "../exports";
+import {concordance, dictionary, translationLanguages} from "../apiClient";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
-import {cardFromDictionary, cardFromRecord, saveCard} from "../study";
+import {cardFromDictionaryEntry, cardFromRecord, saveCard} from "../study";
 import {translationLanguageName} from "../translationLanguages";
-import type {AppData, SearchRecord} from "../types";
-import {
-  recordHasTier,
-  RESULT_TIERS,
-  sortResultRecords,
-  type ResultSort,
-  type ResultTier,
-} from "../searchResultControls";
+import type {
+  AppData,
+  DictionaryEntry,
+  MatchMode,
+  SearchDirection,
+  SearchRecord,
+  SentenceSummary,
+  TierRequirement,
+} from "../types";
 import {CandidateGroups} from "./CandidateGroups";
 import {Diagnostics} from "./Diagnostics";
 import {SearchResultCard} from "./SearchResultCard";
-import {SearchFilters} from "./SearchFilters";
 
 export type LookupKind = "dictionary" | "sentences";
-
-const DICTIONARY_SOURCE_MODES: SearchMode[] = ["exact", "prefix", "fuzzy"];
-const DICTIONARY_TRANSLATION_MODES: SearchMode[] = ["exact", "prefix", "contains", "fuzzy"];
-const SENTENCE_SOURCE_MODES: SearchMode[] = [
-  "exact",
-  "contains",
+const MATCH_MODES: MatchMode[] = ["exact", "prefix", "contains"];
+const REQUIREMENTS: TierRequirement[] = [
+  "translation",
+  "audio",
   "phonology",
-  "gloss",
-  "regex",
-  "source",
+  "interlinear",
+  "unclear",
 ];
-const SENTENCE_TRANSLATION_MODES: SearchMode[] = ["exact", "prefix", "contains", "fuzzy", "regex"];
-
-function modesFor(kind: LookupKind, direction: SearchDirection): SearchMode[] {
-  if (kind === "dictionary") {
-    return direction === "formosan" ? DICTIONARY_SOURCE_MODES : DICTIONARY_TRANSLATION_MODES;
-  }
-  return direction === "formosan" ? SENTENCE_SOURCE_MODES : SENTENCE_TRANSLATION_MODES;
-}
 
 export function SearchTool({
   data,
@@ -71,232 +46,128 @@ export function SearchTool({
   const {languageName, locale, number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
-  const initialLanguage =
-    selectedLanguageId ?? params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "";
-  const requestedMode = params.get("mode") as SearchMode | null;
-  const requestedDirection = params.get("direction");
-  const initialDirection: SearchDirection =
-    requestedDirection === "translation" || requestedMode === "translation"
-      ? "translation"
-      : "formosan";
-  const [direction, setDirection] = useState<SearchDirection>(initialDirection);
-  const modes = modesFor(kind, direction);
-  const initialMode = requestedMode === "translation" ? "contains" : requestedMode;
   const [query, setQuery] = useState(params.get("q") ?? "");
-  const [languageId, setLanguageId] = useState(initialLanguage);
-  const [corpusId, setCorpusId] = useState(params.get("corpus") ?? "");
-  const [selectedTarget, setSelectedTarget] = useState(params.get("target") ?? "");
-  const [mode, setMode] = useState<SearchMode>(
-    initialMode && modesFor(kind, initialDirection).includes(initialMode) ? initialMode : "exact",
+  const [languageId, setLanguageId] = useState(
+    selectedLanguageId ?? params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "",
   );
-  const [records, setRecords] = useState<SearchRecord[]>([]);
-  const [scanned, setScanned] = useState(0);
-  const [matches, setMatches] = useState(0);
-  const [truncated, setTruncated] = useState(false);
-  const initialLimit = learner ? 30 : kind === "dictionary" ? 200 : 25;
-  const [visibleLimit, setVisibleLimit] = useState(initialLimit);
+  const [corpusId, setCorpusId] = useState(params.get("corpus") ?? "");
+  const [dialect, setDialect] = useState(params.get("dialect") ?? "");
+  const [direction, setDirection] = useState<SearchDirection>(
+    params.get("direction") === "translation" ? "translation" : "formosan",
+  );
+  const requestedMode = params.get("mode");
+  const [match, setMatch] = useState<MatchMode>(
+    MATCH_MODES.includes(requestedMode as MatchMode) ? (requestedMode as MatchMode) : "exact",
+  );
+  const [requirements, setRequirements] = useState<TierRequirement[]>([]);
+  const [targets, setTargets] = useState<Array<{xml_lang: string; records: number}>>([]);
+  const [targetLanguage, setTargetLanguage] = useState(params.get("target") ?? "eng");
+  const [dictionaryEntries, setDictionaryEntries] = useState<DictionaryEntry[]>([]);
+  const [sentences, setSentences] = useState<SentenceSummary[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
-  const [exporting, setExporting] = useState(false);
-  const [dialectFilter, setDialectFilter] = useState(params.get("dialect") ?? "");
-  const [requiredTiers, setRequiredTiers] = useState<ResultTier[]>(() =>
-    (params.get("tiers") ?? "").split(",").filter(
-      (value): value is ResultTier => RESULT_TIERS.includes(value as ResultTier),
-    ),
-  );
-  const requestedSort = params.get("sort") as ResultSort | null;
-  const [resultSort, setResultSort] = useState<ResultSort>(
-    requestedSort && ["source", "shortest", "longest", "corpus"].includes(requestedSort)
-      ? requestedSort
-      : "source",
-  );
   const controller = useRef<AbortController | null>(null);
-  const initialStarted = useRef(false);
-  const hasInitialQuery = useRef(Boolean(params.get("q") && initialLanguage));
 
+  const selectedLanguage = data.languages.find((language) => language.id === languageId);
   const relevantCorpora = useMemo(
     () => data.corpora.filter((corpus) => corpus.languages.includes(languageId)),
     [data.corpora, languageId],
   );
-  const targets = useMemo(
-    () =>
-      data.search.translation_targets
-        .map((target) => {
-          const scopes = target.scopes.filter(
-            (scope) =>
-              scope.language_id === languageId &&
-              (!corpusId || scope.corpus_id === corpusId),
-          );
-          const records = scopes.reduce(
-            (total, scope) =>
-              total + (kind === "sentences" ? scope.sentence_records : scope.records),
-            0,
-          );
-          return {...target, records};
-        })
-        .filter((target) => target.records > 0)
-        .sort((left, right) =>
-          translationLanguageName(left.xml_lang, locale).localeCompare(
-            translationLanguageName(right.xml_lang, locale),
-          ),
-        ),
-    [corpusId, data.search.translation_targets, kind, languageId, locale],
-  );
-  const targetLanguage = useMemo(() => {
-    const available = new Set(targets.map((target) => target.xml_lang));
-    if (selectedTarget && available.has(selectedTarget)) return selectedTarget;
-    const preferred = locale === "zh-Hant" ? "zho" : "eng";
-    return available.has(preferred) ? preferred : targets[0]?.xml_lang ?? "";
-  }, [locale, selectedTarget, targets]);
-  const shards = useMemo(
-    () => matchingShards(data.search, languageId, corpusId),
-    [corpusId, data.search, languageId],
-  );
-  const indexes = useMemo(
-    () => matchingIndexes(data.search, languageId, corpusId),
-    [corpusId, data.search, languageId],
-  );
-  const exportBlocked = useMemo(() => {
-    const corporaById = new Map(data.corpora.map((corpus) => [corpus.id, corpus]));
-    const rightsById = new Map(data.rights.entries.map((entry) => [entry.id, entry]));
-    return records.some((record) => {
-      const corpus = corporaById.get(record.corpus_id);
-      const rights = corpus ? rightsById.get(corpus.rights_id) : undefined;
-      return rights?.redistribution !== "allowed";
-    });
-  }, [data.corpora, data.rights.entries, records]);
-  const selectedLanguage = data.languages.find((language) => language.id === languageId);
-  const targetLanguageLabel = targetLanguage
-    ? translationLanguageName(targetLanguage, locale)
-    : tx("Translation", "翻譯語言");
-  const hasResultFilters = Boolean(dialectFilter || requiredTiers.length || resultSort !== "source");
 
-  useEffect(
-    () => () => {
-      controller.current?.abort();
-    },
-    [],
-  );
+  useEffect(() => {
+    if (!languageId || !data.query.available) return;
+    const next = new AbortController();
+    translationLanguages(data.meta.release_id, languageId, corpusId, next.signal).then(
+      (values) => {
+        setTargets(values);
+        const available = new Set(values.map((item) => item.xml_lang));
+        if (!available.has(targetLanguage)) {
+          const preferred = locale === "zh-Hant" ? "zho" : "eng";
+          setTargetLanguage(available.has(preferred) ? preferred : values[0]?.xml_lang ?? "");
+        }
+      },
+      () => setTargets([]),
+    );
+    return () => next.abort();
+  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale, targetLanguage]);
 
-  const performSearch = useCallback(
-    async (limit: number, updateUrl: boolean) => {
-      if (!languageId || !targetLanguage || !query.trim()) return;
+  useEffect(() => () => controller.current?.abort(), []);
+
+  const run = useCallback(
+    async (append: boolean) => {
+      if (!query.trim() || !languageId || !data.query.available) return;
       controller.current?.abort();
-      const nextController = new AbortController();
-      controller.current = nextController;
+      const next = new AbortController();
+      controller.current = next;
       setBusy(true);
       setError("");
-      setNotice("");
-      setSearched(false);
-      if (updateUrl) {
-        setParams({
-          type: kind,
-          q: query.trim(),
-          language: languageId,
-          target: targetLanguage,
-          direction,
-          ...(corpusId && {corpus: corpusId}),
-          ...(kind === "sentences" && dialectFilter && {dialect: dialectFilter}),
-          ...(kind === "sentences" && requiredTiers.length && {tiers: requiredTiers.join(",")}),
-          ...(kind === "sentences" && resultSort !== "source" && {sort: resultSort}),
-          mode,
-        });
-      }
       try {
-        const result = await searchRecords(
-          shards,
-          query,
-          mode,
-          nextController.signal,
-          limit,
-          indexes,
-          targetLanguage,
-          kind === "dictionary" ? "any" : "sentence",
-          kind === "sentences"
-            ? (record) =>
-                (!dialectFilter || (record.dialect || "unknown") === dialectFilter) &&
-                requiredTiers.every((tier) => recordHasTier(record, tier))
-            : undefined,
+        const options = {
+          q: query.trim(),
+          languageId,
+          corpusId,
+          dialect: kind === "sentences" ? dialect : "",
           direction,
-        );
-        setRecords(sortResultRecords(result.records, resultSort));
-        setScanned(result.scanned);
-        setMatches(result.matches);
-        setTruncated(result.truncated);
-        setVisibleLimit(limit);
+          translationLanguage: targetLanguage,
+          match,
+          requirements: kind === "sentences" ? requirements : [],
+          limit: 25,
+          cursor: append ? cursor : null,
+        };
+        if (kind === "dictionary") {
+          const result = await dictionary(data.meta.release_id, options, next.signal);
+          setDictionaryEntries((current) => append ? [...current, ...result.items] : result.items);
+          setCursor(result.next_cursor);
+        } else {
+          const result = await concordance(data.meta.release_id, options, next.signal);
+          setSentences((current) => append ? [...current, ...result.items] : result.items);
+          setCursor(result.next_cursor);
+        }
         setSearched(true);
+        if (!append) {
+          setParams({
+            type: kind,
+            q: query.trim(),
+            language: languageId,
+            direction,
+            mode: match,
+            ...(targetLanguage && {target: targetLanguage}),
+            ...(corpusId && {corpus: corpusId}),
+            ...(dialect && {dialect}),
+          });
+        }
       } catch (cause) {
-        if (cause instanceof DOMException && cause.name === "AbortError") return;
-        setError(cause instanceof Error ? cause.message : String(cause));
+        if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
       } finally {
-        if (controller.current === nextController) setBusy(false);
+        if (controller.current === next) setBusy(false);
       }
     },
     [
-      corpusId,
-      dialectFilter,
-      direction,
-      indexes,
-      kind,
-      languageId,
-      mode,
-      query,
-      requiredTiers,
-      resultSort,
-      setBusy,
-      setError,
-      setMatches,
-      setNotice,
-      setParams,
-      setRecords,
-      setScanned,
-      setSearched,
-      setTruncated,
-      setVisibleLimit,
-      shards,
-      targetLanguage,
+      corpusId, cursor, data.meta.release_id, data.query.available, dialect, direction,
+      kind, languageId, match, query, requirements, setParams, targetLanguage,
     ],
   );
 
-  useEffect(() => {
-    if (!hasInitialQuery.current || initialStarted.current || !targetLanguage) return;
-    const timer = window.setTimeout(() => {
-      initialStarted.current = true;
-      void performSearch(initialLimit, false);
-    });
-    return () => window.clearTimeout(timer);
-  }, [initialLimit, performSearch, targetLanguage]);
-
-  useEffect(() => {
-    const recordId = params.get("record");
-    if (!searched || !recordId) return;
-    document.getElementById(`record-${recordId}`)?.scrollIntoView({block: "center"});
-  }, [params, searched, records]);
-
-  function runSearch(event: FormEvent) {
+  function submit(event: FormEvent) {
     event.preventDefault();
-    void performSearch(initialLimit, true);
+    void run(false);
   }
 
-  function clearSearch() {
-    controller.current?.abort();
-    setQuery("");
-    setRecords([]);
-    setScanned(0);
-    setMatches(0);
-    setTruncated(false);
-    setVisibleLimit(initialLimit);
-    setSearched(false);
-    setBusy(false);
-    setError("");
-    setNotice("");
-    setParams({type: kind});
+  async function saveDictionary(entry: DictionaryEntry) {
+    try {
+      await saveCard(cardFromDictionaryEntry(entry, data.meta.release_id, targetLanguage));
+      setNotice(tx(`${entry.display_form} saved.`, `已儲存「${entry.display_form}」。`));
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : String(cause));
+    }
   }
 
-  async function addSentence(record: SearchRecord) {
+  async function saveSentence(record: SearchRecord) {
     try {
       await saveCard(cardFromRecord(record, data.meta.release_id, targetLanguage));
       setNotice(tx("Sentence saved.", "已儲存句子。"));
@@ -305,338 +176,114 @@ export function SearchTool({
     }
   }
 
-  async function addWord(record: SearchRecord, front: string, meanings: string[]) {
-    try {
-      await saveCard(
-        cardFromDictionary(
-          record,
-          data.meta.release_id,
-          front,
-          meanings,
-          targetLanguage,
-        ),
-      );
-      setNotice(tx(`${front} saved.`, `已儲存「${front}」。`));
-    } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
-  const resultLabel = kind === "dictionary"
-    ? tx("matching corpus records", "筆相符語料記錄")
-    : tx(matches === 1 ? "sentence" : "sentences", "句子");
-
+  const resultCount = kind === "dictionary" ? dictionaryEntries.length : sentences.length;
   return (
     <section className={`search-tool search-tool--${kind} ${learner ? "search-tool--learner" : ""}`}>
-      <form className="search-form" onSubmit={runSearch}>
+      {!data.query.available && (
+        <div className="callout callout--error">
+          <p>{tx("Corpus search is temporarily unavailable.", "語料搜尋暫時無法使用。")}</p>
+          <Diagnostics releaseId={data.meta.release_id} error={new Error(data.query.error)} />
+        </div>
+      )}
+      <form className="search-form" onSubmit={submit}>
         <fieldset className="lookup-direction">
           <legend>{tx("Search in", "搜尋語言")}</legend>
           <div className="lookup-direction__options">
-            {([
-              {
-                value: "formosan" as const,
-                label: selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語"),
-                detail: tx("Formosan text", "臺灣南島語文本"),
-              },
-              {
-                value: "translation" as const,
-                label: targetLanguageLabel,
-                detail: tx("Translations and meanings", "翻譯與釋義"),
-              },
-            ]).map((option) => (
-              <label key={option.value}>
-                <input
-                  type="radio"
-                  name={`direction-${kind}-${learner ? "learn" : "research"}`}
-                  value={option.value}
-                  checked={direction === option.value}
-                  disabled={option.value === "translation" && !targetLanguage}
-                  onChange={() => {
-                    setDirection(option.value);
-                    if (!modesFor(kind, option.value).includes(mode)) setMode("exact");
-                    setRecords([]);
-                    setSearched(false);
-                  }}
-                />
-                <span>
-                  <strong>{option.label}</strong>
-                  <small>{option.detail}</small>
-                </span>
-              </label>
-            ))}
+            <label>
+              <input type="radio" checked={direction === "formosan"} onChange={() => setDirection("formosan")} />
+              <span><strong>{selectedLanguage ? languageName(selectedLanguage) : "Formosan"}</strong></span>
+            </label>
+            <label>
+              <input type="radio" checked={direction === "translation"} onChange={() => setDirection("translation")} />
+              <span><strong>{tx("Translation", "翻譯")}</strong></span>
+            </label>
           </div>
         </fieldset>
         <div className="field field--query">
-          <label htmlFor={`query-${kind}-${learner ? "learn" : "research"}`}>
-            {direction === "formosan"
-              ? kind === "dictionary"
-                ? tx(`Word in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage ? languageName(selectedLanguage) : "臺灣南島語"}單詞`)
-                : tx(`Word or phrase in ${selectedLanguage?.name ?? "Formosan"}`, `${selectedLanguage ? languageName(selectedLanguage) : "臺灣南島語"}單詞或片語`)
-              : kind === "dictionary"
-                ? tx(`Meaning in ${targetLanguageLabel}`, `${targetLanguageLabel}釋義`)
-                : tx(`Word or phrase in ${targetLanguageLabel}`, `${targetLanguageLabel}單詞或片語`)}
-          </label>
-          <input
-            id={`query-${kind}-${learner ? "learn" : "research"}`}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            autoComplete="off"
-            placeholder={direction === "formosan"
-              ? kind === "dictionary" ? "fangcalay" : tx("word in a Formosan sentence", "臺灣南島語句中的單詞")
-              : kind === "dictionary" ? tx("good", "美麗") : tx("word in a translation", "翻譯句中的單詞")}
-          />
+          <label htmlFor={`query-${kind}`}>{kind === "dictionary" ? tx("Word or meaning", "單詞或釋義") : tx("Word or phrase", "單詞或片語")}</label>
+          <input id={`query-${kind}`} value={query} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
         </div>
-        <div className="field">
-          <label htmlFor={`language-${kind}-${learner ? "learn" : "research"}`}>
-            {tx("Formosan language", "臺灣南島語")}
-          </label>
-          <select
-            id={`language-${kind}-${learner ? "learn" : "research"}`}
-            value={languageId}
-            onChange={(event) => {
-              setLanguageId(event.target.value);
-              setCorpusId("");
-              onLanguageChange?.(event.target.value);
-            }}
-          >
-            {data.languages.map((language) => (
-              <option key={language.id} value={language.id}>{languageName(language)}</option>
-            ))}
+        <label className="field">
+          {tx("Formosan language", "臺灣南島語")}
+          <select value={languageId} onChange={(event) => {
+            setLanguageId(event.target.value);
+            setCorpusId("");
+            onLanguageChange?.(event.target.value);
+          }}>
+            {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
           </select>
-        </div>
-        <div className="field">
-          <label htmlFor={`target-${kind}-${learner ? "learn" : "research"}`}>
-            {tx("Translation", "翻譯語言")}
-          </label>
-          <select
-            id={`target-${kind}-${learner ? "learn" : "research"}`}
-            value={targetLanguage}
-            onChange={(event) => setSelectedTarget(event.target.value)}
-          >
-            {targets.map((target) => (
-              <option key={target.xml_lang} value={target.xml_lang}>
-                {translationLanguageName(target.xml_lang, locale)} ({number(target.records)})
-              </option>
-            ))}
+        </label>
+        <label className="field">
+          {tx("Translation", "翻譯語言")}
+          <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}>
+            {targets.map((target) => <option key={target.xml_lang} value={target.xml_lang}>{translationLanguageName(target.xml_lang, locale)} ({number(target.records)})</option>)}
           </select>
-        </div>
+        </label>
         <div className="search-form__actions">
-          <button
-            className="button button--primary"
-            disabled={busy || !languageId || !targetLanguage || !query.trim()}
-          >
+          <button className="button button--primary" disabled={busy || !query.trim() || !data.query.available}>
             {busy ? tx("Searching…", "搜尋中…") : t("search.submit")}
           </button>
-          {(query || searched || records.length > 0) && (
-            <button className="button button--quiet" type="button" onClick={clearSearch}>
-              {tx("Clear", "清除")}
-            </button>
-          )}
         </div>
         <details className="lookup-options">
           <summary>{tx("Search options", "搜尋選項")}</summary>
           <div className="lookup-options__grid">
             <label className="field">
-              {t("search.corpus")}
+              {tx("Corpus", "語料庫")}
               <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
                 <option value="">{tx("All corpora", "所有語料庫")}</option>
-                {relevantCorpora.map((corpus) => (
-                  <option key={corpus.id} value={corpus.id}>{corpus.name}</option>
-                ))}
+                {relevantCorpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}
               </select>
             </label>
             <fieldset className="mode-picker">
-              <legend>{t("search.mode")}</legend>
-              {modes.map((value) => (
-                <label key={value}>
-                  <input
-                    type="radio"
-                    name={`mode-${kind}-${learner ? "learn" : "research"}`}
-                    checked={mode === value}
-                    onChange={() => setMode(value)}
-                  />
-                  <span>{t(`search.${value}`)}</span>
-                </label>
-              ))}
+              <legend>{tx("Match", "比對方式")}</legend>
+              {MATCH_MODES.map((value) => <label key={value}><input type="radio" checked={match === value} onChange={() => setMatch(value)} /><span>{t(`search.${value}`)}</span></label>)}
             </fieldset>
-            {kind === "sentences" && (
-              <SearchFilters
-                dialects={selectedLanguage?.dialects ?? []}
-                dialectFilter={dialectFilter}
-                hasFilters={hasResultFilters}
-                onDialectChange={setDialectFilter}
-                onReset={() => {
-                  setDialectFilter("");
-                  setRequiredTiers([]);
-                  setResultSort("source");
-                }}
-                onSortChange={setResultSort}
-                onTiersChange={setRequiredTiers}
-                requiredTiers={requiredTiers}
-                resultSort={resultSort}
-              />
+            {kind === "sentences" && selectedLanguage && (
+              <>
+                <label className="field">
+                  {tx("Dialect", "方言")}
+                  <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
+                    <option value="">{tx("All dialects", "所有方言")}</option>
+                    {selectedLanguage.dialects.map((value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </label>
+                <fieldset className="filter-checks">
+                  <legend>{tx("Require tiers", "必須包含")}</legend>
+                  {REQUIREMENTS.map((value) => <label key={value}><input type="checkbox" checked={requirements.includes(value)} onChange={() => setRequirements((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />{value}</label>)}
+                </fieldset>
+              </>
             )}
           </div>
         </details>
       </form>
 
-      {targets.length === 0 && (
-        <p className="callout callout--warning">
-          {tx("No translated records are available for this scope.", "此範圍沒有可用的翻譯記錄。")}
-        </p>
-      )}
-      {languageId && shards.length === 0 && (
-        <p className="callout callout--warning">
-          {tx("No browser search data is available for this scope.", "此範圍沒有瀏覽器搜尋資料。")}
-        </p>
-      )}
-      {error && (
-        <div className="callout callout--error">
-          <p>{error}</p>
-          <Diagnostics releaseId={data.meta.release_id} error={new Error(error)} />
-        </div>
-      )}
-      {notice && (
-        <div className="search-notice" role="status">
-          <span>{notice}</span>
-          <button
-            type="button"
-            aria-label={tx("Dismiss message", "關閉訊息")}
-            onClick={() => setNotice("")}
-          >
-            {tx("Close", "關閉")}
-          </button>
-        </div>
-      )}
-
-      {(records.length > 0 || (!busy && searched)) && (
-        <div className="results-heading" aria-live="polite">
-          <dl className="result-summary">
-            <div>
-              <dt>{tx("Matches", "相符結果")}</dt>
-              <dd><strong>{number(matches)}</strong> {resultLabel}</dd>
-            </div>
-            <div>
-              <dt>{tx("Displayed", "目前顯示")}</dt>
-              <dd>{number(records.length)}</dd>
-            </div>
-            <div>
-              <dt>{tx("Records searched", "已搜尋記錄")}</dt>
-              <dd>{number(scanned)}</dd>
-            </div>
-          </dl>
-          {kind === "sentences" && !learner && records.length > 0 && (
-            <div className="result-export">
-              <label>
-                {tx("Export", "匯出")}
-                <select
-                  value={exportFormat}
-                  onChange={(event) => setExportFormat(event.target.value as ExportFormat)}
-                >
-                  <option value="csv">CSV</option>
-                  <option value="tsv">TSV</option>
-                  <option value="json">JSON</option>
-                  <option value="jsonl">JSON Lines</option>
-                  <option value="parquet">Parquet</option>
-                  <option value="plain">{tx("Plain text", "純文字")}</option>
-                  <option value="interlinear">{tx("Interlinear text", "逐行對譯文字")}</option>
-                  <option value="audio">{tx("Audio references", "音訊參照")}</option>
-                  <option value="recipe">{tx("Reproducible recipe", "可重現操作配方")}</option>
-                </select>
-              </label>
-              <button
-                className="button button--quiet"
-                disabled={exporting || (exportBlocked && exportFormat !== "recipe")}
-                onClick={async () => {
-                  setExporting(true);
-                  setError("");
-                  try {
-                    await downloadExport(
-                      records,
-                      {
-                        releaseId: data.meta.release_id,
-                        query: query.trim(),
-                        mode,
-                        direction,
-                        targetLanguage,
-                        languageId,
-                        corpusId,
-                      },
-                      exportFormat,
-                    );
-                  } catch (cause) {
-                    setError(cause instanceof Error ? cause.message : String(cause));
-                  } finally {
-                    setExporting(false);
-                  }
-                }}
-              >
-                {exporting ? tx("Preparing…", "準備中…") : tx("Download shown", "下載目前結果")}
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {exportBlocked && kind === "sentences" && records.length > 0 && (
-        <p className="callout callout--warning">
-          {tx("This selection includes a corpus with restricted redistribution.", "此選取範圍包含限制再散布的語料庫。")}
-        </p>
-      )}
-      {!busy && searched && records.length === 0 && <div className="empty-state">{t("search.noResults")}</div>}
+      {error && <p className="callout callout--error">{error}</p>}
+      {notice && <p className="search-notice" role="status">{notice}</p>}
+      {searched && <p className="result-count" aria-live="polite">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
+      {!busy && searched && resultCount === 0 && <div className="empty-state">{t("search.noResults")}</div>}
 
       {kind === "dictionary" ? (
-        <CandidateGroups
-          data={data}
-          records={records}
-          query={query}
-          mode={mode}
-          direction={direction}
-          targetLanguage={targetLanguage}
-          corpusId={corpusId}
-          onSave={(record, front, meanings) => void addWord(record, front, meanings)}
-        />
+        <CandidateGroups data={data} entries={dictionaryEntries} targetLanguage={targetLanguage} corpusId={corpusId} onSave={(entry) => void saveDictionary(entry)} />
       ) : (
         <div className="result-list">
-          {records.map((record) => (
+          {sentences.map((summary) => (
             <SearchResultCard
               data={data}
-              key={record.id}
-              record={record}
+              key={summary.id}
+              summary={summary}
               query={query}
-              mode={mode}
+              mode={match}
               direction={direction}
               targetLanguage={targetLanguage}
               learner={learner}
-              onSave={(value) => void addSentence(value)}
+              onSave={(record) => void saveSentence(record)}
               onNotice={setNotice}
-              {...(onPractice && {
-                onPractice: (value: SearchRecord) => onPractice(value, targetLanguage),
-              })}
+              {...(onPractice ? {onPractice: (record: SearchRecord) => onPractice(record, targetLanguage)} : {})}
             />
           ))}
         </div>
       )}
-
-      {truncated && (
-        <div className="pagination-actions">
-          <p>{tx("More matches are available.", "還有更多相符結果。")}</p>
-          {visibleLimit < 2_000 && (
-            <button
-              className="button button--quiet"
-              disabled={busy}
-              onClick={() =>
-                void performSearch(
-                  Math.min(visibleLimit + (kind === "dictionary" ? 200 : 25), 2_000),
-                  false,
-                )
-              }
-            >
-              {tx("Load more", "載入更多")}
-            </button>
-          )}
-        </div>
-      )}
+      {cursor && <div className="pagination-actions"><button className="button button--quiet" disabled={busy} onClick={() => void run(true)}>{tx("Load more", "載入更多")}</button></div>}
     </section>
   );
 }

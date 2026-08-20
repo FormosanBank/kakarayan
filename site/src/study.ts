@@ -1,4 +1,4 @@
-import type {SearchRecord} from "./types";
+import type {DictionaryEntry, SearchRecord} from "./types";
 
 export type Grade = "again" | "hard" | "good" | "easy";
 
@@ -186,6 +186,40 @@ export function cardFromDictionary(
     front: front.trim(),
     back,
     tags: [...new Set([...card.tags, "dictionary", targetLanguage].filter(Boolean))].sort(),
+  };
+}
+
+export function cardFromDictionaryEntry(
+  entry: DictionaryEntry,
+  releaseId: string,
+  targetLanguage: string,
+): StudyCard {
+  const front = entry.display_form.trim();
+  const back = [...new Set(entry.meanings.map((value) => value.trim()).filter(Boolean))].join(
+    " · ",
+  );
+  if (!front || !back) throw new Error("A dictionary card needs a headword and meaning");
+  const now = new Date().toISOString();
+  const example = entry.examples[0];
+  return {
+    id: crypto.randomUUID(),
+    deck: "Saved words",
+    front,
+    back,
+    languageId: entry.language_id,
+    tags: [...new Set([...entry.corpus_ids, "dictionary", targetLanguage].filter(Boolean))].sort(),
+    direction: "recognition",
+    audioReferences: [],
+    source: example
+      ? {releaseId, recordId: example.id, sourcePath: example.source_path}
+      : null,
+    createdAt: now,
+    updatedAt: now,
+    dueAt: now,
+    intervalDays: 0,
+    ease: 2.5,
+    repetitions: 0,
+    lapses: 0,
   };
 }
 

@@ -20,23 +20,32 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
+  const shellRequest =
+    request.mode === "navigate" ||
+    url.pathname.includes("/assets/") ||
+    /\/api\/v1\/[^/]+\.json$/u.test(url.pathname) ||
+    /\/(icon\.svg|manifest\.webmanifest|robots\.txt|sitemap\.xml)$/u.test(url.pathname);
+  if (!shellRequest) return;
+  const changesByRelease =
+    request.mode === "navigate" || /\/api\/v1\/[^/]+\.json$/u.test(url.pathname);
   event.respondWith(
-    fetch(request)
-      .then((response) => {
+    caches.match(request).then(async (cached) => {
+      if (cached && !changesByRelease) return cached;
+      try {
+        const response = await fetch(request);
         if (response.ok) {
           const copy = response.clone();
           void caches.open(cacheName).then((cache) => cache.put(request, copy));
         }
         return response;
-      })
-      .catch(async () => {
-        const cached = await caches.match(request);
+      } catch {
         if (cached) return cached;
         if (request.mode === "navigate") {
           const shell = await caches.match("./");
           if (shell) return shell;
         }
-        throw new Error("Offline resource is not cached");
-      }),
+        throw new Error("Offline shell resource is not cached");
+      }
+    }),
   );
 });

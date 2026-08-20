@@ -322,10 +322,18 @@
     grid-template-columns: 1fr;
   }
 
+  .builder__summary {
+    position: static;
+    padding: 24px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
   .builder__scope-options,
   .builder__filters,
   .builder__schema dl,
-  .dataset-fields {
+  .dataset-fields,
+  .field-check-grid {
     grid-template-columns: 1fr;
   }
 
@@ -415,6 +423,10 @@
   .lookup-direction__options label + label {
     border-top: 1px solid var(--line-strong);
     border-left: 0;
+  }
+
+  .builder__requirements {
+    grid-template-columns: 1fr;
   }
 
   .button-row,

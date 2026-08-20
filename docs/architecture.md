@@ -1,198 +1,138 @@
 # Architecture
 
-## Decision summary
+Kakarayan v1 is a modular monolith with three parts:
 
-Kakarayan uses a static-first architecture because the public corpus, catalogue, and common
-learner workflows do not require a mutable server. GitHub Pages provides the application
-shell, versioned metadata, and compressed search shards. GitHub Releases hold large research
-packages. A no-cost Hugging Face Docker Space may expose a read-only API over the same
-release, but it is never required for core use.
+- `site/`: the React interface and browser-local learning state.
+- `api/`: one required public, read-only query application.
+- `publisher/`: one deterministic projection from FormosanBank XML to immutable releases.
 
-This design gives the project:
-
-- No required hosting bill.
-- No accounts, server sessions, or server-side study records.
-- A reproducible relationship between a public source commit and every derived file.
-- A usable fallback when Hugging Face services sleep or fail.
-- A narrow security boundary for the optional API.
-
-## Trust and source boundaries
-
-The canonical input allowlist is public FormosanBank material:
-
-- `Corpora/<Corpus>/XML/**/*.xml`
-- `dialects.csv`
-- Reviewed public orthography conversion tables
-- Public repository terms and notices
-- Public Hugging Face organization metadata when explicitly refreshed
-
-The publisher rejects a dirty checkout, a non-FormosanBank origin, a commit mismatch,
-symlinked XML, malformed XML, entity expansion, and network access from XML parsing. Private
-repositories and private training data are outside the build boundary.
-
-Kakarayan does not write back to FormosanBank. It does not reconstruct archival XML from
-normalized tables. Canonical XML packages contain the exact public source bytes and paths.
+FormosanBank XML remains canonical. The query database, static metadata, and downloads are
+derived artifacts that can be rebuilt from a pinned source commit.
 
 ## Data flow
 
 ```text
-public FormosanBank commit
-          |
-          v
-safe XML projection and reviewed metadata
-          |
-          +--> normalized SQLite and relational tables
-          +--> compressed browser search shards
-          +--> static API catalogues
-          +--> prepared linguistic packages
-          +--> rights, checksums, and release manifests
-                         |
-              +----------+-----------+
-              |                      |
-              v                      v
-      GitHub Pages site       GitHub data release
-                                      |
-                                      v
-                         optional read-only API Space
+clean FormosanBank checkout at one commit
+  -> publisher validates XML, paths, rights, and source identity
+  -> publisher builds one normalized SQLite read model
+  -> publisher derives small static catalogues and prepared downloads
+  -> publisher records checksums, citations, rights, and release identity
+
+browser
+  -> Pages serves the React shell and small static catalogues
+  -> query API returns bounded summaries, details, previews, and exports
+  -> GitHub Releases serves prepared research downloads
+  -> named Hugging Face services receive MT or ASR input only after consent
 ```
 
-Each build records the 40-character FormosanBank commit, a release ID derived from that
-commit and its timestamp, artifact sizes, SHA-256 values, rights IDs, and format summaries.
+The browser never downloads a corpus-wide index or scans the corpus. A lookup sends a small
+request to the query application, receives at most one bounded result page, and requests a
+full nested sentence only when the user expands it.
 
-## Static application
+## Release identity
 
-The application is React 19, strict TypeScript, and Vite. It uses a small internal hash
-router so all routes work at the GitHub Pages project path without rewrite rules.
+Every release has an ID derived from its FormosanBank source commit. Its manifest records:
 
-The application loads the release metadata and catalogue files together. It refuses to show
-a partial release when release IDs disagree. Search shards load only after the user chooses
-a language and optional corpus. Shards are capped at 1,000 records and are gzip-compressed.
-Both compressed and uncompressed SHA-256 values are recorded because web hosts differ in
-whether they transparently decode `.gz` responses.
+- the exact FormosanBank commit;
+- the Kakarayan commit that produced it;
+- schema version and counts;
+- every artifact path, size, SHA-256, media type, and rights scope;
+- compressed and expanded identity for the query database.
 
-Common exact, prefix, translation, phonology, and gloss searches use these scoped shards.
-Fuzzy work is bounded by a documented Unicode edit distance and record cap. User patterns
-compile through RE2JS, a non-backtracking engine, only after language and corpus scope
-limits are checked. The browser never evaluates a pattern as JavaScript.
+The site requires all static envelopes to agree on release ID, source commit, and Kakarayan
+commit. It then checks `/readyz` and enables interactive queries only when the API serves the
+same release. Static documentation, catalogues, downloads, and local cards remain usable if
+the query service is unavailable. A static or API release mismatch fails closed.
 
-Each language and corpus scope has a checksummed vocabulary index for source-exact,
-normalized source, translation, phonology, gloss, and RE2 candidate selection. Postings
-name deterministic shard parts. Common queries scan the compact vocabulary and download
-only candidate record shards, then recheck every record before display. An empty posting
-set produces an immediate empty result without downloading sentence records.
+## React boundary
 
-The dataset builder preflights shard transfer and decoded size before reading data. It caps
-rows, refuses unsafe scopes, and preserves deterministic source order. Linguistic summaries
-run in a dedicated Worker and cap the record count. DuckDB-Wasm is a separate lazy chunk
-used only for bounded Parquet export, so the initial route does not load its 39 MiB
-single-threaded module. None of these paths requires cross-origin isolation or a backend.
+The client owns routing, bilingual presentation, form state, request cancellation, local
+cards, recordings, and explicit model-service consent. It reads small versioned catalogues
+from `api/v1/*.json` and the query routes documented in [api.md](api.md).
 
-The service worker is additive. Network access remains authoritative, successful responses
-are cached, and the shell may be used offline after a prior visit. Failure to register the
-service worker does not prevent normal use.
+The client does not own search normalization, corpus-scale matching, record counting,
+full-corpus projection, or unbounded export. Its service worker caches only the application
+shell and small same-origin metadata. Query responses, audio, model calls, and downloads are
+not added to the offline cache.
 
-The Guide route frames the published FormosanBank GitBook only from its canonical HTTPS
-origin. Kakarayan keeps a reviewed list of guide and corpus paths, but does not scrape,
-cache, translate, or treat GitBook prose as release-pinned corpus data. The live GitBook is
-currently English; Traditional Chinese Kakarayan controls label that fallback explicitly.
-GitBook permits framing from HTTPS parents, so GitHub Pages shows the reader while local
-HTTP previews show a direct-link fallback. The content security policy allows frames only
-from the canonical GitBook host.
+Study cards live in IndexedDB. Recordings live in page memory until the user downloads them,
+discards them, or explicitly submits them to the named ASR provider.
 
-## Browser storage
+## Query application boundary
 
-IndexedDB stores saved study cards and review state. Recordings remain in the active tab
-unless the user downloads them. Preferences use browser-local state. Kakarayan has no
-synchronization account and no analytics endpoint.
+The FastAPI process serves one already activated SQLite database. Routes call one concrete
+`CorpusStore`; there is no second query engine, queue, account system, write API, or generic
+storage layer.
 
-Backups are explicit JSON downloads. Imports validate their version and contents. Anki TSV
-and tabular exports protect formula-like leading characters before opening in spreadsheet
-software.
+The API owns:
 
-## Publisher
+- bidirectional dictionary and sentence search;
+- exact, prefix, and contains matching under one normalization contract;
+- corpus, dialect, translation-language, audio, and tier filters;
+- stable keyset cursors;
+- small result summaries and on-demand record detail;
+- frequency and summary queries;
+- bounded previews and finite CSV, TSV, or JSON Lines exports;
+- health, readiness, release identity, and privacy-preserving operational records.
 
-The publisher uses a normalized SQLite database as its internal read model. It streams CSV
-and JSON Lines during XML projection, creates search and prepared formats from the immutable
-database, packages large directories as soon as they are complete, and removes transient
-files to bound disk use.
+Successful release-scoped GET responses are public and immutable. Validation and readiness
+responses are not cached. Query length, page size, SQLite work, export rows, and export bytes
+are bounded.
 
-Stable IDs combine source scope and source identity instead of trusting XML-local IDs to be
-globally unique. The normalized model preserves:
+## Activation boundary
 
-- Corpus, source path, local XML ID, and ordinal.
-- Text, sentence, word, and morpheme containment.
-- Repeated FORM, PHON, TRANSL, and AUDIO tiers in source order.
-- Original and standard form labels.
-- Raw attribute maps and inline mixed-content structure.
-- Raw and parsed timing, duration, and availability.
-- Corpus, language, dialect, source, citation, and copyright context.
+`api.prepare_release` performs deployment work before the server starts:
 
-Release verification checks the schema, exact file set, every size and checksum, SQLite
-integrity, gzip integrity, uncompressed shard checksums, and shard record counts.
+1. Read a local or HTTPS manifest.
+2. Select exactly one SQLite artifact.
+3. Enforce download and expansion limits.
+4. Verify compressed and expanded checksums and sizes.
+5. Run SQLite integrity verification.
+6. Atomically replace the active database and manifest.
 
-## Large-file split
+Runtime startup performs no network access, decompression, or full integrity scan. It opens
+the database as immutable and read-only, checks required tables and embedded release
+metadata, and becomes ready only when database and manifest identities agree.
 
-GitHub Pages receives only:
+Rollback redeploys and activates a prior immutable release. A crash between atomic file
+replacements leaves readiness false rather than serving mixed data.
 
-- The application shell and assets.
-- Static JSON catalogues.
-- The compressed search shards.
+## Publisher boundary
 
-It does not receive SQLite, normalized bulk tables, canonical XML archives, or prepared
-linguistic packages. The project budget is 900 MiB total and 50 MiB per file.
+The publisher validates a clean public checkout, parses source XML once, creates canonical
+search columns, builds the SQLite read model, and derives static metadata and prepared
+downloads. It also owns rights filtering, citations, deterministic archives, manifests, and
+checksums.
 
-GitHub Releases receive approved bulk packages and the SQLite snapshot. The generated
-public catalogue points to ten curated whole-release `data-<release-id>` assets; granular
-language and corpus selections are handled by the browser dataset builder.
+There is one full publication command and one invented-data fixture command. Publication
+does not build a browser search engine or a second source projection.
 
-The data workflow builds research exports and browser search data in parallel from one
-resolved FormosanBank commit and one captured model catalogue. The browser output is stored
-as a deterministic, checksummed `site-release.tar` asset inside the immutable data release.
-Pages verifies and extracts that bundle instead of parsing the full corpus again. This also
-lets application-only deployments reuse an existing data release while preserving the
-source and producer revisions recorded inside its manifest.
+## External services
 
-The indexed full-corpus rehearsal for public FormosanBank commit
-`40fd519cd82295bd7824e207990d277b871ad47f` produced about 319 MiB of Pages data across
-642 files. Its largest compressed shard was about 23.2 MiB and its largest vocabulary index
-was about 17.6 MiB. The build finished in 6 minutes 30 seconds with 2.63 GiB peak memory.
-These measurements are evidence for the current data shape, not permanent limits or
-performance guarantees.
+- GitHub Pages serves the application and static metadata.
+- GitHub Releases serves immutable prepared downloads and the compressed query read model.
+- A public Docker deployment, currently the Tokyo Lightsail proof of concept, serves the
+  query API.
+- Hugging Face model services provide optional MT and ASR.
+- The FormosanBank GitBook remains the maintained long-form documentation source embedded
+  by the Docs route.
 
-## Optional live API
+These boundaries are independent. Model failure cannot affect corpus lookup. Query failure
+cannot remove static catalogues, prepared downloads, documentation, or local study cards.
 
-The FastAPI service reads one immutable SQLite snapshot. Startup requires a local or HTTPS
-manifest, validates the named database size and SHA-256, runs SQLite integrity checks, and
-opens the database in immutable read-only mode.
+## Repository entry points
 
-The service exposes fixed query templates only. It has no write routes, arbitrary SQL,
-regular expressions, user-provided remote URLs, or uploads. Query lengths, page sizes,
-cursors, SQLite steps, CORS origins, and download size are bounded.
+| Responsibility | Entry point |
+| --- | --- |
+| Site | `site/src/main.tsx`, `site/src/App.tsx` |
+| API | `api/app.py` |
+| Query store | `api/store.py` |
+| Release activation | `api/prepare_release.py` |
+| Publication | `publisher/cli.py`, `publisher/build.py` |
+| Fixture publication | `publisher/fixture_cli.py` |
+| Release verification | `publisher/verify_release.py` |
+| Static metadata extraction | `publisher/extract_metadata.py` |
+| Pages assembly | `publisher/assemble_site.py` |
 
-Health does not imply readiness. `/healthz` confirms the process is alive; `/readyz`
-confirms a verified release is available.
-
-## Preserved Django application
-
-The earlier Django/PostgreSQL application stays under `corpus/` and `config/`. It remains a
-useful server-backed dictionary implementation and tests established normalization and
-search behavior. The public Pages architecture does not depend on it, and the publisher
-does not treat its relational model as an archival representation.
-
-CI runs the legacy suite with PostgreSQL 16 to prevent regressions.
-
-## Key design decisions
-
-1. Canonical XML remains authoritative.
-2. Static access is the core contract; the live API is a convenience.
-3. The canonical public repository is the approved noncommercial publication source set.
-4. Explicit stricter corpus overrides fail closed when unreviewed or restricted.
-5. Original and standardized forms never overwrite each other.
-6. Display language identity is not keyed by ISO code alone.
-7. Browser exports are bounded selections; large formats are prepared offline.
-8. Local learning state stays local unless a user explicitly downloads a backup.
-9. Model calls go directly from the browser to the named provider after consent.
-10. Pull requests can validate but cannot deploy.
-11. Descriptive summaries never become claims about speakers or grammaticality.
-12. Reviewed learning content fails closed when authorship, review, citation, or rights
-    metadata is absent.
+Configuration and operational steps are in [publication.md](publication.md). Search meaning
+is normative in [search-semantics.md](search-semantics.md).

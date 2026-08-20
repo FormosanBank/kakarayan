@@ -20,7 +20,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
 from publisher import SCHEMA_VERSION
-from publisher.archive import directory_entries, write_zip
+from publisher.archive import directory_entries, repack_zip, write_zip
 from publisher.release_db import open_release
 from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS
 
@@ -426,19 +426,12 @@ def write_xlsx(
                 worksheet.append(columns)
     workbook.save(raw)
     with zipfile.ZipFile(raw) as source:
-
-        def normalized_entries() -> Iterator[tuple[str, bytes]]:
-            for name in source.namelist():
-                data = source.read(name)
-                if name == "docProps/core.xml":
-                    data = re.sub(
-                        rb"(<dcterms:modified[^>]*>).*?(</dcterms:modified>)",
-                        rb"\g<1>1980-01-01T00:00:00Z\g<2>",
-                        data,
-                    )
-                yield name, data
-
-        write_zip(path, normalized_entries())
+        core = re.sub(
+            rb"(<dcterms:modified[^>]*>).*?(</dcterms:modified>)",
+            rb"\g<1>1980-01-01T00:00:00Z\g<2>",
+            source.read("docProps/core.xml"),
+        )
+    repack_zip(path, raw, replacements={"docProps/core.xml": core})
     raw.unlink()
 
 

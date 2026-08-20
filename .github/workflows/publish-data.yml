@@ -63,7 +63,7 @@ jobs:
           echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "Resolved FormosanBank $SOURCE_REF to $SOURCE_COMMIT"
 
-      - name: Capture one public model catalogue for both builds
+      - name: Capture one public model catalogue
         run: |
           mkdir -p build/publication-inputs
           python - <<'PY'
@@ -95,10 +95,10 @@ jobs:
           if-no-files-found: error
 
   build:
-    name: Build every research format
+    name: Build and verify one complete release
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 240
     permissions:
       contents: read
     outputs:
@@ -111,7 +111,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Require an approved software license for a real publication
+      - name: Require an approved software license for publication
         if: ${{ !inputs.dry_run }}
         run: |
           if [[ ! -f LICENSE && ! -f LICENSE.md ]]; then
@@ -149,18 +149,45 @@ jobs:
           uv run ruff check publisher
           uv run mypy publisher
 
-      - name: Build and verify every research format
+      - name: Build and verify the immutable publication
         run: |
           uv run python -m publisher.cli \
             --repo build/formosanbank \
             --output build/data-release \
             --source-commit "$SOURCE_COMMIT" \
+            --kakarayan-commit "$GITHUB_SHA" \
             --model-catalog build/publication-inputs/models.json \
             --compress-database \
             --release-only
           uv run python -m publisher.verify_release \
             --release build/data-release \
             --max-artifact-mib 2048
+
+      - name: Reproduce the complete publication
+        run: |
+          cp build/data-release/release-manifest.json \
+            "$RUNNER_TEMP/first-release-manifest.json"
+          rm -r -- build/data-release
+          uv run python -m publisher.cli \
+            --repo build/formosanbank \
+            --output build/data-release \
+            --source-commit "$SOURCE_COMMIT" \
+            --kakarayan-commit "$GITHUB_SHA" \
+            --model-catalog build/publication-inputs/models.json \
+            --compress-database \
+            --release-only
+          cmp "$RUNNER_TEMP/first-release-manifest.json" \
+            build/data-release/release-manifest.json
+          uv run python -m publisher.verify_release \
+            --release build/data-release \
+            --max-artifact-mib 2048
+
+      - name: Reconcile complete prepared formats
+        run: |
+          uv run python -m publisher.reconcile \
+            --release build/data-release \
+            --source-repo build/formosanbank \
+            | tee build/reconciliation.json
 
       - name: Record release ID
         id: release
@@ -169,105 +196,75 @@ jobs:
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Validated $RELEASE_ID from FormosanBank $SOURCE_COMMIT"
 
-      - name: Enforce research-format rights for a real publication
+      - name: Benchmark the complete query release
+        shell: bash
+        run: |
+          mkdir -p build/active-release
+          uv run python -m api.prepare_release \
+            --manifest build/data-release/release-manifest.json \
+            --database build/active-release/formosanbank.sqlite \
+            --activate build/active-release/release-manifest.json
+          KAKARAYAN_DB_PATH=build/active-release/formosanbank.sqlite \
+          KAKARAYAN_RELEASE_MANIFEST_PATH=build/active-release/release-manifest.json \
+            uv run uvicorn api.app:app \
+              --host 127.0.0.1 --port 8000 --no-access-log \
+              > "$RUNNER_TEMP/kakarayan-api.log" 2>&1 &
+          API_PID=$!
+          trap 'kill "$API_PID" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8000/readyz > /dev/null; then
+              break
+            fi
+            if ! kill -0 "$API_PID" 2>/dev/null; then
+              cat "$RUNNER_TEMP/kakarayan-api.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/readyz
+          uv run python -m api.benchmark \
+            --base-url http://127.0.0.1:8000 \
+            --cases tests/fixtures/query-benchmark.json \
+            --output build/query-benchmark.json \
+            --network-profile "GitHub Actions loopback, full release"
+          kill "$API_PID"
+          wait "$API_PID" || true
+          trap - EXIT
+          rm -r -- build/active-release build/formosanbank
+
+      - name: Preserve query benchmark evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: query-benchmark-${{ steps.release.outputs.release_id }}
+          path: |
+            build/query-benchmark.json
+            build/reconciliation.json
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Enforce publication rights
         if: ${{ !inputs.dry_run }}
         run: |
           uv run python -m publisher.verify_release \
             --release build/data-release \
             --max-artifact-mib 2048 \
+            --require-publishable-scope site-metadata \
             --require-publishable-scope release-core \
             --require-publishable-scope prepared-download
 
-      - name: Pack validated research output
+      - name: Pack validated release output
         if: ${{ !inputs.dry_run }}
-        run: tar -C build/data-release -cf build/data-release.tar .
+        run: |
+          tar -C build/data-release -cf build/data-release.tar .
+          rm -r -- build/data-release
 
-      - name: Transfer validated research output
+      - name: Transfer validated release output
         if: ${{ !inputs.dry_run }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: data-release-${{ steps.release.outputs.release_id }}
           path: build/data-release.tar
-          compression-level: 0
-          retention-days: 1
-          if-no-files-found: error
-
-  site:
-    name: Build browser search data
-    needs: prepare
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    permissions:
-      contents: read
-    outputs:
-      release_id: ${{ steps.release.outputs.release_id }}
-    env:
-      SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
-    steps:
-      - name: Check out Kakarayan
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.13"
-
-      - name: Set up uv
-        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
-        with:
-          enable-cache: true
-
-      - name: Check out the exact public FormosanBank source
-        run: |
-          git init -q build/formosanbank
-          git -C build/formosanbank remote add origin \
-            https://github.com/FormosanBank/FormosanBank.git
-          git -C build/formosanbank fetch --depth=1 origin "$SOURCE_COMMIT"
-          git -C build/formosanbank checkout --detach FETCH_HEAD
-
-      - name: Download immutable publication inputs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: publication-inputs-${{ github.run_id }}
-          path: build/publication-inputs
-
-      - name: Install locked dependencies
-        run: uv sync --locked --all-groups
-
-      - name: Build and verify browser search data
-        run: |
-          uv run python -m publisher.cli \
-            --repo build/formosanbank \
-            --output build/site-release \
-            --source-commit "$SOURCE_COMMIT" \
-            --model-catalog build/publication-inputs/models.json \
-            --site-only
-          uv run python -m publisher.verify_release \
-            --release build/site-release \
-            --require-publishable-scope site-query-data
-
-      - name: Record release ID
-        id: release
-        run: |
-          RELEASE_ID="$(jq -r .release_id build/site-release/release-manifest.json)"
-          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-          echo "Validated browser data for $RELEASE_ID"
-
-      - name: Pack validated browser search data
-        if: ${{ !inputs.dry_run }}
-        run: |
-          uv run python -m publisher.site_bundle pack \
-            --release build/site-release \
-            --output build/site-release.tar
-
-      - name: Transfer validated browser search data
-        if: ${{ !inputs.dry_run }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: site-release-${{ steps.release.outputs.release_id }}
-          path: build/site-release.tar
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
@@ -278,7 +275,6 @@ jobs:
     needs:
       - prepare
       - build
-      - site
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -288,7 +284,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_ID: ${{ needs.build.outputs.release_id }}
-      SITE_RELEASE_ID: ${{ needs.site.outputs.release_id }}
       SOURCE_COMMIT: ${{ needs.prepare.outputs.source_commit }}
     steps:
       - name: Check out Kakarayan
@@ -307,36 +302,21 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --all-groups
 
-      - name: Require matching parallel builds
-        run: |
-          if [[ "$RELEASE_ID" != "$SITE_RELEASE_ID" ]]; then
-            echo "Research and browser builds produced different release IDs."
-            exit 1
-          fi
-
-      - name: Download validated research output
+      - name: Download the validated publication
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: data-release-${{ needs.build.outputs.release_id }}
           path: build
 
-      - name: Download validated browser search data
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: site-release-${{ needs.site.outputs.release_id }}
-          path: build
-
-      - name: Join and recheck the validated publication
+      - name: Extract and recheck the publication
         run: |
           mkdir -p build/data-release
           tar -C build/data-release -xf build/data-release.tar
-          uv run python -m publisher.site_bundle attach \
-            --release build/data-release \
-            --bundle build/site-release.tar
+          rm -- build/data-release.tar
           uv run python -m publisher.verify_release \
             --release build/data-release \
             --max-artifact-mib 2048 \
-            --require-publishable-scope site-query-data \
+            --require-publishable-scope site-metadata \
             --require-publishable-scope release-core \
             --require-publishable-scope prepared-download
 
@@ -355,7 +335,7 @@ jobs:
           gh release create "$TAG" \
             --draft \
             --title "FormosanBank data $RELEASE_ID" \
-            --notes "Immutable public data build from FormosanBank commit $SOURCE_COMMIT. Research exports and the Pages search bundle were built in parallel from identical inputs and verified before upload. This draft requires maintainer review before publication."
+            --notes "Immutable public data and query read model from FormosanBank commit $SOURCE_COMMIT. The source was projected once, then every prepared artifact and the Pages metadata package were verified before upload. This draft requires maintainer review before publication."
 
       - name: Upload release assets
         shell: bash
@@ -398,7 +378,8 @@ jobs:
             echo "Draft release $TAG was not found."
             exit 1
           fi
-          gh api "repos/$GITHUB_REPOSITORY/releases/$REMOTE_RELEASE_ID" > build/remote-release.json
+          gh api "repos/$GITHUB_REPOSITORY/releases/$REMOTE_RELEASE_ID" \
+            > build/remote-release.json
           uv run python - <<'PY'
           import hashlib
           import json
@@ -418,9 +399,7 @@ jobs:
               if name in checksums:
                   raise SystemExit(f"Duplicate release checksum for {name}")
               checksums[name] = digest
-          expected_checksums = {
-              name: digest for name, (_, digest) in expected.items()
-          }
+          expected_checksums = {name: digest for name, (_, digest) in expected.items()}
           expected_checksums["release-manifest.json"] = hashlib.sha256(
               manifest_path.read_bytes()
           ).hexdigest()

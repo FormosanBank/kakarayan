@@ -1,197 +1,188 @@
-# Static and live APIs
+# API contract
 
-## Static API
+Kakarayan exposes two versioned public interfaces:
 
-The static API is the primary public developer contract. It is immutable within a deployed
-release and does not require a running server.
+1. Small static metadata documents served with the site.
+2. One required read-only query API for interactive corpus operations.
 
-Base URL:
+OpenAPI is available from the query service at `/openapi.json` and `/docs`.
+
+## Release rule
+
+The current static `meta.json` identifies the release the interface expects. Every
+interactive route includes that release ID:
+
+```text
+/v1/releases/{release_id}/...
+```
+
+The API rejects a different release ID. Clients should call `/readyz` on startup and require
+its `release_id` to match static metadata.
+
+## Static metadata
+
+Production base URL:
 
 ```text
 https://formosanbank.github.io/kakarayan/api/v1/
 ```
 
-Endpoints:
-
-| Path | Purpose |
+| Document | Contents |
 | --- | --- |
-| `meta.json` | Schema version, release ID, generation time, and source commit |
-| `languages.json` | Display identities, names, ISO codes, capabilities, and counts |
-| `corpora.json` | Corpus scopes, language IDs, rights IDs, source paths, and counts |
-| `rights.json` | Central terms and corpus-specific reviewed decisions |
-| `models.json` | Public FormosanBank model and service catalogue |
-| `orthography.json` | Public reviewed conversion-table projection |
-| `downloads.json` | Prepared artifacts, checksums, rights, blockers, and release URLs |
-| `releases.json` | Current release discovery |
-| `search/manifest.json` | Compressed vocabulary-index and record-shard inventory |
+| `meta.json` | Release, source, schema, counts, and provenance |
+| `languages.json` | Display names, identifiers, capabilities, and counts |
+| `corpora.json` | Corpus scopes, languages, source paths, rights, and counts |
+| `rights.json` | Reviewed central and corpus-specific rights decisions |
+| `models.json` | Public MT and ASR model catalogue |
+| `orthography.json` | Reviewed orthography tables |
+| `content.json` | Reviewed learning-content registry |
+| `downloads.json` | Curated prepared artifacts and checksums, added during Pages assembly |
 
-Consumers should first fetch `meta.json`, pin `release_id`, and reject other payloads or
-search manifests that identify a different release.
+Each document uses the envelope in `schemas/static-api.schema.json`. Consumers read its
+`data` member only after checking `schema_version`, `release_id`, `source.commit`, and
+`kakarayan.commit`.
 
-Every static response uses one validated envelope:
-
-```json
-{
-  "schema_version": "1.0.0",
-  "api_version": "v1",
-  "endpoint": "languages",
-  "generated_at": "2026-07-30T00:00:00Z",
-  "kakarayan": {
-    "repository": "FormosanBank/kakarayan",
-    "version": "0.2.0",
-    "commit": "40-character application commit"
-  },
-  "source": {
-    "repository": "FormosanBank/FormosanBank",
-    "commit": "40-character data-source commit"
-  },
-  "release_id": "fb-20260730-abcdef12",
-  "canonical_url": "https://formosanbank.github.io/kakarayan/api/v1/languages.json",
-  "data": []
-}
-```
-
-Read endpoint content from `data`. `meta.json` also keeps the common release fields at the
-top level so clients can pin the release before reading another response. All endpoint
-envelopes validate against `schemas/static-api.schema.json`. The envelope distinguishes the
-Kakarayan application commit that generated the bytes from the public FormosanBank source
-commit represented by those bytes.
-
-Search index and shard paths in the manifest are relative to the site `data/` directory.
-Load the matching language and corpus vocabulary index first, then fetch only the shard
-parts in its postings. Verify the compressed checksum when raw gzip bytes are returned. If
-the host transparently decodes the response, verify `uncompressed_sha256`. Indexes are JSON
-objects and sentence shards are JSON arrays.
-
-## Optional live API
-
-The live API is a convenience over the same immutable release. It may sleep or be absent.
-Applications must keep a static fallback for essential catalogue and data access.
-
-OpenAPI is available at `/openapi.json` and interactive documentation at `/docs`.
-
-Core routes:
+## Service routes
 
 | Route | Purpose |
 | --- | --- |
-| `GET /healthz` | Process liveness |
-| `GET /readyz` | Verified release readiness |
-| `GET /v1/meta` | Release metadata |
+| `GET /healthz` | Process liveness only |
+| `GET /readyz` | Active release readiness and identity |
+| `GET /v1/meta` | Active release metadata |
 | `GET /v1/languages` | Language catalogue |
 | `GET /v1/corpora` | Corpus catalogue |
 | `GET /v1/rights` | Rights catalogue |
 | `GET /v1/models` | Model catalogue |
 | `GET /v1/downloads` | Prepared-download catalogue |
-| `GET /v1/texts/{id}` | One text |
-| `GET /v1/sentences/{id}` | One sentence |
-| `GET /v1/dictionary` | Exact, prefix, contains, or translation search |
-| `GET /v1/concordance` | Token concordance |
-| `GET /v1/frequencies` | Bounded token frequencies |
+| `GET /v1/releases/{release}/languages/{id}` | One language |
+| `GET /v1/releases/{release}/corpora/{id}` | One corpus |
+| `GET /v1/releases/{release}/texts/{id}` | One full text |
+| `GET /v1/releases/{release}/sentences/{id}` | One full nested sentence |
+| `GET /v1/releases/{release}/translation-languages` | Translation-language counts |
+| `GET /v1/releases/{release}/dictionary` | Dictionary summaries |
+| `GET /v1/releases/{release}/concordance` | Sentence summaries |
+| `GET /v1/releases/{release}/frequencies` | Bounded token frequencies |
+| `GET /v1/releases/{release}/summaries` | Corpus summary and distributions |
+| `GET /v1/releases/{release}/datasets/preview` | At most 25 projected rows |
+| `GET /v1/releases/{release}/datasets/export` | Finite CSV, TSV, or JSON Lines export |
 
-The service constrains query strings, page sizes, offsets, and SQLite execution steps.
-Cursors are opaque and bound to the query that created them. A cursor must not be reused
-with different parameters.
+## Search
 
-Errors use a stable envelope:
+Dictionary and concordance routes require:
+
+- `q`: 1 to 256 characters;
+- `language_id`: one FormosanBank display-language identifier;
+- `direction`: `formosan` or `translation`;
+- `match`: `exact`, `prefix`, or `contains`.
+
+Optional filters are `corpus_id`, `dialect`, `translation_language`, and repeated
+`requirement` values. Concordance requirements are `translation`, `audio`, `phonology`,
+`interlinear`, or `unclear`.
+
+Example reverse dictionary lookup:
+
+```http
+GET /v1/releases/fb-20260811-abcdef12/dictionary?q=good&language_id=lang_amis&direction=translation&translation_language=eng&match=exact&limit=25
+```
+
+Search meaning is defined in [search-semantics.md](search-semantics.md). The server queries
+publisher-produced canonical columns; clients must not invent another normalization pass.
+
+Initial dictionary results contain a headword, meanings, scope, counts, citations, and a
+small example set. Concordance results contain sentence summaries and a detail identifier.
+Full words, morphemes, forms, phonology, translations, and audio are returned only by the
+sentence detail route.
+
+## Pagination
+
+`limit` is between 1 and 100 and defaults to 25. Search and frequency responses return an
+opaque `next_cursor` when another page exists. Cursors are keyset positions bound to the
+release and query. Do not decode them or reuse one after changing any query parameter.
+
+Changing `limit` while retaining the same query and cursor does not duplicate or skip
+records.
+
+## Dataset preview and export
+
+Dataset routes accept the same scope, direction, match, translation-language, and tier
+requirements as search. Repeated `field` parameters select from:
+
+```text
+id text_id standard original translations language_id corpus_id dialect
+source_path tokens audio phonology glosses
+```
+
+Preview returns at most 25 rows and reports `estimated_rows`, `returned_rows`, and
+`truncated`. Export requires `max_rows` from 1 through 1,000, accepts `format=csv|tsv|jsonl`,
+and rejects responses above 5 MiB. CSV and TSV cells beginning with spreadsheet formula
+characters are escaped.
+
+Full-corpus work belongs to prepared downloads. There is no unbounded custom export or
+background job in v1.
+
+The UI recipe format is defined by `schemas/export-recipe.schema.json`. Publisher execution
+and the HTTP export share the same fields and selection semantics.
+
+## Errors
+
+Errors use:
 
 ```json
 {
   "error": {
-    "code": "invalid_request",
+    "code": "invalid_parameter",
     "message": "Human-readable explanation",
-    "request_id": "optional identifier"
+    "status": 422
   }
 }
 ```
 
-Clients should branch on `code`, not the prose message.
+Clients should branch on `code`. Expected categories include invalid input, release
+mismatch, missing records, excessive query work, excessive export size, rights denial, and
+service not ready.
 
-## Release acquisition
+## HTTP and privacy behavior
 
-The service requires exactly one manifest source:
+- Successful release-scoped GET responses use immutable public caching.
+- Catalogue responses use a short public cache.
+- Readiness and error responses are not treated as immutable data.
+- CORS accepts only configured exact origins and never credentials.
+- The surface is GET-only and uses parameterized SQL templates.
+- Operational records include method, route template, status, duration, bytes, release ID,
+  and a failure code when applicable. They exclude URLs, raw queries, sentence text,
+  recordings, and model input.
 
-- `KAKARAYAN_RELEASE_MANIFEST_URL` for a pinned HTTPS GitHub release URL.
-- `KAKARAYAN_RELEASE_MANIFEST_PATH` for local tests or development.
+## JavaScript example
 
-It finds the exact `formosanbank.sqlite.gz` release artifact, enforces compressed and
-expanded size limits, downloads through HTTPS, verifies both SHA-256 values, validates
-SQLite integrity and required tables, and checks embedded release metadata before becoming
-ready. Local development may use an uncompressed `formosanbank.sqlite` artifact.
-
-Optional settings:
-
-| Variable | Meaning |
-| --- | --- |
-| `KAKARAYAN_DB_PATH` | Local immutable database path or cache destination |
-| `KAKARAYAN_SQLITE_SHA256` | Independent expected database checksum |
-| `KAKARAYAN_CORS_ORIGINS` | Comma-separated exact allowed origins |
-
-## JavaScript client
-
-The typed client has no runtime dependency beyond `fetch`.
-
-```ts
-import {KakarayanClient} from "@formosanbank/kakarayan-client";
-
-const client = new KakarayanClient({
-  baseUrl: "https://formosanbank.github.io/kakarayan",
-  releaseId: "fb-20260730-abcdef12",
+```js
+const release = "fb-20260811-abcdef12";
+const query = new URLSearchParams({
+  q: "fangcalay",
+  language_id: "lang_amis",
+  direction: "formosan",
+  match: "exact",
+  limit: "25",
 });
-
-const languages = await client.getLanguages();
-const manifest = await client.getSearchManifest();
-const shard = manifest.shards[0];
-const records = await client.getSearchShard(
-  shard.path,
-  shard.sha256,
-  shard.uncompressed_sha256,
+const response = await fetch(
+  `https://API_HOST/v1/releases/${release}/dictionary?${query}`,
 );
+if (!response.ok) throw new Error(`Kakarayan API ${response.status}`);
+const page = await response.json();
 ```
 
-Set `mode: "live"` for bounded live routes. The client supports cursor iteration, timeouts,
-structured errors, release checks, checksummed gzip search data, and download checksums.
+Kakarayan does not maintain separate JavaScript, Python, or R client packages in v1. The
+HTTP and schema contracts are the supported integration surface.
 
-## Python client and CLI
+## Runtime configuration
 
-The Python client has no runtime dependencies:
+The serving process requires a database and active manifest prepared before startup:
 
-```python
-from kakarayan_client import KakarayanClient
+| Variable | Purpose |
+| --- | --- |
+| `KAKARAYAN_DB_PATH` | Local immutable SQLite path |
+| `KAKARAYAN_RELEASE_MANIFEST_PATH` | Local active manifest path |
+| `KAKARAYAN_SQLITE_SHA256` | Optional independently expected expanded checksum |
+| `KAKARAYAN_CORS_ORIGINS` | Comma-separated exact origins |
 
-client = KakarayanClient(
-    "https://formosanbank.github.io/kakarayan",
-    release_id="fb-20260730-abcdef12",
-)
-print(client.languages())
-```
-
-Build it with:
-
-```bash
-uv build clients/python --out-dir build/python-client
-```
-
-The `kakarayan` command exposes the same catalogue and query operations.
-
-## R client
-
-```r
-client <- kakarayan_client(
-  "https://formosanbank.github.io/kakarayan",
-  release_id = "fb-20260730-abcdef12"
-)
-kakarayan_languages(client)
-```
-
-The R package uses `curl`, `jsonlite`, and `digest` for timeouts, JSON, and checksums.
-
-## Compatibility rules
-
-- API schema version `1.0.0` is the current contract.
-- Additive fields may appear within a compatible schema version only where schemas allow.
-- Breaking field, meaning, nullability, or route changes require a new API schema version.
-- Release IDs identify data, not application code.
-- Preserve unknown fields when relaying records when practical.
-- Do not assume ISO code is a unique display-language key.
-- Do not merge original and standard forms.
-- Follow every rights ID attached to an artifact.
+Use `python -m api.prepare_release` during deployment. Runtime startup never downloads or
+decompresses a release.

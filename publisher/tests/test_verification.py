@@ -9,19 +9,14 @@ from publisher.verify_site import verify_site
 
 
 def test_release_and_site_verification(public_repo: Path, tmp_path: Path) -> None:
-    release = build_release(
-        public_repo,
-        tmp_path / "release",
-        include_prepared=False,
-        site_only=True,
-    )
+    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
     manifest = verify_release(release.output)
     assert manifest["release_id"] == release.release_id
-    verified = verify_release(release.output, required_scopes={"site-query-data"})
+    verified = verify_release(release.output, required_scopes={"site-metadata"})
     assert all(
         artifact["publishable"]
         for artifact in verified["artifacts"]
-        if artifact["scope"] == "site-query-data"
+        if artifact["scope"] == "site-metadata"
     )
 
     site = tmp_path / "site"
@@ -40,13 +35,8 @@ def test_release_and_site_verification(public_repo: Path, tmp_path: Path) -> Non
 
 
 def test_release_verification_rejects_tampering(public_repo: Path, tmp_path: Path) -> None:
-    release = build_release(
-        public_repo,
-        tmp_path / "release",
-        include_prepared=False,
-        site_only=True,
-    )
-    shard = next((release.output / "search" / "shards").rglob("*.json.gz"))
-    shard.write_bytes(shard.read_bytes() + b"tampered")
+    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    metadata = release.output / "api" / "v1" / "meta.json"
+    metadata.write_bytes(metadata.read_bytes() + b"tampered")
     with pytest.raises(VerificationError, match="integrity mismatch"):
         verify_release(release.output)
