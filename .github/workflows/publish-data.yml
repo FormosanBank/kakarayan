@@ -186,32 +186,6 @@ jobs:
             --release build/data-release \
             --max-artifact-mib 2048
 
-      - name: Reproduce the complete publication
-        run: |
-          cp build/data-release/release-manifest.json \
-            "$RUNNER_TEMP/first-release-manifest.json"
-          rm -r -- build/data-release
-          uv run python -m publisher.cli \
-            --repo build/formosanbank \
-            --output build/data-release \
-            --source-commit "$SOURCE_COMMIT" \
-            --kakarayan-commit "$GITHUB_SHA" \
-            --model-catalog build/publication-inputs/models.json \
-            --compress-database \
-            --release-only
-          cmp "$RUNNER_TEMP/first-release-manifest.json" \
-            build/data-release/release-manifest.json
-          uv run python -m publisher.verify_release \
-            --release build/data-release \
-            --max-artifact-mib 2048
-
-      - name: Reconcile complete prepared formats
-        run: |
-          uv run python -m publisher.reconcile \
-            --release build/data-release \
-            --source-repo build/formosanbank \
-            | tee build/reconciliation.json
-
       - name: Record release ID
         id: release
         run: |
@@ -257,7 +231,33 @@ jobs:
           kill "$API_PID"
           wait "$API_PID" || true
           trap - EXIT
-          rm -r -- build/active-release build/formosanbank
+          rm -r -- build/active-release
+
+      - name: Reproduce the complete publication
+        run: |
+          cp build/data-release/release-manifest.json \
+            "$RUNNER_TEMP/first-release-manifest.json"
+          rm -r -- build/data-release
+          uv run python -m publisher.cli \
+            --repo build/formosanbank \
+            --output build/data-release \
+            --source-commit "$SOURCE_COMMIT" \
+            --kakarayan-commit "$GITHUB_SHA" \
+            --model-catalog build/publication-inputs/models.json \
+            --compress-database \
+            --release-only
+          cmp "$RUNNER_TEMP/first-release-manifest.json" \
+            build/data-release/release-manifest.json
+          uv run python -m publisher.verify_release \
+            --release build/data-release \
+            --max-artifact-mib 2048
+
+      - name: Reconcile complete prepared formats
+        run: |
+          uv run python -m publisher.reconcile \
+            --release build/data-release \
+            --source-repo build/formosanbank \
+            | tee build/reconciliation.json
 
       - name: Preserve query benchmark evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -269,6 +269,9 @@ jobs:
           compression-level: 0
           retention-days: 90
           if-no-files-found: error
+
+      - name: Remove the temporary source checkout
+        run: rm -r -- build/formosanbank
 
       - name: Enforce publication rights
         if: ${{ !inputs.dry_run }}
