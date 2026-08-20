@@ -20,7 +20,8 @@ finite-export responses from the query API. It does not download corpus indexes 
 corpus locally. Static catalogues, documentation, and prepared downloads remain usable if
 the query service is unavailable.
 
-See [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md), and the
+See [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md), the
+[Lightsail proof-of-concept runbook](docs/lightsail.md), and the
 [v1 completion evidence](docs/v1-evidence.md).
 
 ## Repository map

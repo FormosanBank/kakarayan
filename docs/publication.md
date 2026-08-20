@@ -21,11 +21,12 @@ An administrator configures these once:
 1. Set **Settings > Pages > Build and deployment > Source** to **GitHub Actions**.
 2. Create the `data-release` environment and require the intended maintainer approval.
 3. Keep the `github-pages` environment restricted to `main`.
-4. Create the `hugging-face-space` environment.
-5. Set its `HF_SPACE_REPO` variable to the public Docker Space as `owner/name`.
-6. Set its `HF_TOKEN` secret to a narrowly scoped token that can update only that Space.
-7. Set repository variable `KAKARAYAN_API_URL` to the public HTTPS base URL of that Space.
-8. Enable the dependency graph when an administrator is available. It improves dependency
+4. Choose one query API host. For Lightsail, follow [lightsail.md](lightsail.md). For the
+   guarded Hugging Face deployment, create the `hugging-face-space` environment, set its
+   `HF_SPACE_REPO` variable to `owner/name`, and add a narrowly scoped `HF_TOKEN` secret.
+5. After the selected API is ready, set repository variable `KAKARAYAN_API_URL` to its
+   public HTTPS base URL.
+6. Enable the dependency graph when an administrator is available. It improves dependency
    review but is not a runtime deployment requirement.
 
 The software license must remain present as `LICENSE` or `LICENSE.md`.
@@ -70,6 +71,11 @@ Publish the draft without changing or replacing its assets. An existing release 
 never be reused for different bytes.
 
 ## Deploy the query API
+
+For the small Tokyo Lightsail proof of concept, follow
+[the Lightsail runbook](lightsail.md). It builds the same generic API image, activates
+the published release into a host-mounted data directory, and puts Caddy HTTPS in front
+of the service. Continue with Pages only after `/readyz` reports the selected release.
 
 After publishing the data release, dispatch **Deploy query API to Hugging Face** with its
 release ID. The workflow:
