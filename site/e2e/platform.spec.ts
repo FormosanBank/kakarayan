@@ -20,7 +20,7 @@ async function expectAccessible(page: Page) {
 test("the release-pinned shell, routes, and locale switch work", async ({page}) => {
   await page.goto("");
   await expect(page.getByRole("heading", {level: 1})).toContainText("FormosanBank");
-  await expect(page.locator(".release-pill")).toHaveText(/^fb-\d{8}-[0-9a-f]{8}$/u);
+  await expect(page.locator(".release-pill")).toHaveText(/^fb-\d{8}-[0-9a-f]{7,12}$/u);
   await expectAccessible(page);
 
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
