@@ -11,6 +11,7 @@ import type {
   SearchRecord,
   SentenceSummary,
 } from "../types";
+import {LoadingState} from "./LoadingState";
 
 function translationTextMatches(value: string, query: string, mode: MatchMode): boolean {
   const haystack = value.normalize("NFC").toLocaleLowerCase();
@@ -349,6 +350,7 @@ export function SearchResultCard({
       (cause: unknown) => {
         if (!controller.signal.aborted) {
           setError(cause instanceof Error ? cause.message : String(cause));
+          setOpen(false);
         }
       },
     );
@@ -368,6 +370,15 @@ export function SearchResultCard({
         onSave={onSave}
         onNotice={onNotice}
         {...(onPractice ? {onPractice} : {})}
+      />
+    );
+  }
+  if (open) {
+    return (
+      <LoadingState
+        className="result-card result-card--summary"
+        compact
+        label={tx("Loading full record", "正在載入完整記錄")}
       />
     );
   }
@@ -403,8 +414,8 @@ export function SearchResultCard({
             );
           })}
       </div>
-      <button className="button button--quiet" onClick={() => setOpen(true)} disabled={open}>
-        {open ? tx("Loading record…", "正在載入記錄…") : tx("Open full record", "開啟完整記錄")}
+      <button className="button button--quiet" onClick={() => { setError(""); setOpen(true); }}>
+        {tx("Open full record", "開啟完整記錄")}
       </button>
       {summary.summary_truncated && (
         <small>{tx("Summary shortened. Open the full record for every tier.", "摘要已縮短。開啟完整記錄以查看所有層級。")}</small>

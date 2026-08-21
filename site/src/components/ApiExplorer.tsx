@@ -3,6 +3,7 @@ import {useMemo, useRef, useState, type FormEvent} from "react";
 import {useI18n} from "../i18n";
 import type {Language, MatchMode, SearchDirection} from "../types";
 import {CodeLines, RequestExamples} from "./DeveloperCode";
+import {LoadingState} from "./LoadingState";
 
 type QueryRoute = "dictionary" | "concordance";
 
@@ -200,7 +201,12 @@ export function ApiExplorer({
                   : tx("not run", "尚未執行")}
             </span>
           </div>
-          {response ? (
+          {busy ? (
+            <LoadingState
+              kind="code"
+              label={tx("Waiting for API response", "正在等待 API 回應")}
+            />
+          ) : response ? (
             <>
               <div className="api-explorer__response-actions">
                 <button className="text-button" type="button" onClick={() => void copy(response, tx("Response copied.", "已複製回應。"))}>{tx("Copy response", "複製回應")}</button>

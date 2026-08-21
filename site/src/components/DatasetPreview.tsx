@@ -8,40 +8,13 @@ import {
   type DatasetLevel,
 } from "../datasetSelection";
 import {useI18n} from "../i18n";
+import {LoadingState} from "./LoadingState";
 
 const levelInfo = new Map(DATASET_LEVEL_INFO.map((item) => [item[0], item]));
 
 function displayValue(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   return String(value);
-}
-
-function PreviewSkeleton({fields, label}: {fields: string[]; label: string}) {
-  return (
-    <div
-      className="table-scroll builder__preview-skeleton"
-      role="status"
-      aria-label={label}
-    >
-      <span className="sr-only">{label}</span>
-      <table aria-hidden="true">
-        <thead>
-          <tr>{fields.map((field) => <th key={field}>{field}</th>)}</tr>
-        </thead>
-        <tbody>
-          {Array.from({length: 6}, (_, row) => (
-            <tr key={row}>
-              {fields.map((field, column) => (
-                <td key={field}>
-                  <span className={`preview-skeleton__line preview-skeleton__line--${(row + column) % 3}`} />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
 }
 
 export function DatasetPreview({
@@ -82,7 +55,6 @@ export function DatasetPreview({
                 : tx("Choose a language to inspect the dataset.", "選擇語言以檢視資料集。")}
             </p>
           </div>
-          {previewBusy && <span className="status">{tx("Updating…", "更新中…")}</span>}
         </div>
         {levels.length > 1 && (
           <div className="builder__preview-tabs" role="tablist" aria-label={tx("XML level preview", "XML 層級預覽")}>
@@ -112,8 +84,10 @@ export function DatasetPreview({
           </div>
         )}
         {languageSelected && activeLoading && activeFields.length > 0 && (
-          <PreviewSkeleton
-            fields={activeFields}
+          <LoadingState
+            className="builder__preview-skeleton"
+            columns={activeFields}
+            kind="table"
             label={tx(`Loading ${info[1]} preview`, `正在載入 ${info[1]} 預覽`)}
           />
         )}

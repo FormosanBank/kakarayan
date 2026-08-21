@@ -20,6 +20,7 @@ import {useI18n} from "../i18n";
 import {Link, useSearchParams} from "../routing";
 import type {AppData, MatchMode, SearchDirection} from "../types";
 import {DatasetPreview} from "./DatasetPreview";
+import {LoadingState} from "./LoadingState";
 
 interface PreviewState {
   signature: string;
@@ -395,6 +396,12 @@ export function DatasetBuilder({data}: {data: AppData}) {
           <label className="field">{tx("File type", "檔案類型")}<select value={format} onChange={(event) => setFormat(event.target.value as DatasetFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option><option value="jsonl">JSON Lines</option></select></label>
           {levels.length > 1 && <p className="builder__package-note">{tx(`${levels.length} tables in one ZIP`, `${levels.length} 個資料表合併為一個 ZIP`)}</p>}
           <button className="button button--primary" disabled={!languageId || !selectionReady || exportBusy || exportBlocked || !data.query.available} onClick={() => void exportDataset()}>{exportBusy ? tx("Preparing…", "準備中…") : tx("Download dataset", "下載資料集")}</button>
+          {exportBusy && (
+            <LoadingState
+              compact
+              label={tx("Preparing dataset download", "正在準備資料集下載")}
+            />
+          )}
           <button className="button button--quiet" disabled={!languageId || !selectionReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
           {exportBlocked && <p className="callout callout--warning">{tx("This scope includes data without reviewed redistribution permission.", "此範圍包含尚未審查再散布權限的資料。")}</p>}
           <Link to="/downloads">{tx("Prepared full datasets", "預備完整資料集")}</Link>

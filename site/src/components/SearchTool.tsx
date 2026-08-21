@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import {CandidateGroups} from "./CandidateGroups";
 import {Diagnostics} from "./Diagnostics";
+import {LoadingState} from "./LoadingState";
 import {SearchResultCard} from "./SearchResultCard";
 
 export type LookupKind = "dictionary" | "sentences";
@@ -73,6 +74,7 @@ export function SearchTool({
   const [cursor, setCursor] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<"replace" | "append" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
@@ -111,7 +113,14 @@ export function SearchTool({
       const next = new AbortController();
       controller.current = next;
       setBusy(true);
+      setLoadingMode(append ? "append" : "replace");
       setError("");
+      if (!append) {
+        setDictionaryEntries([]);
+        setSentences([]);
+        setCursor(null);
+        setSearched(false);
+      }
       try {
         const options = {
           q: query.trim(),
@@ -152,7 +161,10 @@ export function SearchTool({
           setError(cause instanceof Error ? cause.message : String(cause));
         }
       } finally {
-        if (controller.current === next) setBusy(false);
+        if (controller.current === next) {
+          setBusy(false);
+          setLoadingMode(null);
+        }
       }
     },
     [
@@ -191,6 +203,7 @@ export function SearchTool({
   }
 
   const resultCount = kind === "dictionary" ? dictionaryEntries.length : sentences.length;
+  const replacingResults = busy && loadingMode === "replace";
   return (
     <section className={`search-tool search-tool--${kind} ${learner ? "search-tool--learner" : ""}`}>
       {!data.query.available && (
@@ -297,12 +310,17 @@ export function SearchTool({
 
       <div className="search-feedback" aria-live="polite">
         {error && <p className="callout callout--error">{error}</p>}
-        {searched && !error && <p className="result-count">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
+        {searched && !error && !replacingResults && <p className="result-count">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
       </div>
       {notice && <p className="search-notice" role="status">{notice}</p>}
       {!busy && searched && resultCount === 0 && <div className="empty-state">{t("search.noResults")}</div>}
 
-      {kind === "dictionary" ? (
+      {replacingResults ? (
+        <LoadingState
+          kind="results"
+          label={tx("Searching the corpus", "正在搜尋語料庫")}
+        />
+      ) : kind === "dictionary" ? (
         <CandidateGroups
           data={data}
           entries={dictionaryEntries}
@@ -330,7 +348,10 @@ export function SearchTool({
           ))}
         </div>
       )}
-      {cursor && <div className="pagination-actions"><button className="button button--quiet" disabled={busy} onClick={() => void run(true)}>{tx("Load more", "載入更多")}</button></div>}
+      {loadingMode === "append" && (
+        <LoadingState compact label={tx("Loading more results", "正在載入更多結果")} />
+      )}
+      {cursor && loadingMode !== "append" && <div className="pagination-actions"><button className="button button--quiet" disabled={busy} onClick={() => void run(true)}>{tx("Load more", "載入更多")}</button></div>}
     </section>
   );
 }

@@ -17,6 +17,12 @@ async function expectAccessible(page: Page) {
   expect(result.violations).toEqual([]);
 }
 
+async function disableServiceWorkerForRouting(page: Page) {
+  await page.addInitScript(() => {
+    Reflect.deleteProperty(Navigator.prototype, "serviceWorker");
+  });
+}
+
 async function controlGeometry(page: Page) {
   const formosan = await page.getByRole("combobox", {name: "Formosan language"}).boundingBox();
   const translation = await page.getByRole("combobox", {name: "Translation"}).boundingBox();
@@ -34,6 +40,31 @@ function expectStableGeometry(
     expect(Math.abs(before[control].width - after[control].width)).toBeLessThanOrEqual(1);
   }
 }
+
+test("boot and resource screens show structured loading states", async ({page}) => {
+  let releaseMeta = () => undefined;
+  const metaGate = new Promise<void>((resolve) => { releaseMeta = resolve; });
+  let releaseDownloads = () => undefined;
+  const downloadsGate = new Promise<void>((resolve) => { releaseDownloads = resolve; });
+  await page.route("**/api/v1/meta.json", async (route) => {
+    await metaGate;
+    await route.continue();
+  });
+  await page.route("**/api/v1/downloads.json", async (route) => {
+    await downloadsGate;
+    await route.continue();
+  });
+  await page.goto("#/downloads");
+  await expect(page.locator(".loading-state--page")).toContainText("Loading public release");
+  await expectAccessible(page);
+  releaseMeta();
+  await expect(page.getByRole("heading", {level: 1})).toHaveText("Download public data");
+  await expect(page.locator(".loading-state--results")).toContainText("Loading downloads");
+  await expect(page.locator(".artifact-card")).toHaveCount(0);
+  releaseDownloads();
+  await expect(page.locator(".loading-state--results")).toBeHidden();
+  await expect(page.locator(".download-results strong")).toHaveText(/^\d+$/u);
+});
 
 test("the release-pinned shell, routes, and locale switch work", async ({page}) => {
   await page.goto("");
@@ -178,7 +209,43 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 });
 
+test("lookup and record requests never leave stale results on screen", async ({page}) => {
+  await disableServiceWorkerForRouting(page);
+  let holdSearch = false;
+  let releaseSearch = () => undefined;
+  const searchGate = new Promise<void>((resolve) => { releaseSearch = resolve; });
+  await page.route(/\/concordance\?/u, async (route) => {
+    if (holdSearch) await searchGate;
+    await route.continue();
+  });
+  await page.goto("#/lookup?type=sentences");
+  await selectFixtureScope(page);
+  await page.getByLabel("Word or phrase").fill("lima");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  await expect(page.locator(".result-card--summary").first()).toBeVisible();
+
+  holdSearch = true;
+  await page.getByLabel("Word or phrase").fill("waco");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  await expect(page.locator(".loading-state--results")).toContainText("Searching the corpus");
+  await expect(page.locator(".result-card--summary")).toHaveCount(0);
+  releaseSearch();
+  await expect(page.locator(".result-card--summary").first()).toBeVisible();
+
+  let releaseRecord = () => undefined;
+  const recordGate = new Promise<void>((resolve) => { releaseRecord = resolve; });
+  await page.route(/\/sentences\/[^/?]+$/u, async (route) => {
+    await recordGate;
+    await route.continue();
+  });
+  await page.locator(".result-card--summary").first().getByRole("button", {name: "Open full record"}).click();
+  await expect(page.locator(".result-card--summary.loading-state")).toContainText("Loading full record");
+  releaseRecord();
+  await expect(page.getByRole("button", {name: "Save to deck"}).first()).toBeVisible();
+});
+
 test("research preview, finite recipe, export, and summaries share the API", async ({page}) => {
+  await disableServiceWorkerForRouting(page);
   let delayPreview = false;
   await page.route(/\/datasets\/preview\?/u, async (route) => {
     if (delayPreview) await new Promise((resolve) => setTimeout(resolve, 700));
@@ -239,11 +306,20 @@ test("research preview, finite recipe, export, and summaries share the API", asy
 
   await page.getByRole("tab", {name: "Linguistic summaries"}).click();
   await page.getByRole("combobox", {name: "Language", exact: true}).selectOption({label: "Amis"});
+  let releaseSummary = () => undefined;
+  const summaryGate = new Promise<void>((resolve) => { releaseSummary = resolve; });
+  await page.route(/\/summaries\?/u, async (route) => {
+    await summaryGate;
+    await route.continue();
+  });
   await page.getByRole("button", {name: "Compute summaries"}).click();
+  await expect(page.locator(".summaries .loading-state--table")).toContainText("Computing corpus summary");
+  releaseSummary();
   await expect(page.getByRole("table")).toBeVisible();
 });
 
 test("developer routes expose the query contract and static metadata", async ({browserName, context, page}) => {
+  await disableServiceWorkerForRouting(page);
   if (browserName === "chromium") {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   }
@@ -251,8 +327,17 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expect(page.getByRole("heading", {name: "Live query API"})).toBeVisible();
   await expect(page.locator(".developer-services")).toContainText("available");
   await expect(page.getByRole("link", {name: "API reference", exact: true})).toHaveAttribute("href", /\/docs$/u);
+  let releaseRequest = () => undefined;
+  const requestGate = new Promise<void>((resolve) => { releaseRequest = resolve; });
+  await page.route(/\/dictionary\?/u, async (route) => {
+    await requestGate;
+    await route.continue();
+  });
   await page.getByRole("button", {name: "Run request"}).click();
+  await expect(page.locator(".api-explorer__response .loading-state--code")).toContainText("Waiting for API response");
+  releaseRequest();
   await expect(page.locator(".api-explorer__response")).toContainText('"headword": "lima"');
+  await page.unroute(/\/dictionary\?/u);
   await page.getByRole("button", {name: "Sentences", exact: true}).click();
   await expect(page.getByRole("button", {name: "Sentences", exact: true})).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", {name: "Run request"}).click();

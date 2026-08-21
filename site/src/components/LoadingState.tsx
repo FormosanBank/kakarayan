@@ -77,7 +77,7 @@ export function LoadingState({
   return (
     <section className={classes} role="status" aria-live="polite" aria-busy="true">
       <div className="loading-state__heading">
-        {kind === "page" && <strong>Kakarayan</strong>}
+        {kind === "page" && <h1>Kakarayan</h1>}
         <span>{label}</span>
       </div>
       <div className="loading-state__rail" aria-hidden="true" />
