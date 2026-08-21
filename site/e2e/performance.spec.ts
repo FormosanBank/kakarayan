@@ -37,7 +37,7 @@ test("a constrained Taiwan-like mobile lookup meets the interaction budget", asy
   await session.send("Emulation.setCPUThrottlingRate", {rate: cpuThrottle});
 
   const shellStarted = performance.now();
-  await page.goto("#/lookup?type=sentences");
+  await page.goto("lookup?type=sentences");
   await expect(page.getByRole("heading", {level: 1})).toBeVisible();
   await selectAmis(page);
   const shellMs = performance.now() - shellStarted;

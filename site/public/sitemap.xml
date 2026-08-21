@@ -4,4 +4,12 @@
     <loc>https://formosanbank.github.io/kakarayan/</loc>
     <changefreq>monthly</changefreq>
   </url>
+  <url><loc>https://formosanbank.github.io/kakarayan/learn</loc></url>
+  <url><loc>https://formosanbank.github.io/kakarayan/explore</loc></url>
+  <url><loc>https://formosanbank.github.io/kakarayan/research</loc></url>
+  <url><loc>https://formosanbank.github.io/kakarayan/downloads</loc></url>
+  <url><loc>https://formosanbank.github.io/kakarayan/developers</loc></url>
+  <url><loc>https://formosanbank.github.io/kakarayan/docs</loc></url>
+  <url><loc>https://formosanbank.github.io/kakarayan/models</loc></url>
+  <url><loc>https://formosanbank.github.io/kakarayan/about</loc></url>
 </urlset>

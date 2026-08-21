@@ -8,6 +8,12 @@ export default defineConfig({
     target: "es2022",
     sourcemap: false,
     chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      input: {
+        app: "index.html",
+        notFound: "404.html",
+      },
+    },
   },
   test: {
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
