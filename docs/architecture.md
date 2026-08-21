@@ -76,6 +76,8 @@ The API owns:
 - small result summaries and on-demand record detail;
 - frequency and summary queries;
 - previews and finite streamed CSV, TSV, or JSON Lines exports;
+- per-IP general and export rate limits;
+- one global SQLite query-concurrency boundary;
 - health, readiness, release identity, and privacy-preserving operational records.
 
 Successful release-scoped GET responses are public and immutable. Validation and readiness

@@ -10,7 +10,7 @@ const webServers = remoteApi
   ? [siteServer]
   : [
       {
-        command: "cd .. && KAKARAYAN_DB_PATH=build/fixture-release/formosanbank.sqlite KAKARAYAN_RELEASE_MANIFEST_PATH=build/fixture-release/release-manifest.json KAKARAYAN_CORS_ORIGINS=http://127.0.0.1:4173 uv run uvicorn api.app:app --host 127.0.0.1 --port 8000 --no-access-log",
+        command: "cd .. && KAKARAYAN_DB_PATH=build/fixture-release/formosanbank.sqlite KAKARAYAN_RELEASE_MANIFEST_PATH=build/fixture-release/release-manifest.json KAKARAYAN_CORS_ORIGINS=http://127.0.0.1:4173 KAKARAYAN_REQUESTS_PER_MINUTE=60000 KAKARAYAN_REQUEST_BURST=60000 KAKARAYAN_EXPORTS_PER_MINUTE=60000 KAKARAYAN_EXPORT_BURST=60000 uv run uvicorn api.app:app --host 127.0.0.1 --port 8000 --no-access-log",
         url: "http://127.0.0.1:8000/readyz",
         reuseExistingServer: !process.env.CI,
       },

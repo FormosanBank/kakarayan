@@ -164,7 +164,14 @@ Set `KAKARAYAN_HOSTNAME` to the hostname made from the attached static IP. Leave
 the production and local frontend origins in `KAKARAYAN_CORS_ORIGINS`. The `.env`
 file contains no password and is ignored by Git, but it remains host-specific. The default
 `KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantially longer analytical queries than
-the original proof of concept.
+the original proof of concept. Keep the initial request controls at 60 requests per minute,
+5 exports per minute, and 4 concurrent SQLite queries. They can be tuned in `.env` without
+changing code.
+
+The application keys its limits from Uvicorn's resolved client address. Caddy supplies the
+client address through proxy headers, and Uvicorn trusts those headers because the API port
+is reachable only from loopback and Docker's private network. Do not expose port 7860 or
+place an untrusted proxy on that network while `--forwarded-allow-ips=*` is configured.
 
 Validate the Compose model and build the generic API image:
 
@@ -330,7 +337,8 @@ docker compose logs --tail=100 api caddy
 ```
 
 The API disables Uvicorn access logs, so raw user search queries are not written to
-the container log.
+the container log. A rate-limited request returns HTTP 429 with `Retry-After`. Limit headers
+identify the active request or export bucket without logging the client IP.
 
 ## Routine release update
 

@@ -156,7 +156,8 @@ Errors use:
 ```
 
 Clients should branch on `code`. Expected categories include invalid input, release
-mismatch, missing records, excessive query work, rights denial, and service not ready.
+mismatch, missing records, rate limiting, excessive query work, rights denial, and service
+not ready. A `rate_limited` response uses status 429 and includes `Retry-After`.
 
 ## HTTP and privacy behavior
 
@@ -168,6 +169,24 @@ mismatch, missing records, excessive query work, rights denial, and service not 
 - Operational records include method, route template, status, duration, bytes, release ID,
   and a failure code when applicable. They exclude URLs, raw queries, sentence text,
   recordings, and model input.
+
+## Request controls
+
+The single production API process uses per-IP token buckets:
+
+- 60 sustained requests per minute, with up to 20 immediate requests after an idle period;
+- 5 sustained dataset exports per minute, with up to 5 immediate exports after an idle
+  period;
+- 4 SQLite queries executing at once across all users.
+
+Export requests consume both kinds of request token. Requests above the rate return 429.
+Database work above the concurrency limit waits for a slot, keeping the small server from
+starting too many large reads at once. `/healthz`, `/readyz`, and CORS `OPTIONS` requests do
+not consume tokens.
+
+These counters live in the one API process and reset when its container restarts. They are
+not a billing, identity, or access-control system. CORS controls browser origins only;
+command-line and server clients may call the public API directly.
 
 ## JavaScript example
 
@@ -201,6 +220,11 @@ The serving process requires a database and active manifest prepared before star
 | `KAKARAYAN_SQLITE_SHA256` | Optional independently expected expanded checksum |
 | `KAKARAYAN_CORS_ORIGINS` | Comma-separated exact origins |
 | `KAKARAYAN_QUERY_STEP_LIMIT` | SQLite progress callbacks allowed per request; default 2,000,000 |
+| `KAKARAYAN_REQUESTS_PER_MINUTE` | Sustained requests per minute per client IP; default 60 |
+| `KAKARAYAN_REQUEST_BURST` | Immediately available general tokens; default 20 |
+| `KAKARAYAN_EXPORTS_PER_MINUTE` | Sustained exports per minute per client IP; default 5 |
+| `KAKARAYAN_EXPORT_BURST` | Immediately available export tokens; default 5 |
+| `KAKARAYAN_QUERY_CONCURRENCY` | SQLite queries executing together; default 4 |
 
 Use `python -m api.prepare_release` during deployment. Runtime startup never downloads or
 decompresses a release.
