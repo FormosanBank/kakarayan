@@ -135,10 +135,14 @@ test("research preview, finite recipe, export, and summaries share the API", asy
 
 test("developer routes expose the query contract and static metadata", async ({page}) => {
   await page.goto("#/developers");
-  await expect(page.getByRole("heading", {name: "Query API v1"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Live API v1"})).toBeVisible();
   await expect(page.locator(".api-choice__primary")).toContainText("available");
+  await expect(page.getByRole("link", {name: "Open API reference"})).toHaveAttribute("href", /\/docs$/u);
   await page.getByRole("button", {name: "Run request"}).click();
-  await expect(page.locator(".api-explorer__response")).toContainText('"api_version": "v1"');
+  await expect(page.locator(".api-explorer__response")).toContainText('"headword": "lima"');
+  await page.getByRole("combobox", {name: "Request"}).selectOption("concordance");
+  await page.getByRole("button", {name: "Run request"}).click();
+  await expect(page.locator(".api-explorer__response")).toContainText('"standard":');
   await expect(page.locator(".code-samples")).toContainText("/concordance?");
   await expectAccessible(page);
 });

@@ -183,9 +183,18 @@
     grid-template-columns: 1fr;
   }
 
-  .api-explorer__controls,
+  .api-explorer__form,
   .format-semantics {
     grid-template-columns: 1fr;
+  }
+
+  .api-explorer__endpoint {
+    grid-template-columns: 1fr;
+  }
+
+  .api-explorer__actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .api-explorer__response > div {

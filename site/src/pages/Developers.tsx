@@ -1,4 +1,4 @@
-import {ApiExplorer, type ApiEndpoint} from "../components/ApiExplorer";
+import {ApiExplorer} from "../components/ApiExplorer";
 import {PageIntro} from "../components/Layout";
 import {DATASET_FIELD_INFO} from "../datasetSelection";
 import {useI18n} from "../i18n";
@@ -6,7 +6,7 @@ import type {AppData} from "../types";
 
 export function Developers({data}: {data: AppData}) {
   const {t, tx} = useI18n();
-  const endpoints: ApiEndpoint[] = [
+  const endpoints = [
     {path: "meta.json", description: tx("Release and pinned source commit", "版本與固定來源提交")},
     {path: "languages.json", description: tx("Language identities, capabilities, and counts", "語言身分、功能與數量")},
     {path: "corpora.json", description: tx("Corpus scopes, rights IDs, and counts", "語料庫範圍、權利識別碼與數量")},
@@ -22,12 +22,16 @@ export function Developers({data}: {data: AppData}) {
       <PageIntro title={t("developers.title")} />
       <section className="api-choice">
         <article className="api-choice__primary">
-          <h2>{tx("Query API v1", "查詢 API v1")}</h2>
-          <p>{tx("Dictionary, sentence, detail, summary, preview, and finite export routes over one immutable release.", "針對單一不可變版本提供詞典、句子、詳情、摘要、預覽與有限匯出路由。")}</p>
+          <h2>{tx("Live API v1", "即時 API v1")}</h2>
+          <p>{tx("Public, read-only corpus search from the Tokyo query service.", "由東京查詢服務提供公開唯讀的語料搜尋。")}</p>
           <code>{data.query.baseUrl}/v1/releases/{data.meta.release_id}/</code>
           <span className={`status status--${data.query.available ? "available" : "unavailable"}`}>
             {data.query.available ? tx("available", "可用") : tx("unavailable", "無法使用")}
           </span>
+          <div className="api-choice__links">
+            <a href={`${data.query.baseUrl}/docs`}>{tx("Open API reference", "開啟 API 參考")}</a>
+            <a href={`${data.query.baseUrl}/openapi.json`}>OpenAPI JSON</a>
+          </div>
         </article>
         <article>
           <h2>{tx("Static metadata", "靜態中繼資料")}</h2>
@@ -48,7 +52,12 @@ export function Developers({data}: {data: AppData}) {
           ))}
         </div>
       </section>
-      <ApiExplorer base={staticBase} endpoints={endpoints} />
+      <ApiExplorer
+        available={data.query.available}
+        base={data.query.baseUrl}
+        languages={data.languages}
+        releaseId={data.meta.release_id}
+      />
       <section className="code-samples">
         <div><p className="eyebrow">curl</p><pre tabIndex={0}><code>{`curl --fail --silent --show-error "${query}"`}</code></pre></div>
         <div><p className="eyebrow">JavaScript</p><pre tabIndex={0}><code>{`const result = await fetch("${query}").then(r => r.json());
