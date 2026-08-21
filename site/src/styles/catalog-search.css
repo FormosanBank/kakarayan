@@ -305,7 +305,7 @@
 
 .search-form {
   display: grid;
-  grid-template-columns: minmax(260px, 2fr) repeat(2, minmax(160px, 0.75fr)) auto;
+  grid-template-columns: minmax(260px, 2fr) repeat(2, minmax(160px, 0.75fr)) 120px;
   gap: 12px;
   align-items: end;
 }
@@ -317,6 +317,7 @@
 }
 
 .search-form__actions .button {
+  width: 100%;
   min-height: 42px;
 }
 

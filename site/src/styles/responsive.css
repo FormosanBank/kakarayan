@@ -22,7 +22,7 @@
 
   .search-form__actions {
     grid-column: 1 / -1;
-    width: fit-content;
+    width: 120px;
   }
 
   .builder__grid {

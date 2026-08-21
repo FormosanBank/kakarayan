@@ -17,6 +17,24 @@ async function expectAccessible(page: Page) {
   expect(result.violations).toEqual([]);
 }
 
+async function controlGeometry(page: Page) {
+  const formosan = await page.getByRole("combobox", {name: "Formosan language"}).boundingBox();
+  const translation = await page.getByRole("combobox", {name: "Translation"}).boundingBox();
+  const action = await page.locator(".search-form__actions").boundingBox();
+  if (!formosan || !translation || !action) throw new Error("Search control geometry unavailable");
+  return {formosan, translation, action};
+}
+
+function expectStableGeometry(
+  before: Awaited<ReturnType<typeof controlGeometry>>,
+  after: Awaited<ReturnType<typeof controlGeometry>>,
+) {
+  for (const control of ["formosan", "translation", "action"] as const) {
+    expect(Math.abs(before[control].x - after[control].x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(before[control].width - after[control].width)).toBeLessThanOrEqual(1);
+  }
+}
+
 test("the release-pinned shell, routes, and locale switch work", async ({page}) => {
   await page.goto("");
   await expect(page.getByRole("heading", {level: 1})).toContainText("FormosanBank");
@@ -117,6 +135,29 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
     return values;
   });
   expect(cachedUrls.some((url) => url.includes("/v1/releases/"))).toBe(false);
+});
+
+test("search controls stay fixed when the action label changes", async ({page}) => {
+  await page.goto("#/lookup?type=dictionary");
+  await page.getByLabel("Word or meaning").fill("lima");
+  const button = page.locator(".search-form__actions .button");
+  await expect(button).toHaveText("Search");
+  const before = await controlGeometry(page);
+
+  await button.evaluate((element) => {
+    element.textContent = "Searching…";
+    element.setAttribute("disabled", "");
+  });
+  const pending = await controlGeometry(page);
+  expectStableGeometry(before, pending);
+
+  await button.evaluate((element) => {
+    element.textContent = "Search";
+    element.removeAttribute("disabled");
+  });
+  await button.click();
+  await expect(page.locator(".dictionary-entry").first()).toBeVisible();
+  expectStableGeometry(before, await controlGeometry(page));
 });
 
 test("dictionary examples stay in the learning workspace", async ({page}) => {
