@@ -2,6 +2,7 @@ import {useEffect} from "react";
 
 import {Layout} from "./components/Layout";
 import {Diagnostics} from "./components/Diagnostics";
+import {LoadingState} from "./components/LoadingState";
 import {useAppData} from "./data";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
@@ -15,14 +16,14 @@ import {Learn} from "./pages/Learn";
 import {Lookup} from "./pages/Lookup";
 import {Models} from "./pages/Models";
 import {Research} from "./pages/Research";
+import {routeHref} from "./routePaths";
 import {Link, RoutingProvider, useRoutePath} from "./routing";
 
 function Loading() {
   const {t} = useI18n();
   return (
-    <main className="boot-state" aria-live="polite">
-      <div className="boot-mark">K</div>
-      <p>{t("common.loading")}</p>
+    <main className="boot-state">
+      <LoadingState kind="page" label={t("common.loading")} />
     </main>
   );
 }
@@ -144,12 +145,15 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
           ? t("download.lede")
           : t("home.lede");
   useEffect(() => {
+    const canonicalUrl = new URL(routeHref(path), window.location.origin).href;
     document.title = `${routeTitle} | Kakarayan`;
     document.querySelector('meta[name="description"]')?.setAttribute("content", routeDescription);
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
     document.querySelector('meta[property="og:title"]')?.setAttribute("content", routeTitle);
     document
       .querySelector('meta[property="og:description"]')
       ?.setAttribute("content", routeDescription);
+    document.querySelector('meta[property="og:url"]')?.setAttribute("content", canonicalUrl);
     document
       .querySelector('meta[property="og:locale"]')
       ?.setAttribute("content", locale === "zh-Hant" ? "zh_TW" : "en_US");

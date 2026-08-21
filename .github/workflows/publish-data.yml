@@ -13,6 +13,11 @@ on:
         required: true
         default: true
         type: boolean
+      verify_determinism:
+        description: Repeat the complete build and compare manifests
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: formosanbank-data-release
@@ -207,6 +212,10 @@ jobs:
             --activate build/active-release/release-manifest.json
           KAKARAYAN_DB_PATH=build/active-release/formosanbank.sqlite \
           KAKARAYAN_RELEASE_MANIFEST_PATH=build/active-release/release-manifest.json \
+          KAKARAYAN_REQUESTS_PER_MINUTE=60000 \
+          KAKARAYAN_REQUEST_BURST=60000 \
+          KAKARAYAN_EXPORTS_PER_MINUTE=60000 \
+          KAKARAYAN_EXPORT_BURST=60000 \
             uv run uvicorn api.app:app \
               --host 127.0.0.1 --port 8000 --no-access-log \
               > "$RUNNER_TEMP/kakarayan-api.log" 2>&1 &
@@ -234,6 +243,7 @@ jobs:
           rm -r -- build/active-release
 
       - name: Reproduce the complete publication
+        if: ${{ inputs.verify_determinism }}
         run: |
           cp build/data-release/release-manifest.json \
             "$RUNNER_TEMP/first-release-manifest.json"

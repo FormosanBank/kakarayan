@@ -3,6 +3,7 @@ import {useMemo, useRef, useState} from "react";
 import {summaries} from "../apiClient";
 import {useI18n} from "../i18n";
 import type {AppData} from "../types";
+import {LoadingState} from "./LoadingState";
 
 type SummaryResult = Awaited<ReturnType<typeof summaries>>;
 type TableKind = "source" | "normalized" | "translation" | "distribution";
@@ -47,6 +48,7 @@ export function Summaries({data}: {data: AppData}) {
     controller.current = next;
     setBusy(true);
     setError("");
+    setResult(null);
     try {
       setResult(await summaries(data.meta.release_id, languageId, corpusId, next.signal));
     } catch (cause) {
@@ -84,6 +86,13 @@ export function Summaries({data}: {data: AppData}) {
         </button>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
+      {busy && (
+        <LoadingState
+          columns={[tx("Form", "形式"), tx("Count", "數量")]}
+          kind="table"
+          label={tx("Computing corpus summary", "正在計算語料摘要")}
+        />
+      )}
       {result && (
         <>
           <div className="summary-stats">

@@ -13,9 +13,13 @@ it("emits the schema-validated representative recipe", () => {
       languageId: "lang_amis",
       corpusId: "corpus_testcorpus",
       dialect: "Xiuguluan",
-      requirements: ["translation", "audio"],
+      recordLevels: ["sentence", "word", "morpheme"],
       maxRows: 250,
-      fields: ["id", "standard", "translations"],
+      fields: {
+        sentence: ["id", "standard", "translations"],
+        word: ["id", "sentence_id", "form"],
+        morpheme: ["id", "word_id", "form", "translations"],
+      },
       format: "csv",
     }),
   ).toEqual(fixture);

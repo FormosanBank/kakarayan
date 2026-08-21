@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from api.cursors import CursorValue, decode_cursor, encode_cursor, query_fingerprint
-from api.dataset_fields import DATASET_FIELDS, DatasetField, dataset_projection
+from api.dataset_fields import (
+    DatasetField,
+    RecordLevel,
+    allowed_dataset_fields,
+    dataset_completeness_clauses,
+    dataset_projection,
+)
 from api.errors import ApiError
 from api.release import ReleaseState, readonly_connection
 from api.search import MatchMode, normalize_surface, normalize_text
@@ -25,6 +33,29 @@ DICTIONARY_EXAMPLE_LIMIT = 2
 DICTIONARY_MEANING_LIMIT = 12
 DICTIONARY_PRONUNCIATION_LIMIT = 8
 DICTIONARY_VALUE_MAX_CHARS = 320
+
+
+@dataclass(frozen=True)
+class DatasetQuery:
+    prefix: str
+    source: str
+    where: str
+    order: str
+    projection: str
+    parameters: tuple[object, ...]
+    fields: tuple[DatasetField, ...]
+
+
+@dataclass(frozen=True)
+class DatasetStream:
+    release_id: str
+    record_level: RecordLevel
+    complete_fields: bool
+    estimated_rows: int
+    returned_rows: int
+    truncated: bool
+    fields: tuple[DatasetField, ...]
+    rows: Iterator[dict[str, Any]]
 
 
 def _bounded_text(value: object, maximum: int) -> tuple[str, bool]:
@@ -91,22 +122,30 @@ def _cursor_position(
 
 
 class CorpusStore:
-    def __init__(self, state: ReleaseState, query_step_limit: int) -> None:
+    def __init__(
+        self,
+        state: ReleaseState,
+        query_step_limit: int,
+        query_concurrency: int = 4,
+    ) -> None:
         self.state = state
         self.query_step_limit = query_step_limit
+        self._query_slots = threading.BoundedSemaphore(query_concurrency)
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
-        connection = readonly_connection(self.state.database_path)
-        callbacks = 0
-
-        def progress() -> int:
-            nonlocal callbacks
-            callbacks += 1
-            return int(callbacks > self.query_step_limit)
-
-        connection.set_progress_handler(progress, 1000)
+        self._query_slots.acquire()
+        connection: sqlite3.Connection | None = None
         try:
+            connection = readonly_connection(self.state.database_path)
+            callbacks = 0
+
+            def progress() -> int:
+                nonlocal callbacks
+                callbacks += 1
+                return int(callbacks > self.query_step_limit)
+
+            connection.set_progress_handler(progress, 1000)
             row = connection.execute(
                 "SELECT value_json FROM publication_metadata WHERE key = 'meta'"
             ).fetchone()
@@ -130,7 +169,9 @@ class CorpusStore:
                 ) from None
             raise
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
+            self._query_slots.release()
 
     @property
     def release_id(self) -> str:
@@ -776,9 +817,15 @@ class CorpusStore:
             clauses.append("EXISTS (SELECT 1 FROM words w WHERE w.parent_id = s.id)")
         if "unclear" in requirements:
             clauses.append(
-                "EXISTS (SELECT 1 FROM forms f JOIN tier_scope_view ts "
+                "(EXISTS (SELECT 1 FROM forms f JOIN tier_scope_view ts "
                 "ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id "
-                "WHERE ts.sentence_id = s.id AND f.unclear > 0)"
+                "WHERE ts.sentence_id = s.id AND f.unclear > 0) "
+                "OR EXISTS (SELECT 1 FROM phonology p JOIN tier_scope_view ts "
+                "ON ts.owner_type = p.owner_type AND ts.owner_id = p.owner_id "
+                "WHERE ts.sentence_id = s.id AND p.unclear > 0) "
+                "OR EXISTS (SELECT 1 FROM translations tr JOIN tier_scope_view ts "
+                "ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id "
+                "WHERE ts.sentence_id = s.id AND tr.unclear > 0))"
             )
 
     def concordance(
@@ -1055,13 +1102,14 @@ class CorpusStore:
         translation_language: str | None,
         match: MatchMode,
         requirements: Sequence[TierRequirement],
+        record_level: RecordLevel,
     ) -> tuple[str | None, list[str], list[object]]:
         normalized = (
             normalize_surface(q or "") if direction == "formosan" else normalize_text(q or "")
         )
         if q is not None and not normalized:
             raise ApiError(422, "invalid_parameter", "The query is empty after normalization")
-        if normalized:
+        if normalized and record_level == "sentence":
             candidates, candidate_parameters = self._candidate_sentences(
                 normalized=normalized,
                 language_id=language_id,
@@ -1076,8 +1124,165 @@ class CorpusStore:
         else:
             candidates = None
             clauses, parameters = self._scope(language_id, corpus_id, dialect)
+            if normalized:
+                owner_type, owner_alias = {
+                    "word": ("word", "w"),
+                    "morpheme": ("morpheme", "m"),
+                }[record_level]
+                if direction == "formosan":
+                    predicate, predicate_parameters = _predicate(
+                        "f.normalized", normalized, match, "formosan"
+                    )
+                    clauses.append(
+                        "EXISTS (SELECT 1 FROM forms f "
+                        f"WHERE f.owner_type = '{owner_type}' "
+                        f"AND f.owner_id = {owner_alias}.id AND {predicate})"
+                    )
+                else:
+                    predicate, predicate_parameters = _predicate(
+                        "tr.normalized", normalized, match, "translation"
+                    )
+                    language_clause = " AND tr.xml_lang = ?" if translation_language else ""
+                    clauses.append(
+                        "EXISTS (SELECT 1 FROM translations tr "
+                        f"WHERE tr.owner_type = '{owner_type}' "
+                        f"AND tr.owner_id = {owner_alias}.id AND {predicate}{language_clause})"
+                    )
+                    if translation_language:
+                        predicate_parameters = (*predicate_parameters, translation_language)
+                parameters.extend(predicate_parameters)
         self._tier_requirements(clauses, requirements)
         return candidates, clauses, parameters
+
+    def _dataset_query(
+        self,
+        *,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirements: Sequence[TierRequirement],
+        fields: Sequence[DatasetField],
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
+    ) -> DatasetQuery:
+        supported = allowed_dataset_fields(record_level)
+        if not fields or any(field not in supported for field in fields):
+            raise ApiError(
+                422,
+                "invalid_parameter",
+                f"Choose supported {record_level} dataset fields",
+            )
+        candidates, clauses, parameters = self._dataset_clauses(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirements,
+            record_level=record_level,
+        )
+        if complete_fields:
+            clauses.extend(dataset_completeness_clauses(record_level, fields))
+        where = " AND ".join(clauses) if clauses else "1 = 1"
+        prefix = f"WITH candidate_ids AS ({candidates})" if candidates else ""
+        sentence_source = (
+            "candidate_ids candidate JOIN sentences s ON s.id = candidate.sentence_id"
+            if candidates
+            else "sentences s"
+        )
+        source, order = {
+            "sentence": (
+                f"{sentence_source} JOIN texts t ON t.id = s.parent_id",
+                "t.source_path, s.position, s.id",
+            ),
+            "word": (
+                f"{sentence_source} JOIN words w ON w.parent_id = s.id "
+                "JOIN texts t ON t.id = s.parent_id",
+                "t.source_path, s.position, w.position, w.id",
+            ),
+            "morpheme": (
+                f"{sentence_source} JOIN words w ON w.parent_id = s.id "
+                "JOIN morphemes m ON m.parent_id = w.id "
+                "JOIN texts t ON t.id = s.parent_id",
+                "t.source_path, s.position, w.position, m.position, m.id",
+            ),
+        }[record_level]
+        projection = dataset_projection(record_level, fields)
+        return DatasetQuery(
+            prefix=prefix,
+            source=source,
+            where=where,
+            order=order,
+            projection=projection,
+            parameters=tuple(parameters),
+            fields=tuple(fields),
+        )
+
+    def stream_dataset(
+        self,
+        *,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirements: Sequence[TierRequirement],
+        fields: Sequence[DatasetField],
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
+        max_rows: int,
+    ) -> DatasetStream:
+        query = self._dataset_query(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirements,
+            fields=fields,
+            record_level=record_level,
+            complete_fields=complete_fields,
+        )
+        with self.connect() as connection:
+            estimated_rows = int(
+                connection.execute(
+                    f"{query.prefix} SELECT COUNT(*) FROM {query.source} WHERE {query.where}",
+                    query.parameters,
+                ).fetchone()[0]
+            )
+
+        returned_rows = min(estimated_rows, max_rows)
+
+        def rows() -> Iterator[dict[str, Any]]:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    f"{query.prefix} SELECT {query.projection} FROM {query.source} "
+                    f"WHERE {query.where} ORDER BY {query.order} LIMIT ?",
+                    (*query.parameters, max_rows),
+                )
+                for row in cursor:
+                    yield dict(row)
+
+        return DatasetStream(
+            release_id=self.release_id,
+            record_level=record_level,
+            complete_fields=complete_fields,
+            estimated_rows=estimated_rows,
+            returned_rows=returned_rows,
+            truncated=estimated_rows > returned_rows,
+            fields=query.fields,
+            rows=rows(),
+        )
 
     def dataset(
         self,
@@ -1091,11 +1296,11 @@ class CorpusStore:
         match: MatchMode,
         requirements: Sequence[TierRequirement],
         fields: Sequence[DatasetField],
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
         max_rows: int,
     ) -> dict[str, Any]:
-        if not fields or any(field not in DATASET_FIELDS for field in fields):
-            raise ApiError(422, "invalid_parameter", "Choose at least one supported dataset field")
-        candidates, clauses, parameters = self._dataset_clauses(
+        stream = self.stream_dataset(
             language_id=language_id,
             corpus_id=corpus_id,
             dialect=dialect,
@@ -1104,34 +1309,20 @@ class CorpusStore:
             translation_language=translation_language,
             match=match,
             requirements=requirements,
+            fields=fields,
+            record_level=record_level,
+            complete_fields=complete_fields,
+            max_rows=max_rows,
         )
-        where = " AND ".join(clauses) if clauses else "1 = 1"
-        prefix = f"WITH candidate_ids AS ({candidates})" if candidates else ""
-        source = (
-            "candidate_ids candidate JOIN sentences s ON s.id = candidate.sentence_id "
-            "JOIN texts t ON t.id = s.parent_id"
-            if candidates
-            else "sentences s JOIN texts t ON t.id = s.parent_id"
-        )
-        projection = dataset_projection(fields)
-        with self.connect() as connection:
-            rows = [
-                dict(row)
-                for row in connection.execute(
-                    f"{prefix} SELECT {projection}, COUNT(*) OVER() AS _estimated_rows "
-                    f"FROM {source} WHERE {where} "
-                    "ORDER BY t.source_path, s.position, s.id LIMIT ?",
-                    (*parameters, max_rows),
-                )
-            ]
-        estimated_rows = int(rows[0].pop("_estimated_rows")) if rows else 0
         return {
-            "release_id": self.release_id,
-            "estimated_rows": estimated_rows,
-            "returned_rows": len(rows),
-            "truncated": estimated_rows > len(rows),
-            "fields": list(fields),
-            "items": rows,
+            "release_id": stream.release_id,
+            "record_level": stream.record_level,
+            "complete_fields": stream.complete_fields,
+            "estimated_rows": stream.estimated_rows,
+            "returned_rows": stream.returned_rows,
+            "truncated": stream.truncated,
+            "fields": list(stream.fields),
+            "items": list(stream.rows),
         }
 
     def assert_export_allowed(self, language_id: str, corpus_id: str | None) -> None:

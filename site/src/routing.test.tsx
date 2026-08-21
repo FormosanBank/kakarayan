@@ -1,7 +1,13 @@
 import {act} from "react";
 import {createRoot, type Root} from "react-dom/client";
 
-import {Link, NavigationBlocker, RoutingProvider, useRoutePath} from "./routing";
+import {
+  Link,
+  NavigationBlocker,
+  RoutingProvider,
+  useRoutePath,
+} from "./routing";
+import {prepareRouting, routeHref} from "./routePaths";
 
 function GuardFixture() {
   const path = useRoutePath();
@@ -19,7 +25,7 @@ describe("navigation protection", () => {
   let root: Root;
 
   beforeEach(async () => {
-    window.history.replaceState(null, "", "#/start");
+    window.history.replaceState(null, "", "/start");
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -43,7 +49,8 @@ describe("navigation protection", () => {
 
     await act(async () => link.click());
 
-    expect(window.location.hash).toBe("#/start");
+    expect(window.location.pathname).toBe("/start");
+    expect(window.location.hash).toBe("");
     expect(container.querySelector("output")).toHaveTextContent("/start");
   });
 
@@ -55,7 +62,8 @@ describe("navigation protection", () => {
     await act(async () => link.click());
 
     await vi.waitFor(() => {
-      expect(window.location.hash).toBe("#/next");
+      expect(window.location.pathname).toBe("/next");
+      expect(window.location.hash).toBe("");
       expect(container.querySelector("output")).toHaveTextContent("/next");
     });
   });
@@ -64,5 +72,39 @@ describe("navigation protection", () => {
     const event = new Event("beforeunload", {cancelable: true});
     window.dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
+  });
+});
+
+describe("clean route migration", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("builds links beneath the GitHub Pages project path", () => {
+    expect(routeHref("/research")).toBe("/research");
+    expect(routeHref("/lookup?type=sentences")).toBe("/lookup?type=sentences");
+  });
+
+  it("converts old hash links without reloading", () => {
+    window.history.replaceState(null, "", "/#/research?language=lang_amis");
+
+    prepareRouting();
+
+    expect(window.location.pathname).toBe("/research");
+    expect(window.location.search).toBe("?language=lang_amis");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("restores a route forwarded by the GitHub Pages fallback", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?__kakarayan_route=%2Fdevelopers%3Fsection%3Dapi",
+    );
+
+    prepareRouting();
+
+    expect(window.location.pathname).toBe("/developers");
+    expect(window.location.search).toBe("?section=api");
   });
 });

@@ -63,14 +63,15 @@ Each document uses the envelope in `schemas/static-api.schema.json`. Consumers r
 | `GET /v1/releases/{release}/concordance` | Sentence summaries |
 | `GET /v1/releases/{release}/frequencies` | Bounded token frequencies |
 | `GET /v1/releases/{release}/summaries` | Corpus summary and distributions |
-| `GET /v1/releases/{release}/datasets/preview` | At most 25 projected rows |
-| `GET /v1/releases/{release}/datasets/export` | Finite CSV, TSV, or JSON Lines export |
+| `GET /v1/releases/{release}/datasets/preview` | At most 250 projected rows |
+| `GET /v1/releases/{release}/datasets/export` | Streamed CSV, TSV, or JSON Lines export |
+| `GET /v1/releases/{release}/datasets/export-package` | S/W/M tables in one ZIP |
 
 ## Search
 
 Dictionary and concordance routes require:
 
-- `q`: 1 to 256 characters;
+- `q`: 1 to 2,048 characters;
 - `language_id`: one FormosanBank display-language identifier;
 - `direction`: `formosan` or `translation`;
 - `match`: `exact`, `prefix`, or `contains`.
@@ -95,7 +96,7 @@ sentence detail route.
 
 ## Pagination
 
-`limit` is between 1 and 100 and defaults to 25. Search and frequency responses return an
+`limit` is between 1 and 1,000 and defaults to 25. Search and frequency responses return an
 opaque `next_cursor` when another page exists. Cursors are keyset positions bound to the
 release and query. Do not decode them or reuse one after changing any query parameter.
 
@@ -105,29 +106,37 @@ records.
 ## Dataset preview and export
 
 Dataset routes accept the same scope, direction, match, translation-language, and tier
-requirements as search. Repeated `field` parameters select from:
+requirements as search. Set `record_level=sentence|word|morpheme`. Repeated `field`
+parameters select columns valid for that level. Shared columns include:
 
 ```text
-id text_id standard original translations language_id corpus_id dialect
-source_path tokens audio phonology word_translations morpheme_translations
+id xml_id parent_id text_id sentence_id word_id position form standard original
+alternate_forms translations phonology audio unclear language_id corpus_id dialect source_path
 ```
 
-`translations` contains sentence-owned translations only. `word_translations` and
-`morpheme_translations` contain compact JSON arrays with stable owner IDs, positions,
-forms, language tags, and translations. This ownership must be preserved when flattening
-or joining exported data. The legacy `glosses` field remains accepted for existing v1
-recipes but is not offered by the interface because it does not retain owner alignment.
+Sentence rows also support `tokens`, `token_count`, and `source`. W and M rows support
+`class` and `sclass`. Invalid level and field combinations return 422. Tier values belong
+only to the selected owner. Parent identifiers support lossless joins across S, W, and M.
 
-Preview returns at most 25 rows and reports `estimated_rows`, `returned_rows`, and
-`truncated`. Export requires `max_rows` from 1 through 1,000, accepts `format=csv|tsv|jsonl`,
-and rejects responses above 5 MiB. CSV and TSV cells beginning with spreadsheet formula
-characters are escaped.
+Set `complete_fields=true` to exclude rows missing any selected optional tier or attribute.
+The Research builder always uses this mode. The default remains `false` for compatibility
+with earlier sentence API clients.
 
-Full-corpus work belongs to prepared downloads. There is no unbounded custom export or
-background job in v1.
+Preview returns at most 250 rows and reports `record_level`, `estimated_rows`,
+`returned_rows`, and `truncated`. Export requires `max_rows` from 1 through 100,000 per
+selected level and accepts `format=csv|tsv|jsonl`. Rows are streamed as they are read from
+SQLite, so there is no fixed response-byte cap or full-result memory buffer. CSV and TSV
+cells beginning with spreadsheet formula characters are escaped.
+
+For `export-package`, repeat `record_level` and pass level-specific fields as
+`sentence_field`, `word_field`, and `morpheme_field`. The response contains one table per
+selected level plus `manifest.json`.
+
+Full-corpus work still belongs to prepared downloads. Custom exports are finite and run in
+the request, with no background job in v1.
 
 The UI recipe format is defined by `schemas/export-recipe.schema.json`. Publisher execution
-and the HTTP export share the same fields and selection semantics.
+and the HTTP export share the same level, column, completeness, and matching semantics.
 
 ## Errors
 
@@ -144,8 +153,8 @@ Errors use:
 ```
 
 Clients should branch on `code`. Expected categories include invalid input, release
-mismatch, missing records, excessive query work, excessive export size, rights denial, and
-service not ready.
+mismatch, missing records, rate limiting, excessive query work, rights denial, and service
+not ready. A `rate_limited` response uses status 429 and includes `Retry-After`.
 
 ## HTTP and privacy behavior
 
@@ -157,6 +166,24 @@ service not ready.
 - Operational records include method, route template, status, duration, bytes, release ID,
   and a failure code when applicable. They exclude URLs, raw queries, sentence text,
   recordings, and model input.
+
+## Request controls
+
+The single production API process uses per-IP token buckets:
+
+- 60 sustained requests per minute, with up to 20 immediate requests after an idle period;
+- 5 sustained dataset exports per minute, with up to 5 immediate exports after an idle
+  period;
+- 4 SQLite queries executing at once across all users.
+
+Export requests consume both kinds of request token. Requests above the rate return 429.
+Database work above the concurrency limit waits for a slot, keeping the small server from
+starting too many large reads at once. `/healthz`, `/readyz`, and CORS `OPTIONS` requests do
+not consume tokens.
+
+These counters live in the one API process and reset when its container restarts. They are
+not a billing, identity, or access-control system. CORS controls browser origins only;
+command-line and server clients may call the public API directly.
 
 ## JavaScript example
 
@@ -189,6 +216,12 @@ The serving process requires a database and active manifest prepared before star
 | `KAKARAYAN_RELEASE_MANIFEST_PATH` | Local active manifest path |
 | `KAKARAYAN_SQLITE_SHA256` | Optional independently expected expanded checksum |
 | `KAKARAYAN_CORS_ORIGINS` | Comma-separated exact origins |
+| `KAKARAYAN_QUERY_STEP_LIMIT` | SQLite progress callbacks allowed per request; default 2,000,000 |
+| `KAKARAYAN_REQUESTS_PER_MINUTE` | Sustained requests per minute per client IP; default 60 |
+| `KAKARAYAN_REQUEST_BURST` | Immediately available general tokens; default 20 |
+| `KAKARAYAN_EXPORTS_PER_MINUTE` | Sustained exports per minute per client IP; default 5 |
+| `KAKARAYAN_EXPORT_BURST` | Immediately available export tokens; default 5 |
+| `KAKARAYAN_QUERY_CONCURRENCY` | SQLite queries executing together; default 4 |
 
 Use `python -m api.prepare_release` during deployment. Runtime startup never downloads or
 decompresses a release.

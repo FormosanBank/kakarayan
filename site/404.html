@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Opening Kakarayan</title>
+    <script>
+      (() => {
+        const base = "%BASE_URL%";
+        const basePath = base === "/" ? "" : base.replace(/\/$/, "");
+        const pathname = basePath && location.pathname.startsWith(`${basePath}/`)
+          ? location.pathname.slice(basePath.length)
+          : location.pathname === basePath
+            ? "/"
+            : location.pathname;
+        const route = `${pathname.startsWith("/") ? pathname : `/${pathname}`}${location.search}${location.hash}`;
+        location.replace(`${base}?__kakarayan_route=${encodeURIComponent(route)}`);
+      })();
+    </script>
+  </head>
+  <body>
+    <p>Opening Kakarayan…</p>
+  </body>
+</html>

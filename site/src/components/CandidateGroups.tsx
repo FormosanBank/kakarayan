@@ -9,12 +9,14 @@ export function CandidateGroups({
   targetLanguage,
   corpusId,
   onSave,
+  onViewSentences,
 }: {
   data: AppData;
   entries: DictionaryEntry[];
   targetLanguage: string;
   corpusId: string;
   onSave: (entry: DictionaryEntry) => void;
+  onViewSentences?: (entry: DictionaryEntry) => void;
 }) {
   const {locale, number, tx} = useI18n();
   return (
@@ -60,9 +62,19 @@ export function CandidateGroups({
               </dl>
             )}
             <footer>
-              <Link className="button button--quiet" to={sentenceLink}>
-                {tx("View sentences", "查看例句")}
-              </Link>
+              {onViewSentences ? (
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  onClick={() => onViewSentences(entry)}
+                >
+                  {tx("View sentences", "查看例句")}
+                </button>
+              ) : (
+                <Link className="button button--quiet" to={sentenceLink}>
+                  {tx("View sentences", "查看例句")}
+                </Link>
+              )}
               <button
                 className="button button--primary"
                 disabled={!entry.meanings.length}

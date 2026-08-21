@@ -169,12 +169,20 @@
 }
 
 .model-progress__spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--line-strong);
-  border-top-color: var(--ink);
-  border-radius: 50%;
-  animation: model-progress-spin 0.8s linear infinite;
+  position: relative;
+  width: 42px;
+  height: 2px;
+  overflow: hidden;
+  background: var(--line-strong);
+}
+
+.model-progress__spinner::after {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 34%;
+  background: var(--ink);
+  content: "";
+  animation: loading-state-scan 1.2s ease-in-out infinite;
 }
 
 .model-progress strong,
@@ -214,12 +222,8 @@
   content: "✓ ";
 }
 
-@keyframes model-progress-spin {
-  to { transform: rotate(360deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .model-progress__spinner {
+  .model-progress__spinner::after {
     animation: none;
   }
 }
@@ -289,6 +293,10 @@
 
 .recorder-panel audio {
   max-width: 100%;
+}
+
+.recorder-panel .loading-state {
+  flex: 1 0 100%;
 }
 
 .recording-indicator {

@@ -2,6 +2,8 @@ import {useMemo, useRef, useState, type FormEvent} from "react";
 
 import {useI18n} from "../i18n";
 import type {Language, MatchMode, SearchDirection} from "../types";
+import {CodeLines, RequestExamples} from "./DeveloperCode";
+import {LoadingState} from "./LoadingState";
 
 type QueryRoute = "dictionary" | "concordance";
 
@@ -26,6 +28,7 @@ export function ApiExplorer({
   const [direction, setDirection] = useState<SearchDirection>("formosan");
   const [translationLanguage, setTranslationLanguage] = useState("eng");
   const [match, setMatch] = useState<MatchMode>("exact");
+  const [limit, setLimit] = useState(5);
   const [response, setResponse] = useState("");
   const [bytes, setBytes] = useState(0);
   const [httpStatus, setHttpStatus] = useState(0);
@@ -33,7 +36,7 @@ export function ApiExplorer({
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
 
-  const url = useMemo(() => {
+  const request = useMemo(() => {
     const endpoint = new URL(
       `/v1/releases/${encodeURIComponent(releaseId)}/${route}`,
       `${base}/`,
@@ -42,12 +45,16 @@ export function ApiExplorer({
     endpoint.searchParams.set("language_id", languageId);
     endpoint.searchParams.set("direction", direction);
     endpoint.searchParams.set("match", match);
-    endpoint.searchParams.set("limit", "5");
+    endpoint.searchParams.set("limit", String(limit));
     if (direction === "translation" && translationLanguage.trim()) {
       endpoint.searchParams.set("translation_language", translationLanguage.trim());
     }
-    return endpoint.toString();
-  }, [base, direction, languageId, match, query, releaseId, route, translationLanguage]);
+    return {
+      parameters: [...endpoint.searchParams.entries()],
+      path: endpoint.pathname,
+      url: endpoint.toString(),
+    };
+  }, [base, direction, languageId, limit, match, query, releaseId, route, translationLanguage]);
 
   async function load(event: FormEvent) {
     event.preventDefault();
@@ -59,7 +66,7 @@ export function ApiExplorer({
     setResponse("");
     setHttpStatus(0);
     try {
-      const result = await fetch(url, {
+      const result = await fetch(request.url, {
         headers: {Accept: "application/json", "X-Kakarayan-Client": "developer-playground-v1"},
         signal: next.signal,
       });
@@ -68,7 +75,7 @@ export function ApiExplorer({
       try {
         formatted = JSON.stringify(JSON.parse(text) as unknown, null, 2);
       } catch {
-        // Keep a proxy error page readable when the response is not JSON.
+        // Preserve a non-JSON proxy response so the developer can inspect it.
       }
       setBytes(new TextEncoder().encode(text).byteLength);
       setHttpStatus(result.status);
@@ -99,76 +106,124 @@ export function ApiExplorer({
   }
 
   return (
-    <section className="api-explorer">
-      <div className="section-heading">
-        <h2>{tx("Try the live API", "試用即時 API")}</h2>
-        <p>{tx("Send a bounded, read-only request to the active corpus release.", "向目前語料版本傳送有限的唯讀請求。")}</p>
+    <section className="api-explorer" aria-labelledby="api-playground-title">
+      <div className="section-heading api-explorer__heading">
+        <div>
+          <h2 id="api-playground-title">{tx("API playground", "API 測試工具")}</h2>
+          <p>{tx("Build a request and inspect the response.", "建立請求並檢視回應。")}</p>
+        </div>
+        <span className="api-explorer__release"><span>release</span> {releaseId}</span>
       </div>
-      <form className="api-explorer__form" onSubmit={load}>
-        <label className="field">
-          {tx("Request", "請求")}
-          <select value={route} onChange={(event) => setRoute(event.target.value as QueryRoute)}>
-            <option value="dictionary">{tx("Dictionary", "詞典")}</option>
-            <option value="concordance">{tx("Sentences", "句子")}</option>
-          </select>
-        </label>
-        <label className="field">
-          {tx("Query", "查詢")}
-          <input required maxLength={256} value={query} onChange={(event) => setQuery(event.target.value)} />
-        </label>
-        <label className="field">
-          {tx("Formosan language", "南島語言")}
-          <select required value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
-            {languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          {tx("Search field", "搜尋欄位")}
-          <select value={direction} onChange={(event) => setDirection(event.target.value as SearchDirection)}>
-            <option value="formosan">{tx("Formosan text", "南島語文本")}</option>
-            <option value="translation">{tx("Translation", "翻譯")}</option>
-          </select>
-        </label>
-        <label className="field">
-          {tx("Match", "比對")}
-          <select value={match} onChange={(event) => setMatch(event.target.value as MatchMode)}>
-            <option value="exact">{tx("Exact", "完全相符")}</option>
-            <option value="prefix">{tx("Prefix", "前綴")}</option>
-            <option value="contains">{tx("Contains", "包含")}</option>
-          </select>
-        </label>
-        {direction === "translation" && (
-          <label className="field">
-            {tx("Translation language tag", "翻譯語言標籤")}
-            <input maxLength={32} value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value)} />
-          </label>
-        )}
-        <div className="api-explorer__endpoint">
-          <span>{tx("GET request", "GET 請求")}</span>
-          <code title={url}>{url}</code>
-        </div>
-        <div className="api-explorer__actions">
-          <button className="button button--primary" disabled={busy || !available} type="submit">
-            {busy ? tx("Requesting…", "請求中…") : tx("Run request", "執行請求")}
-          </button>
-          {busy && <button className="text-button" type="button" onClick={() => controller.current?.abort()}>{tx("Cancel", "取消")}</button>}
-          <button className="text-button" type="button" onClick={() => copy(url, tx("Request URL copied.", "已複製請求網址。"))}>{tx("Copy URL", "複製網址")}</button>
-        </div>
-      </form>
-      {!available && <p className="tool-note" role="status">{tx("The query service is not ready.", "查詢服務尚未就緒。")}</p>}
-      {status && <p className="tool-note" role="status">{status}</p>}
-      {response && (
-        <div className="api-explorer__response">
-          <div>
-            <span>HTTP {httpStatus} · {number(bytes)} bytes</span>
-            <div className="button-row">
-              <button className="text-button" type="button" onClick={() => copy(response, tx("Shown response copied.", "已複製顯示的回應。"))}>{tx("Copy response", "複製回應")}</button>
-              <a href={url}>{tx("Open response", "開啟回應")}</a>
-            </div>
+      <div className="api-explorer__workspace">
+        <form className="api-explorer__request" onSubmit={load}>
+          <div className="api-pane-heading">
+            <h3>{tx("Request", "請求")}</h3>
+            <span>GET · JSON</span>
           </div>
-          <pre tabIndex={0}><code>{response}</code></pre>
-        </div>
-      )}
+          <fieldset className="api-route-picker">
+            <legend>{tx("Endpoint", "端點")}</legend>
+            <div>
+              <button type="button" aria-pressed={route === "dictionary"} onClick={() => setRoute("dictionary")}>
+                {tx("Dictionary", "詞典")}
+              </button>
+              <button type="button" aria-pressed={route === "concordance"} onClick={() => setRoute("concordance")}>
+                {tx("Sentences", "句子")}
+              </button>
+            </div>
+          </fieldset>
+          <div className="api-explorer__fields">
+            <label className="field field--api-wide">
+              {tx("Query", "查詢")}
+              <input required maxLength={2048} value={query} onChange={(event) => setQuery(event.target.value)} />
+            </label>
+            <label className="field field--api-wide">
+              {tx("Formosan language", "臺灣南島語")}
+              <select required value={languageId} onChange={(event) => setLanguageId(event.target.value)}>
+                {languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              {tx("Search in", "搜尋範圍")}
+              <select value={direction} onChange={(event) => setDirection(event.target.value as SearchDirection)}>
+                <option value="formosan">{tx("Formosan text", "臺灣南島語文本")}</option>
+                <option value="translation">{tx("Translations", "翻譯")}</option>
+              </select>
+            </label>
+            <label className="field">
+              {tx("Match", "比對方式")}
+              <select value={match} onChange={(event) => setMatch(event.target.value as MatchMode)}>
+                <option value="exact">{tx("Exact", "完全相符")}</option>
+                <option value="prefix">{tx("Prefix", "前綴")}</option>
+                <option value="contains">{tx("Contains", "包含")}</option>
+              </select>
+            </label>
+            <label className="field">
+              {tx("Results", "結果數")}
+              <select value={limit} onChange={(event) => setLimit(Number(event.target.value))}>
+                {[5, 25, 100, 250, 500, 1000].map((value) => <option key={value} value={value}>{number(value)}</option>)}
+              </select>
+            </label>
+            {direction === "translation" && (
+              <label className="field">
+                {tx("Translation language tag", "翻譯語言標籤")}
+                <input maxLength={32} value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value)} />
+              </label>
+            )}
+          </div>
+          <div className="api-request-preview" aria-label={tx("Generated request", "產生的請求")}>
+            <div className="api-request-preview__route">
+              <span>GET</span>
+              <code>{request.path}</code>
+            </div>
+            <dl>
+              {request.parameters.map(([key, value]) => (
+                <div key={key}><dt>{key}</dt><dd>{value}</dd></div>
+              ))}
+            </dl>
+          </div>
+          <div className="api-explorer__actions">
+            <button className="button button--primary" disabled={busy || !available} type="submit">
+              {busy ? tx("Requesting…", "請求中…") : tx("Run request", "執行請求")}
+            </button>
+            {busy && <button className="text-button" type="button" onClick={() => controller.current?.abort()}>{tx("Cancel", "取消")}</button>}
+            <button className="text-button" type="button" onClick={() => void copy(request.url, tx("Request URL copied.", "已複製請求網址。"))}>{tx("Copy URL", "複製網址")}</button>
+          </div>
+          {!available && <p className="tool-note" role="status">{tx("The query service is unavailable.", "查詢服務目前無法使用。")}</p>}
+        </form>
+        <section className="api-explorer__response" aria-labelledby="api-response-title">
+          <div className="api-pane-heading">
+            <h3 id="api-response-title">{tx("Response", "回應")}</h3>
+            <span>
+              {busy
+                ? tx("waiting", "等待中")
+                : httpStatus
+                  ? `HTTP ${httpStatus} · ${number(bytes)} bytes`
+                  : tx("not run", "尚未執行")}
+            </span>
+          </div>
+          {busy ? (
+            <LoadingState
+              kind="code"
+              label={tx("Waiting for API response", "正在等待 API 回應")}
+            />
+          ) : response ? (
+            <>
+              <div className="api-explorer__response-actions">
+                <button className="text-button" type="button" onClick={() => void copy(response, tx("Response copied.", "已複製回應。"))}>{tx("Copy response", "複製回應")}</button>
+                <a href={request.url} target="_blank" rel="noreferrer">{tx("Open JSON", "開啟 JSON")}</a>
+              </div>
+              <CodeLines label={tx("JSON response", "JSON 回應")} value={response} />
+            </>
+          ) : (
+            <div className="api-explorer__empty">
+              <span>{"{ }"}</span>
+              <p>{tx("Run the request to inspect its JSON response.", "執行請求以檢視 JSON 回應。")}</p>
+            </div>
+          )}
+          {status && <p className="api-explorer__status" role="status">{status}</p>}
+        </section>
+      </div>
+      <RequestExamples url={request.url} />
     </section>
   );
 }

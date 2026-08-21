@@ -1,20 +1,27 @@
-"""Validate and execute finite, sentence-level export recipes."""
+"""Validate and execute finite, release-pinned export recipes."""
 
 from __future__ import annotations
 
-import csv
-import io
+import argparse
 import json
-import zipfile
-from collections.abc import Iterator, Sequence
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from jsonschema import Draft202012Validator
 
-from api.dataset_fields import DatasetField, project_record
-from api.search import MatchMode, matches
-from publisher.build import BuildError
+from api.config import Settings
+from api.dataset_fields import DatasetField, RecordLevel
+from api.exports import dataset_chunks, zip_chunks
+from api.prepare_release import prepare_release
+from api.release import load_release
+from api.search import MatchMode
+from api.store import CorpusStore, DatasetStream, SearchDirection, TierRequirement
+from publisher.build import BuildError, build_release
+
+ExportFormat = Literal["csv", "tsv", "jsonl"]
 
 
 def load_recipe(path: Path, schema_path: Path) -> dict[str, Any]:
@@ -24,181 +31,129 @@ def load_recipe(path: Path, schema_path: Path) -> dict[str, Any]:
     return value
 
 
-def _recipe_record(record: dict[str, Any]) -> dict[str, Any]:
-    if "tiers" not in record:
-        return record
-    forms = list(record["tiers"]["forms"])
-    phonology = list(record["tiers"]["phonology"])
-    tier_translations = list(record["tiers"]["translations"])
-    audio = list(record["tiers"]["audio"])
-    words = record.get("words", [])
-    for word in words:
-        forms.extend(word["tiers"]["forms"])
-        phonology.extend(word["tiers"]["phonology"])
-        tier_translations.extend(word["tiers"]["translations"])
-        audio.extend(word["tiers"]["audio"])
-        for morpheme in word["morphemes"]:
-            forms.extend(morpheme["tiers"]["forms"])
-            phonology.extend(morpheme["tiers"]["phonology"])
-            tier_translations.extend(morpheme["tiers"]["translations"])
-            audio.extend(morpheme["tiers"]["audio"])
-    return {
-        **record,
-        "id": record["sentence_id"],
-        "xml_id": record["source_xml_id"],
-        "standard": record["standard_form"] or "",
-        "original": record["original_form"] or "",
-        "translations": [
-            item for item in record["tiers"]["translations"] if item["owner_type"] == "sentence"
-        ],
-        "forms": forms,
-        "phonology": phonology,
-        "tier_translations": tier_translations,
-        "audio": audio,
-    }
+def _single_scope(values: list[str], name: str) -> str | None:
+    if len(values) > 1:
+        raise BuildError(f"Recipe {name} must contain at most one value")
+    return values[0] if values else None
 
 
-def _matches(record: dict[str, Any], selection: dict[str, Any]) -> bool:
-    query = str(selection["query"])
-    if not query:
-        return True
-    match = cast(MatchMode, selection["match"])
-    if selection["query_field"] == "translation":
-        language = str(selection["translation_language"])
-        return any(
-            (not language or item["xml_lang"] == language)
-            and matches(str(item["text"]), query, match)
-            for item in record["tier_translations"]
+@contextmanager
+def _release_store(release: Path) -> Iterator[CorpusStore]:
+    manifest = release / "release-manifest.json"
+    if not manifest.is_file():
+        raise BuildError(f"Release manifest does not exist: {manifest}")
+    with tempfile.TemporaryDirectory(prefix="kakarayan-recipe-db-") as temporary:
+        root = Path(temporary)
+        database = root / "formosanbank.sqlite"
+        active_manifest = root / "active-release.json"
+        prepare_release(str(manifest), database, active_manifest)
+        settings = Settings(
+            manifest_path=active_manifest,
+            database_path=database,
+            expected_sha256=None,
+            cors_origins=(),
         )
-    values = [
-        record["standard"],
-        record["original"],
-        *(item["surface"] for item in record["tokens"]),
-        *(item["text"] for item in record["forms"]),
-    ]
-    return any(matches(str(value), query, match, surface=True) for value in values)
+        yield CorpusStore(
+            load_release(settings),
+            settings.query_step_limit,
+            query_concurrency=1,
+        )
 
 
-def _has_requirements(record: dict[str, Any], requirements: Sequence[str]) -> bool:
-    for requirement in requirements:
-        if requirement == "translation" and not record["tier_translations"]:
-            return False
-        if requirement == "audio" and not record["audio"]:
-            return False
-        if requirement == "phonology" and not record["phonology"]:
-            return False
-        if requirement == "interlinear" and not record["words"]:
-            return False
-        if requirement == "unclear" and not any(
-            int(item.get("unclear", 0)) > 0
-            for item in [*record["forms"], *record["phonology"], *record["tier_translations"]]
-        ):
-            return False
-    return True
-
-
-def resolve_recipe(release: Path, recipe: dict[str, Any]) -> list[dict[str, Any]]:
-    manifest = json.loads((release / "release-manifest.json").read_text(encoding="utf-8"))
-    if manifest["release_id"] != recipe["release_id"]:
-        raise BuildError(f"Recipe pins {recipe['release_id']}, release is {manifest['release_id']}")
+def _recipe_streams(store: CorpusStore, recipe: dict[str, Any]) -> list[DatasetStream]:
+    if store.release_id != recipe["release_id"]:
+        raise BuildError(f"Recipe pins {recipe['release_id']}, release is {store.release_id}")
     selection = recipe["selection"]
-    record_ids = set(selection["record_ids"])
-    languages = set(selection["language_ids"])
-    corpora = set(selection["corpus_ids"])
-    dialects = set(selection["dialects"])
-    requirements = list(selection["requirements"])
-    result: list[dict[str, Any]] = []
-    for line in _record_lines(release):
-        record = _recipe_record(json.loads(line))
-        if record["language_id"] not in languages:
-            continue
-        if corpora and record["corpus_id"] not in corpora:
-            continue
-        if dialects and record["dialect"] not in dialects:
-            continue
-        if not _has_requirements(record, requirements):
-            continue
-        if record_ids and record["id"] not in record_ids:
-            continue
-        if not record_ids and not _matches(record, selection):
-            continue
-        result.append(record)
-        if len(result) >= selection["max_rows"]:
-            break
-    if record_ids and {record["id"] for record in result} != record_ids:
-        raise BuildError("Recipe record_ids are not all present in the pinned release and scope")
-    return result
-
-
-def _record_lines(release: Path) -> Iterator[str]:
-    packages = sorted((release / "prepared" / "jsonl").glob("*.zip"))
-    if packages:
-        for package in packages:
-            yield from _archive_record_lines(package)
-        return
-    bundled = release / "prepared" / "hierarchical-jsonl.zip"
-    if not bundled.is_file():
-        raise BuildError("Release contains no executable recipe record source")
-    with zipfile.ZipFile(bundled) as outer:
-        for name in sorted(item for item in outer.namelist() if item.endswith(".zip")):
-            with outer.open(name) as stream, zipfile.ZipFile(io.BytesIO(stream.read())) as inner:
-                yield from _archive_record_lines(inner)
-
-
-def _archive_record_lines(package: Path | zipfile.ZipFile) -> Iterator[str]:
-    if isinstance(package, zipfile.ZipFile):
-        for name in sorted(package.namelist()):
-            if name.endswith(".jsonl"):
-                with package.open(name) as stream:
-                    for line in stream:
-                        yield line.decode("utf-8")
-        return
-    with zipfile.ZipFile(package) as archive:
-        yield from _archive_record_lines(archive)
-
-
-def _spreadsheet_safe(value: object, enabled: bool) -> object:
-    if enabled and isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
-        return f"'{value}"
-    return value
-
-
-def write_recipe_export(
-    records: list[dict[str, Any]],
-    recipe: dict[str, Any],
-    output: Path,
-) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
-    export_format = recipe["format"]
-    fields = cast(list[DatasetField], recipe["fields"])
-    if export_format == "jsonl":
-        output.write_text(
-            "".join(
-                json.dumps(
-                    project_record(record, fields),
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-                + "\n"
-                for record in records
-            ),
-            encoding="utf-8",
-            newline="\n",
+    fields = cast(dict[RecordLevel, list[DatasetField]], recipe["fields"])
+    levels = cast(list[RecordLevel], selection["record_units"])
+    if set(levels) != set(fields):
+        raise BuildError("Recipe fields must match its selected record_units")
+    language_ids = cast(list[str], selection["language_ids"])
+    if len(language_ids) != 1:
+        raise BuildError("Recipe language_ids must contain exactly one value")
+    if selection["record_ids"]:
+        raise BuildError("Current recipes select records by query and scope, not explicit IDs")
+    query = str(selection["query"]).strip() or None
+    return [
+        store.stream_dataset(
+            language_id=language_ids[0],
+            corpus_id=_single_scope(cast(list[str], selection["corpus_ids"]), "corpus_ids"),
+            dialect=_single_scope(cast(list[str], selection["dialects"]), "dialects"),
+            q=query,
+            direction=cast(SearchDirection, selection["query_field"]),
+            translation_language=str(selection["translation_language"]) or None,
+            match=cast(MatchMode, selection["match"]),
+            requirements=cast(list[TierRequirement], selection["requirements"]),
+            fields=fields[level],
+            record_level=level,
+            complete_fields=bool(selection["complete_fields"]),
+            max_rows=int(selection["max_rows"]),
         )
-        return
-    delimiter = "\t" if export_format == "tsv" else ","
-    with output.open("w", encoding="utf-8-sig", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=fields, delimiter=delimiter, lineterminator="\n")
-        writer.writeheader()
-        for record in records:
-            projected = project_record(record, fields)
-            writer.writerow(
-                {
-                    field: _spreadsheet_safe(
-                        projected[field],
-                        bool(recipe["spreadsheet_safe"]),
-                    )
-                    for field in fields
-                }
+        for level in levels
+    ]
+
+
+def _write_chunks(output: Path, chunks: Iterator[bytes]) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("wb") as stream:
+        for chunk in chunks:
+            stream.write(chunk)
+
+
+def execute_recipe(release: Path, recipe: dict[str, Any], output: Path) -> int:
+    """Execute one recipe through the canonical SQLite dataset and export paths."""
+    with _release_store(release.resolve()) as store:
+        streams = _recipe_streams(store, recipe)
+        export_format = cast(ExportFormat, recipe["format"])
+        safe = bool(recipe["spreadsheet_safe"])
+        if len(streams) == 1:
+            chunks = dataset_chunks(
+                streams[0],
+                export_format,
+                spreadsheet_safe_cells=safe,
             )
+        else:
+            members = (
+                (
+                    f"{result.record_level}s.{export_format}",
+                    dataset_chunks(
+                        result,
+                        export_format,
+                        spreadsheet_safe_cells=safe,
+                    ),
+                )
+                for result in streams
+            )
+            recipe_bytes = (json.dumps(recipe, ensure_ascii=False, indent=2) + "\n").encode()
+            chunks = zip_chunks(members, recipe_bytes, manifest_name="recipe.json")
+        _write_chunks(output, chunks)
+        return sum(result.returned_rows for result in streams)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--release", type=Path)
+    source.add_argument("--repo", type=Path)
+    parser.add_argument("--recipe", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--schema",
+        type=Path,
+        default=Path(__file__).resolve().parents[1] / "schemas" / "export-recipe.schema.json",
+    )
+    arguments = parser.parse_args(argv)
+    recipe = load_recipe(arguments.recipe, arguments.schema)
+    if arguments.release:
+        count = execute_recipe(arguments.release, recipe, arguments.output)
+    else:
+        with tempfile.TemporaryDirectory(prefix="kakarayan-recipe-") as temporary:
+            release = Path(temporary) / "release"
+            build_release(arguments.repo, release, include_prepared=False)
+            count = execute_recipe(release, recipe, arguments.output)
+    print(f"Wrote {count} records to {arguments.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

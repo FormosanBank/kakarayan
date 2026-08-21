@@ -20,7 +20,7 @@ clean FormosanBank checkout at one commit
 
 browser
   -> Pages serves the React shell and small static catalogues
-  -> query API returns bounded summaries, details, previews, and exports
+  -> query API returns summaries, details, previews, and streamed exports
   -> GitHub Releases serves prepared research downloads
   -> named Hugging Face services receive MT or ASR input only after consent
 ```
@@ -75,12 +75,14 @@ The API owns:
 - stable keyset cursors;
 - small result summaries and on-demand record detail;
 - frequency and summary queries;
-- bounded previews and finite CSV, TSV, or JSON Lines exports;
+- previews and finite streamed CSV, TSV, or JSON Lines exports;
+- per-IP general and export rate limits;
+- one global SQLite query-concurrency boundary;
 - health, readiness, release identity, and privacy-preserving operational records.
 
 Successful release-scoped GET responses are public and immutable. Validation and readiness
-responses are not cached. Query length, page size, SQLite work, export rows, and export bytes
-are bounded.
+responses are not cached. Query length, page size, SQLite work, and export rows have high
+finite limits. Export bytes are streamed rather than buffered in API memory.
 
 ## Activation boundary
 
@@ -114,8 +116,7 @@ does not build a browser search engine or a second source projection.
 
 - GitHub Pages serves the application and static metadata.
 - GitHub Releases serves immutable prepared downloads and the compressed query read model.
-- A public Docker deployment, currently the Tokyo Lightsail proof of concept, serves the
-  query API.
+- The Tokyo Lightsail Docker deployment serves the query API.
 - Hugging Face model services provide optional MT and ASR.
 - The FormosanBank GitBook remains the maintained long-form documentation source embedded
   by the Docs route.

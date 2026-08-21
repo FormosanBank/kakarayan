@@ -43,7 +43,7 @@ async function seedLegacyCard(page: Page) {
 
 test("local study data migrates, backs up, and restores", async ({page}, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "IndexedDB is exercised once");
-  await page.goto("#/learn");
+  await page.goto("learn");
   await seedLegacyCard(page);
   await page.getByRole("tab", {name: /Study deck/u}).click();
   await expect(page.getByRole("heading", {name: "legacy front"})).toBeVisible();
@@ -80,7 +80,7 @@ test("microphone denial is recoverable and local audio can be deleted", async ({
       },
     });
   });
-  await page.goto("#/learn");
+  await page.goto("learn");
   await page.getByRole("tab", {name: /Pronunciation/u}).click();
   const panel = page.getByRole("tabpanel");
   await panel.getByRole("button", {name: "Start recording"}).click();
@@ -100,7 +100,7 @@ test("the shell and local cards remain available offline", async ({
   context,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "Offline behavior is exercised once");
-  await page.goto("#/learn");
+  await page.goto("learn");
   await seedLegacyCard(page);
   await page.getByRole("tab", {name: /Study deck/u}).click();
   await page.evaluate(async () => navigator.serviceWorker.ready);

@@ -20,6 +20,8 @@ from publisher import PUBLIC_DOWNLOAD_PATHS
 from publisher.build import BuildError, Source, _release_id, build_release
 from publisher.cldf_export import write_cldf_package
 from publisher.format_aligned import write_aligned_package
+from publisher.format_tabular import _sentence_records
+from publisher.release_db import open_release
 from publisher.verify_release import verify_release
 
 
@@ -129,7 +131,11 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
             ]
             dictionary = json.loads(archive.read("data-dictionary.json"))
             assert "both owner_type and owner_id" in dictionary["tier_ownership"]["joins"]
-            sentence = json.loads(archive.read("part-0000.jsonl").splitlines()[0])
+            hierarchical_rows = archive.read("part-0000.jsonl")
+            assert hashlib.sha256(hierarchical_rows).hexdigest() == (
+                "203de3e2c34b13c1051d80954a3ee08cceaf3341124ffc909e6ef9f8ee96c33e"
+            )
+            sentence = json.loads(hierarchical_rows.splitlines()[0])
             assert [item["text"] for item in sentence["tiers"]["translations"]] == [
                 "A fictional translated line."
             ]
@@ -140,6 +146,13 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
                 item["text"]
                 for item in sentence["words"][0]["morphemes"][0]["tiers"]["translations"]
             ] == ["FIVE"]
+
+    statements: list[str] = []
+    with open_release(first.output / "formosanbank.sqlite") as connection:
+        connection.set_trace_callback(statements.append)
+        assert len(list(_sentence_records(connection))) == 2
+    selects = [statement for statement in statements if statement.startswith("SELECT")]
+    assert len(selects) == 8
     with zipfile.ZipFile(first.output / "prepared" / "csv-tables.zip") as archive:
         translations = list(
             csv.DictReader(io.StringIO(archive.read("translations.csv").decode("utf-8-sig")))

@@ -1,16 +1,24 @@
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import logging
 import sqlite3
+import zipfile
 from contextlib import closing
 
 from fastapi.testclient import TestClient
 
-from api.app import _spreadsheet_safe, create_app
+from api.app import create_app
 from api.config import Settings
-from api.dataset_fields import project_record
+from api.exports import spreadsheet_safe
+from api.limits import (
+    DATASET_EXPORT_MAX_ROWS,
+    DATASET_PREVIEW_MAX_ROWS,
+    QUERY_MAX_CHARS,
+    SEARCH_PAGE_MAX_ROWS,
+)
 
 
 def release_path(client: TestClient, path: str) -> str:
@@ -197,9 +205,15 @@ def test_summaries_bounds_errors_cors_and_read_only(client: TestClient) -> None:
     assert summary.json()["sentences"] == 2
     assert summary.json()["source_types"] >= len(summary.json()["source_frequencies"])
 
-    too_long = client.get(
+    longer_query = client.get(
         release_path(client, "dictionary"),
         params={"q": "x" * 257, "language_id": "lang_amis"},
+    )
+    assert longer_query.status_code == 200
+
+    too_long = client.get(
+        release_path(client, "dictionary"),
+        params={"q": "x" * (QUERY_MAX_CHARS + 1), "language_id": "lang_amis"},
     )
     assert too_long.status_code == 422
     assert too_long.json()["error"]["field"] == "q"
@@ -232,8 +246,6 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         ("field", "id"),
         ("field", "standard"),
         ("field", "translations"),
-        ("field", "word_translations"),
-        ("field", "morpheme_translations"),
         ("max_rows", "1"),
     ]
     preview = client.get(release_path(client, "datasets/preview"), params=params)
@@ -242,51 +254,221 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert preview.json()["returned_rows"] == 1
     assert preview.json()["truncated"] is True
     item = preview.json()["items"][0]
-    assert list(item) == [
-        "id",
-        "standard",
-        "translations",
-        "word_translations",
-        "morpheme_translations",
-    ]
+    assert list(item) == ["id", "standard", "translations"]
     assert "FIVE" not in item["translations"]
-    word_translation = json.loads(item["word_translations"])
-    morpheme_translation = json.loads(item["morpheme_translations"])
-    assert [(value["form"], value["text"]) for value in word_translation] == [("lima", "five.word")]
-    assert [(value["form"], value["text"]) for value in morpheme_translation] == [("lima", "FIVE")]
-    assert word_translation[0]["word_id"] != morpheme_translation[0]["morpheme_id"]
-    detail = client.get(release_path(client, f"sentences/{item['id']}")).json()
-    assert item == project_record(
-        detail,
-        [
-            "id",
-            "standard",
-            "translations",
-            "word_translations",
-            "morpheme_translations",
-        ],
-    )
 
     exported = client.get(
         release_path(client, "datasets/export"), params=[*params, ("format", "tsv")]
     )
     assert exported.status_code == 200
     assert exported.headers["x-kakarayan-row-count"] == "1"
-    assert exported.text.startswith(
-        "id\tstandard\ttranslations\tword_translations\tmorpheme_translations\n"
+    assert exported.text.startswith("id\tstandard\ttranslations\n")
+
+    larger_export = client.get(
+        release_path(client, "datasets/export"),
+        params={"language_id": "lang_amis", "max_rows": 1001},
     )
+    assert larger_export.status_code == 200
 
     unbounded = client.get(
         release_path(client, "datasets/export"),
-        params={"language_id": "lang_amis", "max_rows": 1001},
+        params={"language_id": "lang_amis", "max_rows": DATASET_EXPORT_MAX_ROWS + 1},
     )
     assert unbounded.status_code == 422
 
 
+def test_streaming_export_is_not_limited_to_five_mebibytes(settings: Settings) -> None:
+    large_translation = "a" * (5 * 1024 * 1024 + 1)
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute(
+            "UPDATE translations SET text = ? WHERE owner_type = 'sentence' AND xml_lang = 'eng'",
+            (large_translation,),
+        )
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get(
+            release_path(client, "datasets/export"),
+            params=[
+                ("language_id", "lang_amis"),
+                ("field", "id"),
+                ("field", "translations"),
+                ("max_rows", "2"),
+                ("format", "jsonl"),
+            ],
+        )
+
+    assert response.status_code == 200
+    assert len(response.content) > 5 * 1024 * 1024
+    assert response.headers["x-kakarayan-row-count"] == "2"
+
+
+def test_public_capacity_limits_accept_larger_queries(client: TestClient) -> None:
+    release = release_path(client, "dictionary")
+    assert (
+        client.get(
+            release,
+            params={"q": "lima", "language_id": "lang_amis", "limit": 101},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            release,
+            params={
+                "q": "lima",
+                "language_id": "lang_amis",
+                "limit": SEARCH_PAGE_MAX_ROWS + 1,
+            },
+        ).status_code
+        == 422
+    )
+    preview = release_path(client, "datasets/preview")
+    assert (
+        client.get(
+            preview,
+            params={"language_id": "lang_amis", "max_rows": 26},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            preview,
+            params={"language_id": "lang_amis", "max_rows": DATASET_PREVIEW_MAX_ROWS + 1},
+        ).status_code
+        == 422
+    )
+
+
+def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
+    client: TestClient,
+) -> None:
+    sentence = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "sentence"),
+            ("complete_fields", "true"),
+            ("field", "id"),
+            ("field", "original"),
+            ("field", "standard"),
+        ],
+    )
+    assert sentence.status_code == 200
+    assert sentence.json()["record_level"] == "sentence"
+    assert sentence.json()["estimated_rows"] == 1
+    assert sentence.json()["items"][0]["original"].startswith("Lima waco")
+
+    word = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "word"),
+            ("complete_fields", "true"),
+            ("q", "lima"),
+            ("match", "exact"),
+            ("field", "id"),
+            ("field", "sentence_id"),
+            ("field", "form"),
+            ("field", "translations"),
+        ],
+    )
+    assert word.status_code == 200
+    word_item = word.json()["items"][0]
+    assert word.json()["estimated_rows"] == 1
+    assert word_item["form"] == "lima"
+    assert word_item["translations"] == "eng:five.word"
+    assert word_item["sentence_id"]
+
+    morpheme = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "morpheme"),
+            ("complete_fields", "true"),
+            ("q", "lima"),
+            ("match", "exact"),
+            ("field", "id"),
+            ("field", "word_id"),
+            ("field", "sentence_id"),
+            ("field", "form"),
+            ("field", "translations"),
+        ],
+    )
+    assert morpheme.status_code == 200
+    morpheme_item = morpheme.json()["items"][0]
+    assert morpheme_item["form"] == "lima"
+    assert morpheme_item["translations"] == "eng:FIVE"
+    assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
+
+
+def test_unclear_requirement_includes_translation_and_phonology_tiers(
+    settings: Settings,
+) -> None:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute("UPDATE forms SET unclear = 0")
+        connection.execute("UPDATE phonology SET unclear = 0")
+        connection.execute("UPDATE translations SET unclear = 0")
+        connection.execute(
+            "UPDATE translations SET unclear = 1 WHERE owner_type = 'sentence' AND xml_lang = 'zho'"
+        )
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get(
+            release_path(client, "datasets/preview"),
+            params=[
+                ("language_id", "lang_amis"),
+                ("requirement", "unclear"),
+                ("field", "id"),
+                ("field", "form"),
+            ],
+        )
+
+    assert response.status_code == 200
+    assert response.json()["estimated_rows"] == 1
+    assert response.json()["items"][0]["form"] == "toki rima"
+
+
+def test_dataset_multi_level_package_has_one_table_per_xml_level(client: TestClient) -> None:
+    response = client.get(
+        release_path(client, "datasets/export-package"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "sentence"),
+            ("record_level", "word"),
+            ("record_level", "morpheme"),
+            ("sentence_field", "id"),
+            ("sentence_field", "form"),
+            ("word_field", "id"),
+            ("word_field", "sentence_id"),
+            ("word_field", "form"),
+            ("morpheme_field", "id"),
+            ("morpheme_field", "word_id"),
+            ("morpheme_field", "form"),
+            ("format", "csv"),
+        ],
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == [
+            "sentences.csv",
+            "words.csv",
+            "morphemes.csv",
+            "manifest.json",
+        ]
+        assert archive.read("words.csv").decode().startswith("id,sentence_id,form\n")
+        manifest = json.loads(archive.read("manifest.json"))
+        assert [table["record_level"] for table in manifest["tables"]] == [
+            "sentence",
+            "word",
+            "morpheme",
+        ]
+
+
 def test_spreadsheet_export_cells_are_formula_safe() -> None:
     for prefix in ("=", "+", "-", "@", "\t", "\r"):
-        assert _spreadsheet_safe(f"{prefix}danger") == f"'{prefix}danger"
-    assert _spreadsheet_safe("ordinary text") == "ordinary text"
+        assert spreadsheet_safe(f"{prefix}danger") == f"'{prefix}danger"
+    assert spreadsheet_safe("ordinary text") == "ordinary text"
 
 
 def test_request_records_use_route_templates_without_raw_queries(
@@ -320,7 +502,7 @@ def test_request_records_use_route_templates_without_raw_queries(
 
     client.get(
         release_path(client, "dictionary"),
-        params={"q": "x" * 257, "language_id": "lang_amis"},
+        params={"q": "x" * (QUERY_MAX_CHARS + 1), "language_id": "lang_amis"},
     )
     failure = next(
         item

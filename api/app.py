@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import csv
-import io
 import json
 import logging
 import sqlite3
@@ -16,20 +14,31 @@ from typing import Annotated, Literal
 from fastapi import FastAPI, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
-from api.dataset_fields import DATASET_FIELDS, DatasetField
+from api.dataset_fields import DatasetField, RecordLevel, default_dataset_fields
 from api.errors import ApiError, api_error_handler, validation_error_handler
+from api.exports import dataset_chunks, zip_chunks
+from api.limits import (
+    DATASET_EXPORT_MAX_ROWS,
+    DATASET_PREVIEW_MAX_ROWS,
+    QUERY_MAX_CHARS,
+    SEARCH_PAGE_MAX_ROWS,
+    SUMMARY_MAX_ROWS,
+)
 from api.release import ReleaseError, load_release
 from api.search import MatchMode
+from api.security import PerIpRateLimiter, RateDecision, RatePolicy
 from api.store import CorpusStore, FrequencySort, SearchDirection, TierRequirement
 
 LOGGER = logging.getLogger("kakarayan.api")
 _FAILURE_HEADER = "X-Kakarayan-Internal-Failure"
-PageSize = Annotated[int, Query(ge=1, le=100)]
+PageSize = Annotated[int, Query(ge=1, le=SEARCH_PAGE_MAX_ROWS)]
+QueryText = Annotated[str, Query(min_length=1, max_length=QUERY_MAX_CHARS)]
+OptionalQueryText = Annotated[str | None, Query(min_length=1, max_length=QUERY_MAX_CHARS)]
 LanguageId = Annotated[str, Query(min_length=1, max_length=128)]
 OptionalCorpus = Annotated[str | None, Query(max_length=128)]
 OptionalDialect = Annotated[str | None, Query(max_length=128)]
@@ -47,14 +56,12 @@ def _record(event: str, **values: object) -> None:
     LOGGER.info(json.dumps({"event": event, **values}, separators=(",", ":"), sort_keys=True))
 
 
-def _spreadsheet_safe(value: object) -> object:
-    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
-        return f"'{value}"
-    return value
-
-
 def create_app(settings: Settings | None = None) -> FastAPI:
     configured = settings or Settings.from_environment()
+    rate_limiter = PerIpRateLimiter(
+        RatePolicy(configured.requests_per_minute, configured.request_burst),
+        RatePolicy(configured.exports_per_minute, configured.export_burst),
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -63,7 +70,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         started = time.perf_counter()
         try:
             state = await asyncio.to_thread(load_release, configured)
-            app.state.store = CorpusStore(state, configured.query_step_limit)
+            app.state.store = CorpusStore(
+                state,
+                configured.query_step_limit,
+                configured.query_concurrency,
+            )
             _record(
                 "startup",
                 status="ready",
@@ -96,6 +107,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET"],
         allow_headers=["Accept", "If-None-Match", "X-Kakarayan-Client"],
+        expose_headers=[
+            "Retry-After",
+            "X-Kakarayan-Release",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Scope",
+        ],
         max_age=86400,
     )
     app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
@@ -126,7 +144,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def request_record(request: Request, call_next: RequestResponseEndpoint) -> Response:
         started = time.perf_counter()
-        response = await call_next(request)
+        decision: RateDecision | None = None
+        path = request.url.path
+        if request.method != "OPTIONS" and path not in {"/healthz", "/readyz"}:
+            client_ip = request.client.host.casefold() if request.client else "unknown"
+            decision = rate_limiter.check(
+                client_ip,
+                is_export=path.endswith(("/datasets/export", "/datasets/export-package")),
+            )
+        response: Response
+        if decision is not None and not decision.allowed:
+            error = ApiError(429, "rate_limited", "Too many requests. Try again shortly.")
+            response = JSONResponse(
+                status_code=error.status,
+                content=error.body(),
+                headers={
+                    _FAILURE_HEADER: error.code,
+                    "Cache-Control": "no-store",
+                    "Retry-After": str(decision.retry_after),
+                },
+            )
+            origin = request.headers.get("origin")
+            if origin in configured.cors_origins:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Expose-Headers"] = (
+                    "Retry-After, X-Kakarayan-Release, X-RateLimit-Limit, "
+                    "X-RateLimit-Remaining, X-RateLimit-Scope"
+                )
+                response.headers.add_vary_header("Origin")
+        else:
+            response = await call_next(request)
+        if decision is not None:
+            response.headers["X-RateLimit-Limit"] = str(decision.limit)
+            response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+            response.headers["X-RateLimit-Scope"] = decision.scope
         current = getattr(request.app.state, "store", None)
         release_id = current.release_id if isinstance(current, CorpusStore) else None
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -252,7 +303,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         response: Response,
         release_id: ReleaseId,
-        q: Annotated[str, Query(min_length=1, max_length=256)],
+        q: QueryText,
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
@@ -280,7 +331,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         response: Response,
         release_id: ReleaseId,
-        q: Annotated[str, Query(min_length=1, max_length=256)],
+        q: QueryText,
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
@@ -313,7 +364,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
-        prefix: Annotated[str | None, Query(max_length=256)] = None,
+        prefix: Annotated[str | None, Query(max_length=QUERY_MAX_CHARS)] = None,
         minimum: Annotated[int, Query(ge=1, le=1_000_000)] = 1,
         sort: FrequencySort = "count",
         limit: PageSize = 25,
@@ -339,7 +390,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
-        limit: Annotated[int, Query(ge=1, le=100)] = 25,
+        limit: Annotated[int, Query(ge=1, le=SUMMARY_MAX_ROWS)] = 25,
     ) -> dict:
         _cache(response, immutable=True)
         return release_store(request, release_id).summaries(
@@ -358,6 +409,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         match: MatchMode,
         requirement: list[TierRequirement] | None,
         field: list[DatasetField] | None,
+        record_level: RecordLevel,
+        complete_fields: bool,
         max_rows: int,
     ) -> dict:
         return release_store(request, release_id).dataset(
@@ -369,7 +422,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             translation_language=translation_language,
             match=match,
             requirements=requirement or (),
-            fields=field or DATASET_FIELDS,
+            fields=field or default_dataset_fields(record_level),
+            record_level=record_level,
+            complete_fields=complete_fields,
             max_rows=max_rows,
         )
 
@@ -381,13 +436,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
-        q: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+        q: OptionalQueryText = None,
         direction: SearchDirection = "formosan",
         translation_language: Annotated[str | None, Query(max_length=32)] = None,
         match: MatchMode = "exact",
         requirement: Annotated[list[TierRequirement] | None, Query()] = None,
         field: Annotated[list[DatasetField] | None, Query()] = None,
-        max_rows: Annotated[int, Query(ge=1, le=25)] = 12,
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
+        max_rows: Annotated[int, Query(ge=1, le=DATASET_PREVIEW_MAX_ROWS)] = 12,
     ) -> dict:
         _cache(response, immutable=True)
         return dataset_result(
@@ -402,6 +459,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             match,
             requirement,
             field,
+            record_level,
+            complete_fields,
             max_rows,
         )
 
@@ -416,59 +475,133 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
         dialect: OptionalDialect = None,
-        q: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+        q: OptionalQueryText = None,
         direction: SearchDirection = "formosan",
         translation_language: Annotated[str | None, Query(max_length=32)] = None,
         match: MatchMode = "exact",
         requirement: Annotated[list[TierRequirement] | None, Query()] = None,
         field: Annotated[list[DatasetField] | None, Query()] = None,
-        max_rows: Annotated[int, Query(ge=1, le=1000)] = 1000,
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
+        max_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
         format: Literal["csv", "tsv", "jsonl"] = "csv",
     ) -> Response:
         current = release_store(request, release_id)
         current.assert_export_allowed(language_id, corpus_id)
-        result = dataset_result(
-            request,
-            release_id,
-            language_id,
-            corpus_id,
-            dialect,
-            q,
-            direction,
-            translation_language,
-            match,
-            requirement,
-            field,
-            max_rows,
+        result = current.stream_dataset(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirement or (),
+            fields=field or default_dataset_fields(record_level),
+            record_level=record_level,
+            complete_fields=complete_fields,
+            max_rows=max_rows,
         )
-        fields = result["fields"]
-        output = io.StringIO(newline="")
-        if format == "jsonl":
-            for row in result["items"]:
-                output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
-            media_type = "application/x-ndjson"
-        else:
-            delimiter = "\t" if format == "tsv" else ","
-            writer = csv.DictWriter(
-                output, fieldnames=fields, delimiter=delimiter, lineterminator="\n"
-            )
-            writer.writeheader()
-            writer.writerows(
-                {field: _spreadsheet_safe(row[field]) for field in fields}
-                for row in result["items"]
-            )
-            media_type = "text/tab-separated-values" if format == "tsv" else "text/csv"
-        body = output.getvalue().encode()
-        if len(body) > 5 * 1024 * 1024:
-            raise ApiError(413, "export_too_large", "The export exceeds the 5 MiB response limit")
-        filename = f"kakarayan-{release_id}.{format}"
-        return Response(
-            body,
+        media_type = {
+            "csv": "text/csv",
+            "tsv": "text/tab-separated-values",
+            "jsonl": "application/x-ndjson",
+        }[format]
+        filename = f"kakarayan-{release_id}-{record_level}s.{format}"
+        return StreamingResponse(
+            dataset_chunks(result, format),
             media_type=media_type,
             headers={
                 "Cache-Control": "public, max-age=31536000, immutable",
                 "Content-Disposition": f'attachment; filename="{filename}"',
-                "X-Kakarayan-Row-Count": str(result["returned_rows"]),
+                "X-Kakarayan-Row-Count": str(result.returned_rows),
+            },
+        )
+
+    @app.get(
+        "/v1/releases/{release_id}/datasets/export-package",
+        tags=["datasets"],
+        response_model=None,
+    )
+    def dataset_export_package(
+        request: Request,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+        dialect: OptionalDialect = None,
+        q: OptionalQueryText = None,
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
+        match: MatchMode = "exact",
+        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        record_level: Annotated[list[RecordLevel] | None, Query()] = None,
+        sentence_field: Annotated[list[DatasetField] | None, Query()] = None,
+        word_field: Annotated[list[DatasetField] | None, Query()] = None,
+        morpheme_field: Annotated[list[DatasetField] | None, Query()] = None,
+        complete_fields: bool = True,
+        max_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
+        format: Literal["csv", "tsv", "jsonl"] = "csv",
+    ) -> Response:
+        current = release_store(request, release_id)
+        current.assert_export_allowed(language_id, corpus_id)
+        levels = list(dict.fromkeys(record_level or ()))
+        if not levels:
+            raise ApiError(422, "invalid_parameter", "Choose at least one XML record level")
+        field_map = {
+            "sentence": sentence_field,
+            "word": word_field,
+            "morpheme": morpheme_field,
+        }
+        results = [
+            current.stream_dataset(
+                language_id=language_id,
+                corpus_id=corpus_id,
+                dialect=dialect,
+                q=q,
+                direction=direction,
+                translation_language=translation_language,
+                match=match,
+                requirements=requirement or (),
+                fields=field_map[level] or default_dataset_fields(level),
+                record_level=level,
+                complete_fields=complete_fields,
+                max_rows=max_rows,
+            )
+            for level in levels
+        ]
+        manifest = {
+            "release_id": release_id,
+            "complete_fields": complete_fields,
+            "max_rows_per_level": max_rows,
+            "format": format,
+            "tables": [
+                {
+                    "record_level": result.record_level,
+                    "fields": result.fields,
+                    "estimated_rows": result.estimated_rows,
+                    "returned_rows": result.returned_rows,
+                    "truncated": result.truncated,
+                }
+                for result in results
+            ],
+        }
+        members = (
+            (f"{result.record_level}s.{format}", dataset_chunks(result, format))
+            for result in results
+        )
+        return StreamingResponse(
+            zip_chunks(
+                members,
+                (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode(),
+            ),
+            media_type="application/zip",
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Content-Encoding": "identity",
+                "Content-Disposition": (
+                    f'attachment; filename="kakarayan-{release_id}-xml-levels.zip"'
+                ),
+                "X-Kakarayan-Row-Count": str(sum(result.returned_rows for result in results)),
             },
         )
 

@@ -20,9 +20,8 @@ finite-export responses from the query API. It does not download corpus indexes 
 corpus locally. Static catalogues, documentation, and prepared downloads remain usable if
 the query service is unavailable.
 
-See [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md), the
-[Lightsail proof-of-concept runbook](docs/lightsail.md), and the
-[v1 completion evidence](docs/v1-evidence.md).
+See [docs/architecture.md](docs/architecture.md), [docs/api.md](docs/api.md), and the
+[Lightsail deployment runbook](docs/lightsail.md).
 
 ## Repository map
 
@@ -34,7 +33,7 @@ publisher/            source projection, artifacts, manifests, and verification
 schemas/              release, static API, content, and export-recipe contracts
 site/                 React interface, local learner state, unit tests, and Playwright
 tests/fixtures/       invented public data and shared semantic fixtures
-.github/workflows/    CI, publication, API deployment, and Pages deployment
+.github/workflows/    CI, data publication, and Pages deployment
 ```
 
 Generated corpus data belongs under `build/` and is ignored by Git. Do not commit a full

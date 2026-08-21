@@ -1,6 +1,7 @@
 import {useState} from "react";
 
 import {PageIntro} from "../components/Layout";
+import {LoadingState} from "../components/LoadingState";
 import {
   GITBOOK_CORPUS_PAGES,
   GITBOOK_TOPICS,
@@ -42,9 +43,11 @@ export function Guide({data}: {data: AppData}) {
         {canEmbed ? (
           <div className="guide-frame">
             {frameLoading && (
-              <span className="guide-frame__status" role="status">
-                {tx("Loading docs…", "正在載入文件…")}
-              </span>
+              <LoadingState
+                className="guide-frame__loading"
+                kind="document"
+                label={tx("Loading documentation", "正在載入文件")}
+              />
             )}
             <iframe
               key={`${locale}-${pageUrl}`}

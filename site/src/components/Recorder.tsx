@@ -5,6 +5,7 @@ import {useI18n} from "../i18n";
 import {wordError} from "../recorderMetrics";
 import type {ModelCatalog} from "../types";
 import {StatusBadge} from "./Layout";
+import {LoadingState} from "./LoadingState";
 
 const ASR_LANGUAGES = [
   "Amis",
@@ -195,7 +196,24 @@ export function Recorder({
           signal: next.signal,
           onStage: (nextStage, message) => {
             setStage(nextStage);
-            setStatus(message ?? "");
+            if (nextStage === "connecting") {
+              setStatus(
+                message?.includes("waking")
+                  ? tx("Waking the speech model", "正在喚醒語音模型")
+                  : tx("Connecting to the speech model", "正在連線至語音模型"),
+              );
+            } else if (nextStage === "pending") {
+              const position = message?.match(/\d+/u)?.[0];
+              setStatus(
+                position
+                  ? tx(`Waiting in queue · position ${position}`, `正在排隊 · 第 ${position} 位`)
+                  : tx("Waiting in the model queue", "正在模型佇列中等待"),
+              );
+            } else if (nextStage === "generating") {
+              setStatus(tx("Transcribing audio", "正在轉錄音訊"));
+            } else {
+              setStatus("");
+            }
           },
         },
       );
@@ -272,11 +290,14 @@ export function Recorder({
             <button className="button button--quiet" onClick={removeRecording}>
               {tx("Delete", "刪除")}
             </button>
-            <small>
-              {audioDuration === null
-                ? tx("Reading audio duration…", "正在讀取音訊長度…")
-                : `${audioDuration.toFixed(1)} ${tx("seconds", "秒")} · ${((audio?.size ?? 0) / 1024 ** 2).toFixed(1)} MiB`}
-            </small>
+            {audioDuration === null ? (
+              <LoadingState
+                compact
+                label={tx("Reading audio", "正在讀取音訊")}
+              />
+            ) : (
+              <small>{audioDuration.toFixed(1)} {tx("seconds", "秒")} · {((audio?.size ?? 0) / 1024 ** 2).toFixed(1)} MiB</small>
+            )}
           </>
         )}
       </div>
@@ -352,7 +373,14 @@ export function Recorder({
           </div>
         </div>
       )}
-      {status && <p className="callout callout--info">{status}</p>}
+      {running && (
+        <LoadingState
+          label={status || tx("Preparing transcription", "正在準備轉錄")}
+        />
+      )}
+      {status && !running && (
+        <p className={`callout callout--${stage === "error" ? "error" : "info"}`}>{status}</p>
+      )}
       {transcript && (
         <div className="machine-output">
           <span>{tx("Automatic transcript", "自動轉錄")}</span>

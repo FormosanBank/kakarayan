@@ -15,6 +15,7 @@ import {
   type Grade,
   type StudyCard,
 } from "../study";
+import {LoadingState} from "./LoadingState";
 
 function download(value: string, name: string, type: string) {
   const url = URL.createObjectURL(new Blob([value], {type}));
@@ -36,6 +37,7 @@ export function StudyDeck({
 }) {
   const {number, t, tx} = useI18n();
   const [cards, setCards] = useState<StudyCard[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAnswer, setShowAnswer] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -50,8 +52,12 @@ export function StudyDeck({
       (nextCards) => {
         setCards(nextCards);
         setNow(Date.now());
+        setLoading(false);
       },
-      (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)),
+      (cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        setLoading(false);
+      },
     );
   }, []);
 
@@ -142,6 +148,16 @@ export function StudyDeck({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
+  }
+
+  if (loading) {
+    return (
+      <LoadingState
+        className="study-deck"
+        kind="results"
+        label={tx("Loading study deck", "正在載入學習字卡")}
+      />
+    );
   }
 
   return (

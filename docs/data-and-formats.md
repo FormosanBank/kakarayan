@@ -30,9 +30,9 @@ set includes normalized tabular packages, the SQLite read model, and specialist 
 produced by `publisher/prepared.py`. Canonical XML remains available in FormosanBank. The
 Downloads page shows sizes, checksums, included tiers, rights, and citation evidence.
 
-The production release exposes 11 curated downloads. Hierarchical JSONL partitions used
-by export recipes are bundled into one archive. Corpus-specific canonical XML is not
-duplicated in the Kakarayan release.
+The production release exposes 11 curated downloads. Hierarchical JSONL partitions are
+bundled into one archive. Corpus-specific canonical XML is not duplicated in the Kakarayan
+release.
 
 The time-alignment package stores every valid sentence timing and media reference in one
 JSONL table. It also includes EAF, WebVTT, and SRT files for media with multiple cues, plus
@@ -51,58 +51,57 @@ The Research builder calls the API for a bounded preview and a finite export. It
 - optional corpus and dialect scope;
 - Formosan or reverse-translation queries;
 - exact, prefix, or contains matching;
-- optional translation-language and evidence-tier filters;
-- explicit selected columns;
-- 1 to 1,000 rows;
+- sentence (`S`), word (`W`), and morpheme (`M`) row levels;
+- separate selected columns for each level;
+- complete-row filtering, where every selected optional tier must exist on its owner;
+- 1 to 100,000 rows per selected level;
 - CSV, TSV, or JSON Lines.
 
-The preview returns at most 25 rows. Export output is capped at 5 MiB. Users who need more
-than those limits should choose a prepared artifact rather than asking a phone or API
-process to materialize a full corpus selection.
+Each preview returns at most 250 rows. A single level downloads as one table. Two or three
+levels download as a ZIP containing one table per level and a manifest. The API streams
+rows and ZIP members instead of keeping the completed download in server or browser memory.
+Use a prepared artifact when the complete corpus or more than 100,000 rows per level is
+needed.
 
 ## Column meanings
 
-| Field | Meaning |
-| --- | --- |
-| `id` | Stable sentence identifier |
-| `text_id` | Containing text identifier |
-| `standard` | FormosanBank standardized sentence form |
-| `original` | Source orthography without replacement |
-| `translations` | Sentence-owned translations with XML language tags |
-| `word_translations` | Word-owned translations as JSON with stable word IDs, positions, forms, and language tags |
-| `morpheme_translations` | Morpheme-owned translations as JSON with stable word and morpheme IDs, positions, forms, and language tags |
-| `language_id` | FormosanBank display-language identifier |
-| `corpus_id` | Source corpus identifier |
-| `dialect` | Source dialect label |
-| `source_path` | Canonical public XML path |
-| `tokens` | Ordered surface token sequence |
-| `audio` | Audio file and URL references |
-| `phonology` | Available phonological tiers |
+Identity and ancestry columns include `id`, `xml_id`, `parent_id`, `text_id`,
+`sentence_id`, `word_id`, and `position`. Only ancestry columns that apply to the selected
+level are offered.
 
-The legacy `glosses` field is accepted when replaying an older v1 recipe, but it flattens
-word and morpheme values and is not offered for new selections. Use the two owner-aligned
-translation fields instead.
+Tier columns include `form`, `standard`, `original`, `alternate_forms`, `translations`,
+`phonology`, `audio`, and `unclear`. Values come only from the row owner. A word translation
+is never placed in an S row, and a morpheme gloss is never placed in a W row. `form` uses
+standard, original, then alternate FORM as a display fallback while the three source fields
+remain separately selectable.
+
+Sentence-only columns are `tokens`, `token_count`, and `source`. W and M rows may include
+`class` and `sclass`. Provenance columns are repeated on every level: `language_id`,
+`corpus_id`, `dialect`, and `source_path`.
 
 The same serializer supplies preview rows, API exports, and recipe execution. CSV and TSV
 exports escape cells that spreadsheet software could interpret as formulas.
 
 ## Export recipes
 
-A downloaded recipe records the exact release, selection, fields, output format, and
-spreadsheet-safety policy. It validates against `schemas/export-recipe.schema.json`.
+A downloaded recipe records the exact release, selected XML levels, columns for each level,
+complete-row behavior, output format, and spreadsheet-safety policy. It validates against
+`schemas/export-recipe.schema.json`.
 
-Execute a recipe against the matching full release directory:
+Execute a recipe against the matching full release directory. Recipe execution verifies and
+activates that release's SQLite database in a temporary directory, then uses the same query
+and streaming serializer as the web API:
 
 ```bash
 uv run python -m publisher.recipes \
   --release build/data-release \
   --recipe path/to/recipe.json \
-  --output build/recipe-output
+  --output build/recipe-output.zip
 ```
 
-The release ID is required to match. Selection limits remain finite. Repeating the same
-recipe against the same immutable release produces byte-identical CSV, TSV, or JSON Lines
-output.
+The release ID is required to match. A one-level recipe writes one table. A multi-level
+recipe writes a deterministic ZIP. Repeating the same recipe against the same immutable
+release produces byte-identical output.
 
 ## Provenance and verification
 

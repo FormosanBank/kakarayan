@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator, FormatChecker
-
 from publisher.identifiers import dimension_id
 
 CENTRAL_TERMS = {
@@ -73,8 +71,3 @@ def build_rights_catalog(
         default.update(overrides.get(corpus, {}))
         entries.append(default)
     return {"schema_version": "1.0.0", "central_terms": CENTRAL_TERMS, "entries": entries}
-
-
-def validate_rights_catalog(document: dict[str, object], schema_path: Path) -> None:
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    Draft202012Validator(schema, format_checker=FormatChecker()).validate(document)

@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from api.config import Settings
+from api.limits import DEFAULT_SQLITE_PROGRESS_CALLBACKS
 
 
 def test_release_mismatch_stays_unready(settings, tmp_path) -> None:
@@ -34,3 +37,27 @@ def test_startup_never_acquires_a_remote_database(settings, monkeypatch) -> None
     monkeypatch.setattr("urllib.request.urlopen", fail)
     with TestClient(create_app(settings)) as client:
         assert client.get("/readyz").status_code == 200
+
+
+def test_query_work_limit_is_configurable(monkeypatch) -> None:
+    monkeypatch.delenv("KAKARAYAN_QUERY_STEP_LIMIT", raising=False)
+    assert Settings.from_environment().query_step_limit == DEFAULT_SQLITE_PROGRESS_CALLBACKS
+
+    monkeypatch.setenv("KAKARAYAN_QUERY_STEP_LIMIT", "3000000")
+    assert Settings.from_environment().query_step_limit == 3_000_000
+
+    monkeypatch.setenv("KAKARAYAN_REQUESTS_PER_MINUTE", "90")
+    monkeypatch.setenv("KAKARAYAN_REQUEST_BURST", "30")
+    monkeypatch.setenv("KAKARAYAN_EXPORTS_PER_MINUTE", "8")
+    monkeypatch.setenv("KAKARAYAN_EXPORT_BURST", "4")
+    monkeypatch.setenv("KAKARAYAN_QUERY_CONCURRENCY", "3")
+    configured = Settings.from_environment()
+    assert configured.requests_per_minute == 90
+    assert configured.request_burst == 30
+    assert configured.exports_per_minute == 8
+    assert configured.export_burst == 4
+    assert configured.query_concurrency == 3
+
+    monkeypatch.setenv("KAKARAYAN_QUERY_STEP_LIMIT", "0")
+    with pytest.raises(ValueError, match="positive integer"):
+        Settings.from_environment()

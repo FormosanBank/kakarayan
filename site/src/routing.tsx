@@ -7,8 +7,11 @@ import {
   useRef,
   useState,
   type AnchorHTMLAttributes,
+  type MouseEvent,
   type PropsWithChildren,
 } from "react";
+
+import {prepareRouting, routeFromPathname, routeHref} from "./routePaths";
 
 interface LocationValue {
   path: string;
@@ -26,17 +29,36 @@ const NavigationGuardContext = createContext<NavigationGuardValue>({
   request: () => true,
 });
 
-function readHash(): LocationValue {
-  const raw = window.location.hash.replace(/^#/, "") || "/";
-  const [path = "/", query = ""] = raw.split("?", 2);
-  return {path: path.startsWith("/") ? path : `/${path}`, search: new URLSearchParams(query)};
+function normalizeRoutePath(path: string): string {
+  const withLeadingSlash = path.startsWith("/") ? path : `/${path}`;
+  if (withLeadingSlash.length === 1) return withLeadingSlash;
+  return withLeadingSlash.replace(/\/+$/u, "");
+}
+
+function currentBrowserUrl(): string {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
+
+function readLocation(): LocationValue {
+  return {
+    path: routeFromPathname(window.location.pathname),
+    search: new URLSearchParams(window.location.search),
+  };
+}
+
+function pushRoute(href: string): void {
+  window.history.pushState(null, "", href);
+  window.dispatchEvent(new PopStateEvent("popstate", {state: window.history.state}));
 }
 
 export function RoutingProvider({children}: PropsWithChildren) {
-  const [location, setLocation] = useState(readHash);
+  const [location, setLocation] = useState(() => {
+    prepareRouting();
+    return readLocation();
+  });
   const blocker = useRef<(() => boolean) | null>(null);
-  const acceptedHash = useRef(window.location.hash);
-  const allowNextHashChange = useRef(false);
+  const acceptedUrl = useRef(currentBrowserUrl());
+  const allowNextPop = useRef(false);
   const register = useCallback((next: () => boolean) => {
     blocker.current = next;
     return () => {
@@ -46,22 +68,27 @@ export function RoutingProvider({children}: PropsWithChildren) {
   const request = useCallback(() => {
     if (!blocker.current) return true;
     const allowed = blocker.current();
-    if (allowed) allowNextHashChange.current = true;
+    if (allowed) allowNextPop.current = true;
     return allowed;
   }, []);
   useEffect(() => {
     const update = () => {
-      if (allowNextHashChange.current) {
-        allowNextHashChange.current = false;
+      prepareRouting();
+      if (allowNextPop.current) {
+        allowNextPop.current = false;
       } else if (blocker.current && !blocker.current()) {
-        window.history.replaceState(null, "", acceptedHash.current || "#/");
+        window.history.pushState(window.history.state, "", acceptedUrl.current);
         return;
       }
-      acceptedHash.current = window.location.hash;
-      setLocation(readHash());
+      acceptedUrl.current = currentBrowserUrl();
+      setLocation(readLocation());
     };
+    window.addEventListener("popstate", update);
     window.addEventListener("hashchange", update);
-    return () => window.removeEventListener("hashchange", update);
+    return () => {
+      window.removeEventListener("popstate", update);
+      window.removeEventListener("hashchange", update);
+    };
   }, []);
   const guard = useMemo(() => ({register, request}), [register, request]);
   return (
@@ -77,21 +104,29 @@ export function useRoutePath(): string {
 
 type LinkProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {to: string};
 
-export function Link({to, children, onClick, ...props}: LinkProps) {
+function isPlainLeftClick(event: MouseEvent<HTMLAnchorElement>): boolean {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+export function Link({to, children, onClick, target, ...props}: LinkProps) {
   const guard = useContext(NavigationGuardContext);
-  const normalized = to.startsWith("/") ? to : `/${to}`;
+  const href = routeHref(to);
   return (
     <a
-      href={`#${normalized}`}
+      href={href}
+      target={target}
       onClick={(event) => {
         onClick?.(event);
         if (
-          !event.defaultPrevented &&
-          window.location.hash !== `#${normalized}` &&
-          !guard.request()
+          event.defaultPrevented ||
+          !isPlainLeftClick(event) ||
+          (target && target !== "_self")
         ) {
-          event.preventDefault();
+          return;
         }
+        event.preventDefault();
+        if (currentBrowserUrl() === href || !guard.request()) return;
+        pushRoute(href);
       }}
       {...props}
     >
@@ -102,7 +137,10 @@ export function Link({to, children, onClick, ...props}: LinkProps) {
 
 export function NavLink({to, className, children, ...props}: LinkProps) {
   const path = useRoutePath();
-  const active = to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`);
+  const destination = normalizeRoutePath(to.split(/[?#]/u, 1)[0] || "/");
+  const active = destination === "/"
+    ? path === "/"
+    : path === destination || path.startsWith(`${destination}/`);
   const classes = [className, active ? "active" : ""].filter(Boolean).join(" ");
   return (
     <Link to={to} className={classes} aria-current={active ? "page" : undefined} {...props}>
@@ -124,7 +162,7 @@ export function useSearchParams(): [
   const setSearch = (value: Record<string, string>) => {
     const next = new URLSearchParams(value);
     if (!guard.request()) return;
-    window.location.hash = `${location.path}${next.size ? `?${next}` : ""}`;
+    pushRoute(routeHref(`${location.path}${next.size ? `?${next}` : ""}`));
   };
   return [search, setSearch];
 }

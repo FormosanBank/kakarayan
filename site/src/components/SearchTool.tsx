@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import {CandidateGroups} from "./CandidateGroups";
 import {Diagnostics} from "./Diagnostics";
+import {LoadingState} from "./LoadingState";
 import {SearchResultCard} from "./SearchResultCard";
 
 export type LookupKind = "dictionary" | "sentences";
@@ -32,21 +33,27 @@ export function SearchTool({
   data,
   kind,
   learner = false,
+  initialQuery,
+  autoSearch = false,
   selectedLanguageId,
   onLanguageChange,
   onPractice,
+  onViewSentences,
 }: {
   data: AppData;
   kind: LookupKind;
   learner?: boolean;
+  initialQuery?: string;
+  autoSearch?: boolean;
   selectedLanguageId?: string;
   onLanguageChange?: (languageId: string) => void;
   onPractice?: (record: SearchRecord, targetLanguage: string) => void;
+  onViewSentences?: (entry: DictionaryEntry) => void;
 }) {
   const {languageName, locale, number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
-  const [query, setQuery] = useState(params.get("q") ?? "");
+  const [query, setQuery] = useState(initialQuery ?? params.get("q") ?? "");
   const [languageId, setLanguageId] = useState(
     selectedLanguageId ?? params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "",
   );
@@ -67,9 +74,11 @@ export function SearchTool({
   const [cursor, setCursor] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadingMode, setLoadingMode] = useState<"replace" | "append" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
+  const initialSearchStarted = useRef(false);
 
   const selectedLanguage = data.languages.find((language) => language.id === languageId);
   const selectedTranslationLanguage = translationLanguageName(targetLanguage, locale);
@@ -85,15 +94,16 @@ export function SearchTool({
       (values) => {
         setTargets(values);
         const available = new Set(values.map((item) => item.xml_lang));
-        if (!available.has(targetLanguage)) {
+        setTargetLanguage((current) => {
+          if (available.has(current)) return current;
           const preferred = locale === "zh-Hant" ? "zho" : "eng";
-          setTargetLanguage(available.has(preferred) ? preferred : values[0]?.xml_lang ?? "");
-        }
+          return available.has(preferred) ? preferred : values[0]?.xml_lang ?? "";
+        });
       },
       () => setTargets([]),
     );
     return () => next.abort();
-  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale, targetLanguage]);
+  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale]);
 
   useEffect(() => () => controller.current?.abort(), []);
 
@@ -104,7 +114,14 @@ export function SearchTool({
       const next = new AbortController();
       controller.current = next;
       setBusy(true);
+      setLoadingMode(append ? "append" : "replace");
       setError("");
+      if (!append) {
+        setDictionaryEntries([]);
+        setSentences([]);
+        setCursor(null);
+        setSearched(false);
+      }
       try {
         const options = {
           q: query.trim(),
@@ -145,7 +162,10 @@ export function SearchTool({
           setError(cause instanceof Error ? cause.message : String(cause));
         }
       } finally {
-        if (controller.current === next) setBusy(false);
+        if (controller.current === next) {
+          setBusy(false);
+          setLoadingMode(null);
+        }
       }
     },
     [
@@ -153,6 +173,12 @@ export function SearchTool({
       kind, languageId, match, query, requirements, setParams, targetLanguage,
     ],
   );
+
+  useEffect(() => {
+    if (!autoSearch || initialSearchStarted.current) return;
+    initialSearchStarted.current = true;
+    void run(false);
+  }, [autoSearch, run]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -178,6 +204,7 @@ export function SearchTool({
   }
 
   const resultCount = kind === "dictionary" ? dictionaryEntries.length : sentences.length;
+  const replacingResults = busy && loadingMode === "replace";
   return (
     <section className={`search-tool search-tool--${kind} ${learner ? "search-tool--learner" : ""}`}>
       {!data.query.available && (
@@ -209,7 +236,7 @@ export function SearchTool({
         </fieldset>
         <div className="field field--query">
           <label htmlFor={`query-${kind}`}>{kind === "dictionary" ? tx("Word or meaning", "單詞或釋義") : tx("Word or phrase", "單詞或片語")}</label>
-          <input id={`query-${kind}`} value={query} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
+          <input id={`query-${kind}`} value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
         </div>
         <label className="field">
           {tx("Formosan language", "臺灣南島語")}
@@ -257,7 +284,24 @@ export function SearchTool({
                 </label>
                 <fieldset className="filter-checks">
                   <legend>{tx("Require tiers", "必須包含")}</legend>
-                  {REQUIREMENTS.map((value) => <label key={value}><input type="checkbox" checked={requirements.includes(value)} onChange={() => setRequirements((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />{value}</label>)}
+                  {REQUIREMENTS.map((value) => (
+                    <label key={value}>
+                      <input
+                        type="checkbox"
+                        checked={requirements.includes(value)}
+                        onChange={() => setRequirements((current) => current.includes(value)
+                          ? current.filter((item) => item !== value)
+                          : [...current, value])}
+                      />
+                      <span>{tx(value, {
+                        translation: "翻譯",
+                        audio: "音訊",
+                        phonology: "音韻",
+                        interlinear: "逐行分析",
+                        unclear: "不確定標註",
+                      }[value])}</span>
+                    </label>
+                  ))}
                 </fieldset>
               </>
             )}
@@ -267,13 +311,25 @@ export function SearchTool({
 
       <div className="search-feedback" aria-live="polite">
         {error && <p className="callout callout--error">{error}</p>}
-        {searched && !error && <p className="result-count">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
+        {searched && !error && !replacingResults && <p className="result-count">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
       </div>
       {notice && <p className="search-notice" role="status">{notice}</p>}
       {!busy && searched && resultCount === 0 && <div className="empty-state">{t("search.noResults")}</div>}
 
-      {kind === "dictionary" ? (
-        <CandidateGroups data={data} entries={dictionaryEntries} targetLanguage={targetLanguage} corpusId={corpusId} onSave={(entry) => void saveDictionary(entry)} />
+      {replacingResults ? (
+        <LoadingState
+          kind="results"
+          label={tx("Searching the corpus", "正在搜尋語料庫")}
+        />
+      ) : kind === "dictionary" ? (
+        <CandidateGroups
+          data={data}
+          entries={dictionaryEntries}
+          targetLanguage={targetLanguage}
+          corpusId={corpusId}
+          onSave={(entry) => void saveDictionary(entry)}
+          {...(onViewSentences && {onViewSentences})}
+        />
       ) : (
         <div className="result-list">
           {sentences.map((summary) => (
@@ -293,7 +349,10 @@ export function SearchTool({
           ))}
         </div>
       )}
-      {cursor && <div className="pagination-actions"><button className="button button--quiet" disabled={busy} onClick={() => void run(true)}>{tx("Load more", "載入更多")}</button></div>}
+      {loadingMode === "append" && (
+        <LoadingState compact label={tx("Loading more results", "正在載入更多結果")} />
+      )}
+      {cursor && loadingMode !== "append" && <div className="pagination-actions"><button className="button button--quiet" disabled={busy} onClick={() => void run(true)}>{tx("Load more", "載入更多")}</button></div>}
     </section>
   );
 }

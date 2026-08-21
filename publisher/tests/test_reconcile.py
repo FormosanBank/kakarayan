@@ -8,11 +8,20 @@ from contextlib import closing
 from typing import cast
 
 from publisher.build import build_release
-from publisher.reconcile import _database_state, _delimited_archive, reconcile_release
+from publisher.reconcile import (
+    _database_state,
+    _delimited_archive,
+    _parquet_archive,
+    reconcile_release,
+)
 from publisher.tables import TABLE_COLUMNS
 
 
-def test_fixture_reconciles_across_primary_representations(public_repo, tmp_path) -> None:
+def test_fixture_reconciles_across_primary_representations(
+    public_repo,
+    tmp_path,
+    monkeypatch,
+) -> None:
     release = build_release(public_repo, tmp_path / "release")
     result = reconcile_release(release.output, source_repo=public_repo)
     counts = cast(dict[str, int], result["counts"])
@@ -29,6 +38,25 @@ def test_fixture_reconciles_across_primary_representations(public_repo, tmp_path
         "xlsx",
     ]
     assert result["canonical_files_verified"] == 1
+
+    database_counts, samples, duration, _, _ = _database_state(
+        release.output / "formosanbank.sqlite"
+    )
+    zip_read = zipfile.ZipFile.read
+
+    def reject_whole_parquet_read(archive, name, *args, **kwargs):
+        if str(name).endswith(".parquet"):
+            raise AssertionError("Parquet members must be streamed to a temporary file")
+        return zip_read(archive, name, *args, **kwargs)
+
+    monkeypatch.setattr(zipfile.ZipFile, "read", reject_whole_parquet_read)
+    parquet_counts, parquet_samples, parquet_duration = _parquet_archive(
+        release.output / "prepared" / "parquet-tables.zip",
+        samples,
+    )
+    assert parquet_counts == database_counts
+    assert parquet_samples == samples
+    assert parquet_duration == duration
 
 
 def test_delimited_reconciliation_accepts_preserved_large_fields(tmp_path) -> None:
