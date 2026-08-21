@@ -255,6 +255,11 @@
     grid-template-columns: 1fr;
   }
 
+  .lookup-options__grid {
+    gap: 14px;
+    padding: 14px;
+  }
+
   .search-form__actions,
   .lookup-options {
     grid-column: 1;

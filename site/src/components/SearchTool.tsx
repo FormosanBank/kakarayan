@@ -257,7 +257,24 @@ export function SearchTool({
                 </label>
                 <fieldset className="filter-checks">
                   <legend>{tx("Require tiers", "必須包含")}</legend>
-                  {REQUIREMENTS.map((value) => <label key={value}><input type="checkbox" checked={requirements.includes(value)} onChange={() => setRequirements((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value])} />{value}</label>)}
+                  {REQUIREMENTS.map((value) => (
+                    <label key={value}>
+                      <input
+                        type="checkbox"
+                        checked={requirements.includes(value)}
+                        onChange={() => setRequirements((current) => current.includes(value)
+                          ? current.filter((item) => item !== value)
+                          : [...current, value])}
+                      />
+                      <span>{tx(value, {
+                        translation: "翻譯",
+                        audio: "音訊",
+                        phonology: "音韻",
+                        interlinear: "逐行分析",
+                        unclear: "不確定標註",
+                      }[value])}</span>
+                    </label>
+                  ))}
                 </fieldset>
               </>
             )}

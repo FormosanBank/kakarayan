@@ -47,6 +47,13 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   page.on("request", (request) => requests.push(request.url()));
   await page.goto("#/lookup?type=sentences");
   await selectFixtureScope(page);
+  const tierFieldset = page.locator(".filter-checks");
+  const tierCheckbox = tierFieldset.getByRole("checkbox").first();
+  const dialectSelect = page.getByRole("combobox", {name: "Dialect"});
+  await expect(tierFieldset).toBeVisible();
+  expect(await tierFieldset.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  expect((await tierCheckbox.boundingBox())?.width).toBeLessThanOrEqual(1);
+  expect((await dialectSelect.boundingBox())?.height).toBeLessThanOrEqual(42);
   await page.getByLabel("Word or phrase").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
 
