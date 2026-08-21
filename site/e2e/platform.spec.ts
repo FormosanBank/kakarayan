@@ -188,32 +188,41 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
   await expect(page.locator(".builder__summary")).toContainText("Matching rows");
 
-  await page.getByRole("combobox", {name: "Search field"}).selectOption("translation");
+  await page.getByRole("combobox", {name: "Search in"}).selectOption("translation");
   const translationLanguage = page.getByRole("combobox", {name: "Translation language"});
   await expect(translationLanguage).toBeVisible();
   await translationLanguage.selectOption("eng");
-  await page.getByLabel("Optional word or phrase").fill("five");
+  await page.getByLabel("Word or phrase").fill("five");
   await page.getByRole("combobox", {name: "Match"}).selectOption("contains");
   await expect(page.locator(".builder__summary dd").first()).toHaveText(/^[1-9][\d,]*$/u);
+
+  await page.locator(".builder__level-options").getByText("Word", {exact: true}).click();
+  await page.locator(".builder__level-options").getByText("Morpheme", {exact: true}).click();
+  await expect(page.locator(".builder__column-tabs").getByRole("tab")).toHaveCount(3);
+  await expect(page.locator(".builder__preview-tabs").getByRole("tab")).toHaveCount(3);
 
   const recipeDownload = page.waitForEvent("download");
   await page.getByRole("button", {name: "Download recipe"}).click();
   const recipePath = await (await recipeDownload).path();
   if (!recipePath) throw new Error("Recipe download has no local path");
   const recipe = JSON.parse(await readFile(recipePath, "utf8")) as {
-    selection: {max_rows: number; record_unit: string; translation_language: string};
+    selection: {max_rows: number; record_units: string[]; translation_language: string};
+    fields: Record<string, string[]>;
     format: string;
   };
   expect(recipe.selection).toMatchObject({
     max_rows: 1000,
-    record_unit: "sentence",
+    record_units: ["sentence", "word", "morpheme"],
     translation_language: "eng",
   });
+  expect(recipe.fields.sentence).toContain("text_id");
+  expect(recipe.fields.word).toContain("sentence_id");
+  expect(recipe.fields.morpheme).toContain("word_id");
   expect(["csv", "tsv", "jsonl"]).toContain(recipe.format);
 
   const exportDownload = page.waitForEvent("download");
   await page.getByRole("button", {name: "Download dataset"}).click();
-  expect((await exportDownload).suggestedFilename()).toMatch(/\.csv$/u);
+  expect((await exportDownload).suggestedFilename()).toMatch(/\.zip$/u);
 
   await page.getByRole("tab", {name: "Linguistic summaries"}).click();
   await page.getByRole("combobox", {name: "Language", exact: true}).selectOption({label: "Amis"});

@@ -1,5 +1,5 @@
-import type {DatasetField} from "./datasetSelection";
-import type {MatchMode, SearchDirection, TierRequirement} from "./types";
+import type {DatasetFieldsByLevel, DatasetLevel} from "./datasetSelection";
+import type {MatchMode, SearchDirection} from "./types";
 
 export type DatasetFormat = "csv" | "tsv" | "jsonl";
 
@@ -12,9 +12,9 @@ export interface DatasetRecipeInput {
   languageId: string;
   corpusId: string;
   dialect: string;
-  requirements: TierRequirement[];
+  recordLevels: DatasetLevel[];
   maxRows: number;
-  fields: DatasetField[];
+  fields: DatasetFieldsByLevel;
   format: DatasetFormat;
 }
 
@@ -30,12 +30,15 @@ export function createDatasetRecipe(input: DatasetRecipeInput) {
       language_ids: [input.languageId],
       corpus_ids: input.corpusId ? [input.corpusId] : [],
       dialects: input.dialect ? [input.dialect] : [],
-      requirements: [...input.requirements],
+      requirements: [],
       record_ids: [] as string[],
       max_rows: input.maxRows,
-      record_unit: "sentence" as const,
+      record_units: [...input.recordLevels],
+      complete_fields: true,
     },
-    fields: [...input.fields],
+    fields: Object.fromEntries(
+      input.recordLevels.map((level) => [level, [...input.fields[level]]]),
+    ),
     format: input.format,
     spreadsheet_safe: true,
   };

@@ -9,12 +9,17 @@
     "language_ids": ["lang_amis"],
     "corpus_ids": ["corpus_testcorpus"],
     "dialects": ["Xiuguluan"],
-    "requirements": ["translation", "audio"],
+    "requirements": [],
     "record_ids": [],
     "max_rows": 250,
-    "record_unit": "sentence"
+    "record_units": ["sentence", "word", "morpheme"],
+    "complete_fields": true
   },
-  "fields": ["id", "standard", "translations"],
+  "fields": {
+    "sentence": ["id", "standard", "translations"],
+    "word": ["id", "sentence_id", "form"],
+    "morpheme": ["id", "word_id", "form", "translations"]
+  },
   "format": "csv",
   "spreadsheet_safe": true
 }

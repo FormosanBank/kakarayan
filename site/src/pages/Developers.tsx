@@ -1,6 +1,10 @@
 import {ApiExplorer} from "../components/ApiExplorer";
 import {PageIntro} from "../components/Layout";
-import {DATASET_FIELD_INFO} from "../datasetSelection";
+import {
+  DATASET_FIELD_INFO,
+  DATASET_FIELDS_BY_LEVEL,
+  DATASET_LEVEL_INFO,
+} from "../datasetSelection";
 import {useI18n} from "../i18n";
 import type {AppData} from "../types";
 
@@ -71,15 +75,20 @@ export function Developers({data}: {data: AppData}) {
         </div>
       </section>
       <section className="data-contract">
-        <div className="section-heading"><h2>{tx("Export row fields", "匯出資料列欄位")}</h2></div>
-        <dl className="data-contract__list">
-          {DATASET_FIELD_INFO.map(([field, description, descriptionZh]) => (
-            <div key={field}><dt><code>{field}</code></dt><dd>{tx(description, descriptionZh)}</dd></div>
-          ))}
-        </dl>
+        <div className="section-heading"><h2>{tx("XML dataset rows", "XML 資料集列")}</h2></div>
+        {DATASET_LEVEL_INFO.map(([level, code, label, labelZh]) => (
+          <details className="data-contract__level" key={level} open={level === "sentence"}>
+            <summary><code>{code}</code> {tx(label, labelZh)}</summary>
+            <dl className="data-contract__list">
+              {DATASET_FIELDS_BY_LEVEL[level].map((field) => (
+                <div key={field}><dt><code>{field}</code></dt><dd>{tx(DATASET_FIELD_INFO[field][0], DATASET_FIELD_INFO[field][1])}</dd></div>
+              ))}
+            </dl>
+          </details>
+        ))}
         <div className="format-semantics">
           <article><h3>CSV / TSV</h3><p>{tx("Flat selected columns, UTF-8, and spreadsheet-formula guarded.", "平面選取欄位、UTF-8，並防護試算表公式。")}</p></article>
-          <article><h3>JSONL</h3><p>{tx("One selected sentence row per line.", "每行一筆選定句子資料。")}</p></article>
+          <article><h3>JSONL</h3><p>{tx("One selected XML element per line.", "每行一個選定的 XML 元素。")}</p></article>
           <article><h3>{tx("Recipe", "操作配方")}</h3><p>{tx("A release-pinned, finite, validated selection that can be reproduced.", "固定版本、有限且經驗證的選取，可供重現。")}</p></article>
         </div>
       </section>

@@ -23,11 +23,14 @@
         "corpus_ids",
         "record_ids",
         "max_rows",
-        "record_unit",
         "query_field",
         "translation_language",
         "dialects",
         "requirements"
+      ],
+      "anyOf": [
+        {"required": ["record_unit"]},
+        {"required": ["record_units", "complete_fields"]}
       ],
       "properties": {
         "query": {"type": "string", "maxLength": 256},
@@ -68,39 +71,92 @@
           "uniqueItems": true
         },
         "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000},
-        "record_unit": {"const": "sentence"}
+        "record_unit": {"const": "sentence"},
+        "record_units": {
+          "type": "array",
+          "items": {"enum": ["sentence", "word", "morpheme"]},
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true
+        },
+        "complete_fields": {"type": "boolean"}
       },
       "additionalProperties": false
     },
     "fields": {
-      "type": "array",
-      "items": {
-        "enum": [
-          "id",
-          "text_id",
-          "standard",
-          "original",
-          "translations",
-          "language_id",
-          "corpus_id",
-          "dialect",
-          "source_path",
-          "tokens",
-          "audio",
-          "phonology",
-          "glosses",
-          "word_translations",
-          "morpheme_translations"
-        ]
-      },
-      "minItems": 1,
-      "maxItems": 15,
-      "uniqueItems": true
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacySentenceField"},
+          "minItems": 1,
+          "maxItems": 15,
+          "uniqueItems": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sentence": {"$ref": "#/$defs/sentenceFields"},
+            "word": {"$ref": "#/$defs/wordFields"},
+            "morpheme": {"$ref": "#/$defs/morphemeFields"}
+          },
+          "minProperties": 1,
+          "additionalProperties": false
+        }
+      ]
     },
     "format": {
       "enum": ["csv", "tsv", "jsonl"]
     },
     "spreadsheet_safe": {"type": "boolean"}
+  },
+  "$defs": {
+    "legacySentenceField": {
+      "enum": [
+        "id", "text_id", "standard", "original", "translations", "language_id",
+        "corpus_id", "dialect", "source_path", "tokens", "audio", "phonology",
+        "glosses", "word_translations", "morpheme_translations"
+      ]
+    },
+    "sentenceFields": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "id", "xml_id", "text_id", "position", "form", "standard", "original",
+          "alternate_forms", "translations", "tokens", "token_count", "phonology",
+          "source", "unclear", "language_id", "corpus_id", "dialect", "source_path", "audio"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 19,
+      "uniqueItems": true
+    },
+    "wordFields": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "id", "xml_id", "parent_id", "sentence_id", "text_id", "position", "form",
+          "standard", "original", "alternate_forms", "translations", "phonology", "class",
+          "sclass", "unclear", "language_id", "corpus_id", "dialect", "source_path", "audio"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 20,
+      "uniqueItems": true
+    },
+    "morphemeFields": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "id", "xml_id", "parent_id", "word_id", "sentence_id", "text_id", "position",
+          "form", "standard", "original", "alternate_forms", "translations", "phonology",
+          "class", "sclass", "unclear", "language_id", "corpus_id", "dialect", "source_path",
+          "audio"
+        ]
+      },
+      "minItems": 1,
+      "maxItems": 21,
+      "uniqueItems": true
+    }
   },
   "additionalProperties": false
 }

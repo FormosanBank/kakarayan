@@ -367,8 +367,14 @@
   .builder__filters,
   .builder__schema dl,
   .dataset-fields,
-  .field-check-grid {
+  .field-check-grid,
+  .builder__level-options {
     grid-template-columns: 1fr;
+  }
+
+  .builder__level-columns > header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .builder__field-heading {

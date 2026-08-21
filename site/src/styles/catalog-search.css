@@ -909,6 +909,153 @@
   margin-bottom: 6px;
 }
 
+.builder__levels {
+  padding: 0;
+  margin: 34px 0 0;
+  border: 0;
+}
+
+.builder__levels > legend {
+  width: 100%;
+  padding: 0 0 10px;
+  color: var(--body);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.builder__level-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line);
+  gap: 1px;
+}
+
+.builder__level-options label {
+  display: grid;
+  grid-template-columns: 16px 24px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+  min-width: 0;
+  padding: 13px;
+  background: white;
+  cursor: pointer;
+}
+
+.builder__level-options label:has(input:checked) {
+  background: var(--surface);
+}
+
+.builder__level-options input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+}
+
+.builder__level-options > label > code {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.builder__level-options span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.builder__level-options strong {
+  font-size: 13px;
+}
+
+.builder__level-options small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.builder__column-heading {
+  padding-top: 32px;
+  margin-top: 34px;
+  border-top: 1px solid var(--line);
+}
+
+.builder__column-heading h2 {
+  margin: 0 0 4px;
+}
+
+.builder__column-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.builder__column-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 18px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.builder__column-tabs button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.builder__column-tabs button[aria-selected="true"] {
+  border-color: var(--line);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.builder__column-tabs button span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.builder__level-columns {
+  margin-top: 26px;
+}
+
+.builder__level-columns > header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.builder__level-columns h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.builder__level-columns h3 code {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  margin-right: 5px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  color: var(--ink);
+  font-size: 12px;
+}
+
 .builder__section-title,
 .builder__field-heading {
   padding-top: 36px;
@@ -1081,6 +1228,12 @@
   display: inline-block;
   margin-top: 16px;
   font-size: 12px;
+}
+
+.builder__package-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .field-checks {
@@ -1363,6 +1516,40 @@
   font-size: 13px;
 }
 
+.builder__preview-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 18px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.builder__preview-tabs button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.builder__preview-tabs button[aria-selected="true"] {
+  border-color: var(--line);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.builder__preview-tabs button span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
 .builder__preview td {
   min-width: 120px;
   max-width: 320px;
@@ -1404,6 +1591,21 @@
 
 .builder__schema dd {
   color: var(--muted);
+}
+
+.data-contract__level {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.data-contract__level > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.data-contract__level .data-contract__list {
+  margin-top: 12px;
 }
 
 .table-scroll {

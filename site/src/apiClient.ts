@@ -135,7 +135,7 @@ export function summaries(
 
 export function datasetUrl(
   releaseId: string,
-  route: "preview" | "export",
+  route: "preview" | "export" | "export-package",
   parameters: URLSearchParams,
 ): string {
   return `${apiBaseUrl}${releasePath(releaseId, `datasets/${route}`)}?${parameters}`;
@@ -148,10 +148,14 @@ export function datasetPreview(
 ) {
   return request<{
     release_id: string;
+    record_level: "sentence" | "word" | "morpheme";
+    complete_fields: boolean;
     estimated_rows: number;
     returned_rows: number;
     truncated: boolean;
     fields: string[];
-    items: Array<Record<string, string>>;
+    items: Array<Record<string, string | number | null>>;
   }>(`${releasePath(releaseId, "datasets/preview")}?${parameters}`, signal);
 }
+
+export type DatasetPreviewResult = Awaited<ReturnType<typeof datasetPreview>>;
