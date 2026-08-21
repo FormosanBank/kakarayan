@@ -97,6 +97,24 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   expect(cachedUrls.some((url) => url.includes("/v1/releases/"))).toBe(false);
 });
 
+test("dictionary examples stay in the learning workspace", async ({page}) => {
+  await page.goto("#/learn");
+  await page.getByLabel("Word or meaning").fill("lima");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  const entry = page.locator(".dictionary-entry").first();
+  await expect(entry).toBeVisible();
+
+  await entry.getByRole("button", {name: "View sentences"}).click();
+
+  await expect(page).toHaveURL(/#\/learn\?/u);
+  await expect(page.getByRole("button", {name: "Sentence lookup"})).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByLabel("Word or phrase")).toHaveValue("lima");
+  await expect(page.locator(".result-card--summary").first()).toBeVisible();
+});
+
 test("research preview, finite recipe, export, and summaries share the API", async ({page}) => {
   await page.goto("#/research");
   const language = page.getByRole("combobox", {name: "Language", exact: true}).first();

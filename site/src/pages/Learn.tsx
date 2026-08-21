@@ -9,7 +9,7 @@ import {SearchTool, type LookupKind} from "../components/SearchTool";
 import {StudyDeck} from "../components/StudyDeck";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
-import type {AppData, SearchRecord} from "../types";
+import type {AppData, DictionaryEntry, SearchRecord} from "../types";
 
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
@@ -28,7 +28,11 @@ export function Learn({data}: {data: AppData}) {
       ? requestedTool
       : "lookup",
   );
-  const [lookupKind, setLookupKind] = useState<LookupKind>("dictionary");
+  const requestedLookupKind = params.get("type");
+  const [lookupKind, setLookupKind] = useState<LookupKind>(
+    requestedLookupKind === "sentences" ? "sentences" : "dictionary",
+  );
+  const [pendingSentenceQuery, setPendingSentenceQuery] = useState<string | null>(null);
   const [practiceTarget, setPracticeTarget] = useState("");
   const capability = useMemo(() => {
     if (!language) return {mt: false, asr: false, orthography: false};
@@ -43,6 +47,19 @@ export function Learn({data}: {data: AppData}) {
     const next = data.languages.find((item) => item.id === nextId);
     setLanguageId(nextId);
     setDialect(next?.dialects[0] ?? "");
+    setPendingSentenceQuery(null);
+  }
+
+  function selectLookupKind(nextKind: LookupKind) {
+    setPendingSentenceQuery(null);
+    setLookupKind(nextKind);
+  }
+
+  function viewSentences(entry: DictionaryEntry) {
+    if (entry.language_id !== languageId) changeLanguage(entry.language_id);
+    setPendingSentenceQuery(entry.display_form);
+    setLookupKind("sentences");
+    setTab("lookup");
   }
 
   function practice(record: SearchRecord) {
@@ -92,7 +109,10 @@ export function Learn({data}: {data: AppData}) {
             role="tab"
             aria-selected={tab === id}
             aria-controls={`studio-${id}`}
-            onClick={() => setTab(id)}
+            onClick={() => {
+              if (id !== "lookup") setPendingSentenceQuery(null);
+              setTab(id);
+            }}
           >
             <span>{label}</span>
           </button>
@@ -101,16 +121,19 @@ export function Learn({data}: {data: AppData}) {
       <div className="studio-panel" id={`studio-${tab}`} role="tabpanel">
         {tab === "lookup" && (
           <>
-            <LookupKindToggle kind={lookupKind} onChange={setLookupKind} />
+            <LookupKindToggle kind={lookupKind} onChange={selectLookupKind} />
             <div id="lookup-results">
               <SearchTool
-                key={`${lookupKind}-${languageId}`}
+                key={`${lookupKind}-${languageId}-${pendingSentenceQuery ?? ""}`}
                 data={data}
                 kind={lookupKind}
                 learner
+                autoSearch={pendingSentenceQuery !== null}
                 selectedLanguageId={languageId}
                 onLanguageChange={changeLanguage}
                 onPractice={practice}
+                onViewSentences={viewSentences}
+                {...(pendingSentenceQuery !== null && {initialQuery: pendingSentenceQuery})}
               />
             </div>
           </>

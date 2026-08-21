@@ -32,21 +32,27 @@ export function SearchTool({
   data,
   kind,
   learner = false,
+  initialQuery,
+  autoSearch = false,
   selectedLanguageId,
   onLanguageChange,
   onPractice,
+  onViewSentences,
 }: {
   data: AppData;
   kind: LookupKind;
   learner?: boolean;
+  initialQuery?: string;
+  autoSearch?: boolean;
   selectedLanguageId?: string;
   onLanguageChange?: (languageId: string) => void;
   onPractice?: (record: SearchRecord, targetLanguage: string) => void;
+  onViewSentences?: (entry: DictionaryEntry) => void;
 }) {
   const {languageName, locale, number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
-  const [query, setQuery] = useState(params.get("q") ?? "");
+  const [query, setQuery] = useState(initialQuery ?? params.get("q") ?? "");
   const [languageId, setLanguageId] = useState(
     selectedLanguageId ?? params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "",
   );
@@ -70,6 +76,7 @@ export function SearchTool({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
+  const initialSearchStarted = useRef(false);
 
   const selectedLanguage = data.languages.find((language) => language.id === languageId);
   const selectedTranslationLanguage = translationLanguageName(targetLanguage, locale);
@@ -153,6 +160,12 @@ export function SearchTool({
       kind, languageId, match, query, requirements, setParams, targetLanguage,
     ],
   );
+
+  useEffect(() => {
+    if (!autoSearch || initialSearchStarted.current) return;
+    initialSearchStarted.current = true;
+    void run(false);
+  }, [autoSearch, run]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -290,7 +303,14 @@ export function SearchTool({
       {!busy && searched && resultCount === 0 && <div className="empty-state">{t("search.noResults")}</div>}
 
       {kind === "dictionary" ? (
-        <CandidateGroups data={data} entries={dictionaryEntries} targetLanguage={targetLanguage} corpusId={corpusId} onSave={(entry) => void saveDictionary(entry)} />
+        <CandidateGroups
+          data={data}
+          entries={dictionaryEntries}
+          targetLanguage={targetLanguage}
+          corpusId={corpusId}
+          onSave={(entry) => void saveDictionary(entry)}
+          {...(onViewSentences && {onViewSentences})}
+        />
       ) : (
         <div className="result-list">
           {sentences.map((summary) => (
