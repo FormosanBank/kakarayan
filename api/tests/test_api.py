@@ -232,7 +232,8 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         ("field", "id"),
         ("field", "standard"),
         ("field", "translations"),
-        ("field", "glosses"),
+        ("field", "word_translations"),
+        ("field", "morpheme_translations"),
         ("max_rows", "1"),
     ]
     preview = client.get(release_path(client, "datasets/preview"), params=params)
@@ -241,18 +242,39 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert preview.json()["returned_rows"] == 1
     assert preview.json()["truncated"] is True
     item = preview.json()["items"][0]
-    assert list(item) == ["id", "standard", "translations", "glosses"]
+    assert list(item) == [
+        "id",
+        "standard",
+        "translations",
+        "word_translations",
+        "morpheme_translations",
+    ]
     assert "FIVE" not in item["translations"]
-    assert "FIVE" in item["glosses"]
+    word_translation = json.loads(item["word_translations"])
+    morpheme_translation = json.loads(item["morpheme_translations"])
+    assert [(value["form"], value["text"]) for value in word_translation] == [("lima", "five.word")]
+    assert [(value["form"], value["text"]) for value in morpheme_translation] == [("lima", "FIVE")]
+    assert word_translation[0]["word_id"] != morpheme_translation[0]["morpheme_id"]
     detail = client.get(release_path(client, f"sentences/{item['id']}")).json()
-    assert item == project_record(detail, ["id", "standard", "translations", "glosses"])
+    assert item == project_record(
+        detail,
+        [
+            "id",
+            "standard",
+            "translations",
+            "word_translations",
+            "morpheme_translations",
+        ],
+    )
 
     exported = client.get(
         release_path(client, "datasets/export"), params=[*params, ("format", "tsv")]
     )
     assert exported.status_code == 200
     assert exported.headers["x-kakarayan-row-count"] == "1"
-    assert exported.text.startswith("id\tstandard\ttranslations\tglosses\n")
+    assert exported.text.startswith(
+        "id\tstandard\ttranslations\tword_translations\tmorpheme_translations\n"
+    )
 
     unbounded = client.get(
         release_path(client, "datasets/export"),

@@ -460,4 +460,15 @@ def data_dictionary() -> dict[str, object]:
             ]
             for table, columns in TABLE_COLUMNS.items()
         },
+        "tier_ownership": {
+            "sentence": "A translation with owner_type=sentence applies only to owner_id sentence.",
+            "word": "A translation with owner_type=word applies only to owner_id word.",
+            "morpheme": (
+                "A translation with owner_type=morpheme applies only to owner_id morpheme."
+            ),
+            "joins": (
+                "Join translations on both owner_type and owner_id. "
+                "Never infer ownership from row order."
+            ),
+        },
     }

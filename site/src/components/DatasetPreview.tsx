@@ -1,6 +1,17 @@
 import {DATASET_FIELD_INFO} from "../datasetSelection";
 import {useI18n} from "../i18n";
 
+function alignedTranslationPreview(value: string): string {
+  try {
+    const items = JSON.parse(value) as Array<{form?: string; text?: string; xml_lang?: string}>;
+    return items
+      .map((item) => `${item.form || "?"} → ${item.text || "?"}${item.xml_lang ? ` (${item.xml_lang})` : ""}`)
+      .join(" · ");
+  } catch {
+    return value;
+  }
+}
+
 export function DatasetPreview({
   fields,
   languageSelected,
@@ -45,7 +56,11 @@ export function DatasetPreview({
                 {preview.map((record) => (
                   <tr key={record.id}>
                     {fields.map((field) => (
-                      <td key={field}>{record[field] || "—"}</td>
+                      <td key={field}>
+                        {field === "word_translations" || field === "morpheme_translations"
+                          ? alignedTranslationPreview(record[field] || "[]") || "—"
+                          : record[field] || "—"}
+                      </td>
                     ))}
                   </tr>
                 ))}
