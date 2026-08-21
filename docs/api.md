@@ -109,8 +109,14 @@ requirements as search. Repeated `field` parameters select from:
 
 ```text
 id text_id standard original translations language_id corpus_id dialect
-source_path tokens audio phonology glosses
+source_path tokens audio phonology word_translations morpheme_translations
 ```
+
+`translations` contains sentence-owned translations only. `word_translations` and
+`morpheme_translations` contain compact JSON arrays with stable owner IDs, positions,
+forms, language tags, and translations. This ownership must be preserved when flattening
+or joining exported data. The legacy `glosses` field remains accepted for existing v1
+recipes but is not offered by the interface because it does not retain owner alignment.
 
 Preview returns at most 25 rows and reports `estimated_rows`, `returned_rows`, and
 `truncated`. Export requires `max_rows` from 1 through 1,000, accepts `format=csv|tsv|jsonl`,
