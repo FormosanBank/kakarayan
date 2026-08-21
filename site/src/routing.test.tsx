@@ -19,7 +19,7 @@ describe("navigation protection", () => {
   let root: Root;
 
   beforeEach(async () => {
-    window.location.hash = "/start";
+    window.history.replaceState(null, "", "#/start");
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -54,7 +54,15 @@ describe("navigation protection", () => {
 
     await act(async () => link.click());
 
-    await vi.waitFor(() => expect(window.location.hash).toBe("#/next"));
-    expect(container.querySelector("output")).toHaveTextContent("/next");
+    await vi.waitFor(() => {
+      expect(window.location.hash).toBe("#/next");
+      expect(container.querySelector("output")).toHaveTextContent("/next");
+    });
+  });
+
+  it("asks the browser to confirm a refresh or close", () => {
+    const event = new Event("beforeunload", {cancelable: true});
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
   });
 });
