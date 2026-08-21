@@ -21,6 +21,12 @@ import {Link, useSearchParams} from "../routing";
 import type {AppData, MatchMode, SearchDirection} from "../types";
 import {DatasetPreview} from "./DatasetPreview";
 
+interface PreviewState {
+  signature: string;
+  values: Partial<Record<DatasetLevel, DatasetPreviewResult>>;
+  pending: DatasetLevel[];
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -59,10 +65,11 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const [fields, setFields] = useState<DatasetFieldsByLevel>(initialFields);
   const [maxRows, setMaxRows] = useState(1000);
   const [format, setFormat] = useState<DatasetFormat>("csv");
-  const [previews, setPreviews] = useState<
-    Partial<Record<DatasetLevel, DatasetPreviewResult>>
-  >({});
-  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewState, setPreviewState] = useState<PreviewState>({
+    signature: "",
+    values: {},
+    pending: [],
+  });
   const [exportBusy, setExportBusy] = useState(false);
   const [error, setError] = useState("");
   const previewController = useRef<AbortController | null>(null);
@@ -85,6 +92,35 @@ export function DatasetBuilder({data}: {data: AppData}) {
     : (levels[0] ?? "sentence");
   const columnInfo = DATASET_LEVEL_INFO.find(([value]) => value === columnLevel)
     ?? DATASET_LEVEL_INFO[0];
+  const previewSignature = useMemo(() => JSON.stringify({
+    releaseId: data.meta.release_id,
+    languageId,
+    corpusId,
+    dialect,
+    query: query.trim(),
+    direction,
+    translationLanguage: direction === "translation" ? translationLanguage : "",
+    match,
+    levels: levels.map((level) => [level, fields[level]]),
+  }), [
+    corpusId,
+    data.meta.release_id,
+    dialect,
+    direction,
+    fields,
+    languageId,
+    levels,
+    match,
+    query,
+    translationLanguage,
+  ]);
+  const canPreview = Boolean(languageId && selectionReady && data.query.available);
+  const previewIsCurrent = previewState.signature === previewSignature;
+  const previews = previewIsCurrent ? previewState.values : {};
+  const previewLoadingLevels = canPreview
+    ? (previewIsCurrent ? previewState.pending : levels)
+    : [];
+  const previewBusy = previewLoadingLevels.length > 0;
 
   const parameters = useCallback((
     level: DatasetLevel,
@@ -133,38 +169,46 @@ export function DatasetBuilder({data}: {data: AppData}) {
   }, [corpusId, data.meta.release_id, data.query.available, direction, languageId]);
 
   useEffect(() => {
-    if (!languageId || !selectionReady || !data.query.available) {
+    if (!canPreview) {
       return;
     }
     previewController.current?.abort();
     const next = new AbortController();
     previewController.current = next;
     const timer = window.setTimeout(() => {
-      setPreviewBusy(true);
       setError("");
-      Promise.all(
-        levels.map(async (level) => [
-          level,
-          await datasetPreview(
-            data.meta.release_id,
-            parameters(level, fields[level], 12),
-            next.signal,
-          ),
-        ] as const),
-      ).then(
-        (results) => setPreviews(Object.fromEntries(results)),
-        (cause: unknown) => {
-          if (!next.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
-        },
-      ).finally(() => {
-        if (previewController.current === next) setPreviewBusy(false);
-      });
+      setPreviewState({signature: previewSignature, values: {}, pending: [...levels]});
+      for (const level of levels) {
+        datasetPreview(
+          data.meta.release_id,
+          parameters(level, fields[level], 12),
+          next.signal,
+        ).then(
+          (result) => {
+            if (next.signal.aborted) return;
+            setPreviewState((current) => current.signature === previewSignature
+              ? {
+                  ...current,
+                  values: {...current.values, [level]: result},
+                  pending: current.pending.filter((item) => item !== level),
+                }
+              : current);
+          },
+          (cause: unknown) => {
+            if (next.signal.aborted) return;
+            setError(cause instanceof Error ? cause.message : String(cause));
+            setPreviewState((current) => current.signature === previewSignature
+              ? {...current, pending: current.pending.filter((item) => item !== level)}
+              : current);
+          },
+        );
+      }
     }, 250);
     return () => {
       window.clearTimeout(timer);
       next.abort();
     };
-  }, [data.meta.release_id, data.query.available, fields, languageId, levels, parameters, selectionReady]);
+  }, [canPreview, data.meta.release_id, fields, levels, parameters, previewSignature]);
 
   function toggleLevel(level: DatasetLevel) {
     if (!levels.includes(level)) setActiveColumnLevel(level);
@@ -262,6 +306,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     (total, level) => total + Math.min(previews[level]?.estimated_rows ?? 0, maxRows),
     0,
   );
+  const previewComplete = levels.length > 0 && levels.every((level) => previews[level]);
 
   return (
     <section className="builder">
@@ -269,7 +314,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
         <div className="builder__controls">
           <h2>{tx("Build a dataset", "建立資料集")}</h2>
           <div className="form-grid">
-            <label className="field">{tx("Language", "語言")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); setTranslationLanguage(""); setTranslationOptions([]); setPreviews({}); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
+            <label className="field">{tx("Language", "語言")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); setTranslationLanguage(""); setTranslationOptions([]); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
             <label className="field">{tx("Corpus", "語料庫")}<select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setTranslationLanguage(""); setTranslationOptions([]); }}><option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>{corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}</select></label>
             <label className="field">{tx("Dialect", "方言")}<select value={dialect} disabled={!languageId} onChange={(event) => setDialect(event.target.value)}><option value="">{tx("All dialects", "所有方言")}</option>{selectedLanguage?.dialects.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label className="field">{tx("Word or phrase", "單詞或片語")}<input value={query} maxLength={256} onChange={(event) => setQuery(event.target.value)} /></label>
@@ -341,10 +386,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
           <dl>
             {levels.map((level) => {
               const info = DATASET_LEVEL_INFO.find(([value]) => value === level) ?? DATASET_LEVEL_INFO[0];
-              return <div key={level}><dt><code>{info[1]}</code> {tx(info[2], info[3])}</dt><dd>{languageId ? number(previews[level]?.estimated_rows ?? 0) : "—"}</dd></div>;
+              return <div key={level}><dt><code>{info[1]}</code> {tx(info[2], info[3])}</dt><dd>{languageId ? (previews[level] ? number(previews[level].estimated_rows) : (previewLoadingLevels.includes(level) ? "…" : "—")) : "—"}</dd></div>;
             })}
-            <div><dt>{tx("Matching rows", "相符列數")}</dt><dd>{languageId ? number(estimatedRows) : "—"}</dd></div>
-            <div><dt>{tx("Rows downloaded", "下載列數")}</dt><dd>{languageId ? number(exportRows) : "—"}</dd></div>
+            <div><dt>{tx("Matching rows", "相符列數")}</dt><dd>{languageId ? (previewComplete ? number(estimatedRows) : (previewBusy ? "…" : "—")) : "—"}</dd></div>
+            <div><dt>{tx("Rows downloaded", "下載列數")}</dt><dd>{languageId ? (previewComplete ? number(exportRows) : (previewBusy ? "…" : "—")) : "—"}</dd></div>
           </dl>
           <label className="field">{tx("Maximum per level", "每層級上限")}<select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))}>{[100, 250, 500, 1000].map((value) => <option key={value} value={value}>{number(value)}</option>)}</select></label>
           <label className="field">{tx("File type", "檔案類型")}<select value={format} onChange={(event) => setFormat(event.target.value as DatasetFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option><option value="jsonl">JSON Lines</option></select></label>
@@ -361,7 +406,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
         languageSelected={Boolean(languageId)}
         levels={levels}
         previews={previews}
-        previewBusy={previewBusy}
+        loadingLevels={previewLoadingLevels}
       />
     </section>
   );

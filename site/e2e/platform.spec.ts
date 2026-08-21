@@ -179,6 +179,11 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
 });
 
 test("research preview, finite recipe, export, and summaries share the API", async ({page}) => {
+  let delayPreview = false;
+  await page.route(/\/datasets\/preview\?/u, async (route) => {
+    if (delayPreview) await new Promise((resolve) => setTimeout(resolve, 700));
+    await route.continue();
+  });
   await page.goto("#/research");
   const language = page.getByRole("combobox", {name: "Language", exact: true}).first();
   await language.selectOption({label: "Amis"});
@@ -187,6 +192,14 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   if (labels.includes("TestCorpus")) await corpus.selectOption({label: "TestCorpus"});
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
   await expect(page.locator(".builder__summary")).toContainText("Matching rows");
+
+  delayPreview = true;
+  await page.getByLabel("Word or phrase").fill("lima");
+  await expect(page.locator(".builder__preview-skeleton")).toBeVisible();
+  await expect(page.locator(".builder__preview").getByRole("table")).toHaveCount(0);
+  await expect(page.locator(".builder__preview-skeleton")).toBeHidden();
+  await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  delayPreview = false;
 
   await page.getByRole("combobox", {name: "Search in"}).selectOption("translation");
   const translationLanguage = page.getByRole("combobox", {name: "Translation language"});

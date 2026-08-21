@@ -16,18 +16,46 @@ function displayValue(value: string | number | null | undefined): string {
   return String(value);
 }
 
+function PreviewSkeleton({fields, label}: {fields: string[]; label: string}) {
+  return (
+    <div
+      className="table-scroll builder__preview-skeleton"
+      role="status"
+      aria-label={label}
+    >
+      <span className="sr-only">{label}</span>
+      <table aria-hidden="true">
+        <thead>
+          <tr>{fields.map((field) => <th key={field}>{field}</th>)}</tr>
+        </thead>
+        <tbody>
+          {Array.from({length: 6}, (_, row) => (
+            <tr key={row}>
+              {fields.map((field, column) => (
+                <td key={field}>
+                  <span className={`preview-skeleton__line preview-skeleton__line--${(row + column) % 3}`} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function DatasetPreview({
   fields,
   languageSelected,
   levels,
   previews,
-  previewBusy,
+  loadingLevels,
 }: {
   fields: DatasetFieldsByLevel;
   languageSelected: boolean;
   levels: DatasetLevel[];
   previews: Partial<Record<DatasetLevel, DatasetPreviewResult>>;
-  previewBusy: boolean;
+  loadingLevels: DatasetLevel[];
 }) {
   const {tx} = useI18n();
   const [activeLevel, setActiveLevel] = useState<DatasetLevel>(levels[0] ?? "sentence");
@@ -36,6 +64,8 @@ export function DatasetPreview({
   const active = previews[displayLevel];
   const activeFields = fields[displayLevel];
   const info = levelInfo.get(displayLevel) ?? DATASET_LEVEL_INFO[0];
+  const activeLoading = loadingLevels.includes(displayLevel);
+  const previewBusy = loadingLevels.length > 0;
 
   return (
     <>
@@ -67,7 +97,7 @@ export function DatasetPreview({
                   type="button"
                 >
                   <code>{item[1]}</code> {tx(item[2], item[3])}
-                  <span>{previews[level]?.estimated_rows ?? "—"}</span>
+                  <span>{previews[level]?.estimated_rows ?? (loadingLevels.includes(level) ? "…" : "—")}</span>
                 </button>
               );
             })}
@@ -81,7 +111,13 @@ export function DatasetPreview({
             {tx(`Select columns for ${info[1]}.`, `請選擇 ${info[1]} 的欄位。`)}
           </div>
         )}
-        {languageSelected && !previewBusy && activeFields.length > 0 && active?.items.length === 0 && (
+        {languageSelected && activeLoading && activeFields.length > 0 && (
+          <PreviewSkeleton
+            fields={activeFields}
+            label={tx(`Loading ${info[1]} preview`, `正在載入 ${info[1]} 預覽`)}
+          />
+        )}
+        {languageSelected && !activeLoading && activeFields.length > 0 && active?.items.length === 0 && (
           <div className="empty-state">
             {tx(
               "No complete rows match these filters and columns.",
@@ -89,7 +125,7 @@ export function DatasetPreview({
             )}
           </div>
         )}
-        {active && active.items.length > 0 && activeFields.length > 0 && (
+        {!activeLoading && active && active.items.length > 0 && activeFields.length > 0 && (
           <div className="table-scroll" tabIndex={0} role="region" aria-label={`${info[1]} preview`}>
             <table>
               <thead>
