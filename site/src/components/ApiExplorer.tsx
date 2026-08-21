@@ -134,7 +134,7 @@ export function ApiExplorer({
           <div className="api-explorer__fields">
             <label className="field field--api-wide">
               {tx("Query", "查詢")}
-              <input required maxLength={256} value={query} onChange={(event) => setQuery(event.target.value)} />
+              <input required maxLength={2048} value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
             <label className="field field--api-wide">
               {tx("Formosan language", "臺灣南島語")}
@@ -160,7 +160,7 @@ export function ApiExplorer({
             <label className="field">
               {tx("Results", "結果數")}
               <select value={limit} onChange={(event) => setLimit(Number(event.target.value))}>
-                {[5, 10, 25, 50, 100].map((value) => <option key={value} value={value}>{number(value)}</option>)}
+                {[5, 25, 100, 250, 500, 1000].map((value) => <option key={value} value={value}>{number(value)}</option>)}
               </select>
             </label>
             {direction === "translation" && (

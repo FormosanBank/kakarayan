@@ -235,7 +235,7 @@ export function SearchTool({
         </fieldset>
         <div className="field field--query">
           <label htmlFor={`query-${kind}`}>{kind === "dictionary" ? tx("Word or meaning", "單詞或釋義") : tx("Word or phrase", "單詞或片語")}</label>
-          <input id={`query-${kind}`} value={query} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
+          <input id={`query-${kind}`} value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
         </div>
         <label className="field">
           {tx("Formosan language", "臺灣南島語")}

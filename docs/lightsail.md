@@ -10,7 +10,7 @@ The deployed request path is:
 browser
   -> GitHub Pages: React, styles, and small catalogues
   -> Lightsail Caddy: HTTPS termination
-  -> Lightsail FastAPI: bounded public queries
+  -> Lightsail FastAPI: indexed public queries and streamed exports
   -> Lightsail SQLite: one local immutable read model
 ```
 
@@ -81,8 +81,9 @@ swapon --show
 df -h /
 ```
 
-The API normally uses much less than 512 MiB, but image building and release
-activation need temporary headroom. Add a 2 GiB swap file once:
+The API container may use up to 448 MiB and Caddy up to 64 MiB. Image building,
+large exports, and release activation also need temporary headroom. Add a 2 GiB swap file
+once:
 
 ```bash
 if [ ! -f /swapfile ]; then
@@ -161,7 +162,9 @@ nano .env
 
 Set `KAKARAYAN_HOSTNAME` to the hostname made from the attached static IP. Leave
 the production and local frontend origins in `KAKARAYAN_CORS_ORIGINS`. The `.env`
-file contains no password and is ignored by Git, but it remains host-specific.
+file contains no password and is ignored by Git, but it remains host-specific. The default
+`KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantially longer analytical queries than
+the original proof of concept.
 
 Validate the Compose model and build the generic API image:
 
@@ -356,8 +359,10 @@ charge, and Caddy certificates are free. The plan includes 20 GB SSD and 1 TB mo
 transfer. Optional Lightsail snapshots are billed separately per stored GB.
 
 The 512 MiB instance is appropriate for this proof of concept because the service
-has one read-only process, a local indexed database, bounded queries, and no corpus
-build at request time. Watch memory, swap, disk, latency, and request failures. Move
+has one read-only process, a local indexed database, streamed exports, and no corpus
+build at request time. The API permits 100,000 export rows per selected XML level and uses
+448 MiB of the container budget; Caddy may use the remaining 64 MiB. Watch memory, swap,
+disk, latency, and request failures. Move
 to the 1 GiB plan if the process uses swap during normal traffic, queries queue under
 small bursts, or release updates no longer have enough disk headroom.
 

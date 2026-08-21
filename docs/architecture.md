@@ -20,7 +20,7 @@ clean FormosanBank checkout at one commit
 
 browser
   -> Pages serves the React shell and small static catalogues
-  -> query API returns bounded summaries, details, previews, and exports
+  -> query API returns summaries, details, previews, and streamed exports
   -> GitHub Releases serves prepared research downloads
   -> named Hugging Face services receive MT or ASR input only after consent
 ```
@@ -75,12 +75,12 @@ The API owns:
 - stable keyset cursors;
 - small result summaries and on-demand record detail;
 - frequency and summary queries;
-- bounded previews and finite CSV, TSV, or JSON Lines exports;
+- previews and finite streamed CSV, TSV, or JSON Lines exports;
 - health, readiness, release identity, and privacy-preserving operational records.
 
 Successful release-scoped GET responses are public and immutable. Validation and readiness
-responses are not cached. Query length, page size, SQLite work, export rows, and export bytes
-are bounded.
+responses are not cached. Query length, page size, SQLite work, and export rows have high
+finite limits. Export bytes are streamed rather than buffered in API memory.
 
 ## Activation boundary
 

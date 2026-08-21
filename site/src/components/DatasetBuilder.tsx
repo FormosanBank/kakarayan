@@ -20,7 +20,6 @@ import {useI18n} from "../i18n";
 import {Link, useSearchParams} from "../routing";
 import type {AppData, MatchMode, SearchDirection} from "../types";
 import {DatasetPreview} from "./DatasetPreview";
-import {LoadingState} from "./LoadingState";
 
 interface PreviewState {
   signature: string;
@@ -35,6 +34,16 @@ function downloadBlob(blob: Blob, filename: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+function startDownload(url: string, filename: string) {
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
 }
 
 function initialFields(): DatasetFieldsByLevel {
@@ -71,7 +80,6 @@ export function DatasetBuilder({data}: {data: AppData}) {
     values: {},
     pending: [],
   });
-  const [exportBusy, setExportBusy] = useState(false);
   const [error, setError] = useState("");
   const previewController = useRef<AbortController | null>(null);
 
@@ -237,45 +245,31 @@ export function DatasetBuilder({data}: {data: AppData}) {
     );
   }
 
-  async function exportDataset() {
+  function exportDataset() {
     if (!languageId || !selectionReady || exportBlocked) return;
-    setExportBusy(true);
     setError("");
-    try {
-      let route: "export" | "export-package" = "export";
-      let values: URLSearchParams;
-      let filename: string;
-      if (levels.length === 1) {
-        const level = levels[0];
-        if (!level) return;
-        values = parameters(level, fields[level], maxRows, true);
-        filename = `kakarayan-${data.meta.release_id}-${level}s.${format}`;
-      } else {
-        route = "export-package";
-        const firstLevel = levels.at(0);
-        if (!firstLevel) return;
-        values = parameters(firstLevel, [], maxRows, true);
-        values.delete("record_level");
-        values.delete("field");
-        for (const level of levels) {
-          values.append("record_level", level);
-          for (const field of fields[level]) values.append(`${level}_field`, field);
-        }
-        filename = `kakarayan-${data.meta.release_id}-xml-levels.zip`;
+    let route: "export" | "export-package" = "export";
+    let values: URLSearchParams;
+    let filename: string;
+    if (levels.length === 1) {
+      const level = levels[0];
+      if (!level) return;
+      values = parameters(level, fields[level], maxRows, true);
+      filename = `kakarayan-${data.meta.release_id}-${level}s.${format}`;
+    } else {
+      route = "export-package";
+      const firstLevel = levels.at(0);
+      if (!firstLevel) return;
+      values = parameters(firstLevel, [], maxRows, true);
+      values.delete("record_level");
+      values.delete("field");
+      for (const level of levels) {
+        values.append("record_level", level);
+        for (const field of fields[level]) values.append(`${level}_field`, field);
       }
-      const response = await fetch(datasetUrl(data.meta.release_id, route, values), {
-        headers: {Accept: "*/*", "X-Kakarayan-Client": "web-v1"},
-      });
-      if (!response.ok) {
-        const body = (await response.json()) as {error?: {message?: string}};
-        throw new Error(body.error?.message || `${response.status} ${response.statusText}`);
-      }
-      downloadBlob(await response.blob(), filename);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setExportBusy(false);
+      filename = `kakarayan-${data.meta.release_id}-xml-levels.zip`;
     }
+    startDownload(datasetUrl(data.meta.release_id, route, values), filename);
   }
 
   function downloadRecipe() {
@@ -318,7 +312,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
             <label className="field">{tx("Language", "語言")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); setTranslationLanguage(""); setTranslationOptions([]); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
             <label className="field">{tx("Corpus", "語料庫")}<select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setTranslationLanguage(""); setTranslationOptions([]); }}><option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>{corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}</select></label>
             <label className="field">{tx("Dialect", "方言")}<select value={dialect} disabled={!languageId} onChange={(event) => setDialect(event.target.value)}><option value="">{tx("All dialects", "所有方言")}</option>{selectedLanguage?.dialects.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-            <label className="field">{tx("Word or phrase", "單詞或片語")}<input value={query} maxLength={256} onChange={(event) => setQuery(event.target.value)} /></label>
+            <label className="field">{tx("Word or phrase", "單詞或片語")}<input value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} /></label>
             <label className="field">{tx("Search in", "搜尋範圍")}<select value={direction} onChange={(event) => { const next = event.target.value as SearchDirection; setDirection(next); if (next === "formosan") { setTranslationLanguage(""); setTranslationOptions([]); } }}><option value="formosan">{tx("Formosan forms", "臺灣南島語形式")}</option><option value="translation">{tx("Translations", "翻譯")}</option></select></label>
             {direction === "translation" && <label className="field">{tx("Translation language", "翻譯語言")}<select value={translationLanguage} disabled={!translationOptions.length} onChange={(event) => setTranslationLanguage(event.target.value)}><option value="">{tx("Any language", "任何語言")}</option>{translationOptions.map((option) => <option key={option.xml_lang} value={option.xml_lang}>{option.xml_lang} · {number(option.records)}</option>)}</select></label>}
             <label className="field">{tx("Match", "比對方式")}<select value={match} onChange={(event) => setMatch(event.target.value as MatchMode)}><option value="exact">{tx("Exact", "完全相符")}</option><option value="prefix">{tx("Prefix", "前綴")}</option><option value="contains">{tx("Contains", "包含")}</option></select></label>
@@ -392,16 +386,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
             <div><dt>{tx("Matching rows", "相符列數")}</dt><dd>{languageId ? (previewComplete ? number(estimatedRows) : (previewBusy ? "…" : "—")) : "—"}</dd></div>
             <div><dt>{tx("Rows downloaded", "下載列數")}</dt><dd>{languageId ? (previewComplete ? number(exportRows) : (previewBusy ? "…" : "—")) : "—"}</dd></div>
           </dl>
-          <label className="field">{tx("Maximum per level", "每層級上限")}<select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))}>{[100, 250, 500, 1000].map((value) => <option key={value} value={value}>{number(value)}</option>)}</select></label>
+          <label className="field">{tx("Maximum per level", "每層級上限")}<select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))}>{[1000, 10_000, 25_000, 50_000, 100_000].map((value) => <option key={value} value={value}>{number(value)}</option>)}</select></label>
           <label className="field">{tx("File type", "檔案類型")}<select value={format} onChange={(event) => setFormat(event.target.value as DatasetFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option><option value="jsonl">JSON Lines</option></select></label>
           {levels.length > 1 && <p className="builder__package-note">{tx(`${levels.length} tables in one ZIP`, `${levels.length} 個資料表合併為一個 ZIP`)}</p>}
-          <button className="button button--primary" disabled={!languageId || !selectionReady || exportBusy || exportBlocked || !data.query.available} onClick={() => void exportDataset()}>{exportBusy ? tx("Preparing…", "準備中…") : tx("Download dataset", "下載資料集")}</button>
-          {exportBusy && (
-            <LoadingState
-              compact
-              label={tx("Preparing dataset download", "正在準備資料集下載")}
-            />
-          )}
+          <button className="button button--primary" disabled={!languageId || !selectionReady || exportBlocked || !data.query.available} onClick={exportDataset}>{tx("Download dataset", "下載資料集")}</button>
           <button className="button button--quiet" disabled={!languageId || !selectionReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
           {exportBlocked && <p className="callout callout--warning">{tx("This scope includes data without reviewed redistribution permission.", "此範圍包含尚未審查再散布權限的資料。")}</p>}
           <Link to="/downloads">{tx("Prepared full datasets", "預備完整資料集")}</Link>

@@ -63,15 +63,15 @@ Each document uses the envelope in `schemas/static-api.schema.json`. Consumers r
 | `GET /v1/releases/{release}/concordance` | Sentence summaries |
 | `GET /v1/releases/{release}/frequencies` | Bounded token frequencies |
 | `GET /v1/releases/{release}/summaries` | Corpus summary and distributions |
-| `GET /v1/releases/{release}/datasets/preview` | At most 25 projected rows |
-| `GET /v1/releases/{release}/datasets/export` | Finite CSV, TSV, or JSON Lines export |
+| `GET /v1/releases/{release}/datasets/preview` | At most 250 projected rows |
+| `GET /v1/releases/{release}/datasets/export` | Streamed CSV, TSV, or JSON Lines export |
 | `GET /v1/releases/{release}/datasets/export-package` | S/W/M tables in one ZIP |
 
 ## Search
 
 Dictionary and concordance routes require:
 
-- `q`: 1 to 256 characters;
+- `q`: 1 to 2,048 characters;
 - `language_id`: one FormosanBank display-language identifier;
 - `direction`: `formosan` or `translation`;
 - `match`: `exact`, `prefix`, or `contains`.
@@ -96,7 +96,7 @@ sentence detail route.
 
 ## Pagination
 
-`limit` is between 1 and 100 and defaults to 25. Search and frequency responses return an
+`limit` is between 1 and 1,000 and defaults to 25. Search and frequency responses return an
 opaque `next_cursor` when another page exists. Cursors are keyset positions bound to the
 release and query. Do not decode them or reuse one after changing any query parameter.
 
@@ -122,17 +122,18 @@ Set `complete_fields=true` to exclude rows missing any selected optional tier or
 The Research builder always uses this mode. The default remains `false` for compatibility
 with earlier sentence API clients.
 
-Preview returns at most 25 rows and reports `record_level`, `estimated_rows`,
-`returned_rows`, and `truncated`. Export requires `max_rows` from 1 through 1,000, accepts
-`format=csv|tsv|jsonl`, and rejects responses above 5 MiB. CSV and TSV cells beginning with
-spreadsheet formula characters are escaped.
+Preview returns at most 250 rows and reports `record_level`, `estimated_rows`,
+`returned_rows`, and `truncated`. Export requires `max_rows` from 1 through 100,000 per
+selected level and accepts `format=csv|tsv|jsonl`. Rows are streamed as they are read from
+SQLite, so there is no fixed response-byte cap or full-result memory buffer. CSV and TSV
+cells beginning with spreadsheet formula characters are escaped.
 
 For `export-package`, repeat `record_level` and pass level-specific fields as
 `sentence_field`, `word_field`, and `morpheme_field`. The response contains one table per
 selected level plus `manifest.json`.
 
-Full-corpus work belongs to prepared downloads. There is no unbounded custom export or
-background job in v1.
+Full-corpus work still belongs to prepared downloads. Custom exports are finite and run in
+the request, with no background job in v1.
 
 Legacy `glosses`, `word_translations`, and `morpheme_translations` remain accepted on
 sentence exports for existing recipes. New selections use W and M rows directly.
@@ -155,8 +156,7 @@ Errors use:
 ```
 
 Clients should branch on `code`. Expected categories include invalid input, release
-mismatch, missing records, excessive query work, excessive export size, rights denial, and
-service not ready.
+mismatch, missing records, excessive query work, rights denial, and service not ready.
 
 ## HTTP and privacy behavior
 
@@ -200,6 +200,7 @@ The serving process requires a database and active manifest prepared before star
 | `KAKARAYAN_RELEASE_MANIFEST_PATH` | Local active manifest path |
 | `KAKARAYAN_SQLITE_SHA256` | Optional independently expected expanded checksum |
 | `KAKARAYAN_CORS_ORIGINS` | Comma-separated exact origins |
+| `KAKARAYAN_QUERY_STEP_LIMIT` | SQLite progress callbacks allowed per request; default 2,000,000 |
 
 Use `python -m api.prepare_release` during deployment. Runtime startup never downloads or
 decompresses a release.

@@ -6,6 +6,7 @@ services:
     image: kakarayan-api:lightsail
     environment:
       KAKARAYAN_CORS_ORIGINS: ${KAKARAYAN_CORS_ORIGINS:?set KAKARAYAN_CORS_ORIGINS in .env}
+      KAKARAYAN_QUERY_STEP_LIMIT: ${KAKARAYAN_QUERY_STEP_LIMIT:-2000000}
     volumes:
       - ./data:/data
     ports:
@@ -17,7 +18,7 @@ services:
       - /tmp:size=64m,mode=1777
     security_opt:
       - no-new-privileges:true
-    mem_limit: 384m
+    mem_limit: 448m
 
   caddy:
     image: caddy:2.11.4-alpine
@@ -36,7 +37,7 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    mem_limit: 96m
+    mem_limit: 64m
 
 volumes:
   caddy_data:

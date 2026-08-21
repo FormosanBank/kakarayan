@@ -54,12 +54,14 @@ The Research builder calls the API for a bounded preview and a finite export. It
 - sentence (`S`), word (`W`), and morpheme (`M`) row levels;
 - separate selected columns for each level;
 - complete-row filtering, where every selected optional tier must exist on its owner;
-- 1 to 1,000 rows per selected level;
+- 1 to 100,000 rows per selected level;
 - CSV, TSV, or JSON Lines.
 
-Each preview returns at most 25 rows. A single level downloads as one table. Two or three
-levels download as a ZIP containing one table per level and a manifest. Export output is
-capped at 5 MiB. Use a prepared artifact for larger work.
+Each preview returns at most 250 rows. A single level downloads as one table. Two or three
+levels download as a ZIP containing one table per level and a manifest. The API streams
+rows and ZIP members instead of keeping the completed download in server or browser memory.
+Use a prepared artifact when the complete corpus or more than 100,000 rows per level is
+needed.
 
 ## Column meanings
 
