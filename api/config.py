@@ -6,7 +6,14 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from api.limits import DEFAULT_SQLITE_PROGRESS_CALLBACKS
+from api.limits import (
+    DEFAULT_EXPORT_BURST,
+    DEFAULT_EXPORTS_PER_MINUTE,
+    DEFAULT_QUERY_CONCURRENCY,
+    DEFAULT_REQUEST_BURST,
+    DEFAULT_REQUESTS_PER_MINUTE,
+    DEFAULT_SQLITE_PROGRESS_CALLBACKS,
+)
 
 
 def _origins(value: str) -> tuple[str, ...]:
@@ -30,6 +37,11 @@ class Settings:
     expected_sha256: str | None
     cors_origins: tuple[str, ...]
     query_step_limit: int = DEFAULT_SQLITE_PROGRESS_CALLBACKS
+    requests_per_minute: int = DEFAULT_REQUESTS_PER_MINUTE
+    request_burst: int = DEFAULT_REQUEST_BURST
+    exports_per_minute: int = DEFAULT_EXPORTS_PER_MINUTE
+    export_burst: int = DEFAULT_EXPORT_BURST
+    query_concurrency: int = DEFAULT_QUERY_CONCURRENCY
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -55,8 +67,47 @@ class Settings:
                 ),
                 "KAKARAYAN_QUERY_STEP_LIMIT",
             ),
+            requests_per_minute=_positive_integer(
+                os.environ.get(
+                    "KAKARAYAN_REQUESTS_PER_MINUTE",
+                    str(DEFAULT_REQUESTS_PER_MINUTE),
+                ),
+                "KAKARAYAN_REQUESTS_PER_MINUTE",
+            ),
+            request_burst=_positive_integer(
+                os.environ.get("KAKARAYAN_REQUEST_BURST", str(DEFAULT_REQUEST_BURST)),
+                "KAKARAYAN_REQUEST_BURST",
+            ),
+            exports_per_minute=_positive_integer(
+                os.environ.get(
+                    "KAKARAYAN_EXPORTS_PER_MINUTE",
+                    str(DEFAULT_EXPORTS_PER_MINUTE),
+                ),
+                "KAKARAYAN_EXPORTS_PER_MINUTE",
+            ),
+            export_burst=_positive_integer(
+                os.environ.get("KAKARAYAN_EXPORT_BURST", str(DEFAULT_EXPORT_BURST)),
+                "KAKARAYAN_EXPORT_BURST",
+            ),
+            query_concurrency=_positive_integer(
+                os.environ.get(
+                    "KAKARAYAN_QUERY_CONCURRENCY",
+                    str(DEFAULT_QUERY_CONCURRENCY),
+                ),
+                "KAKARAYAN_QUERY_CONCURRENCY",
+            ),
         )
 
     def validate(self) -> None:
-        if self.query_step_limit <= 0:
+        if any(
+            value <= 0
+            for value in (
+                self.query_step_limit,
+                self.requests_per_minute,
+                self.request_burst,
+                self.exports_per_minute,
+                self.export_burst,
+                self.query_concurrency,
+            )
+        ):
             raise ValueError("Service resource limits must be positive")

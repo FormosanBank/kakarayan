@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -121,22 +122,30 @@ def _cursor_position(
 
 
 class CorpusStore:
-    def __init__(self, state: ReleaseState, query_step_limit: int) -> None:
+    def __init__(
+        self,
+        state: ReleaseState,
+        query_step_limit: int,
+        query_concurrency: int = 4,
+    ) -> None:
         self.state = state
         self.query_step_limit = query_step_limit
+        self._query_slots = threading.BoundedSemaphore(query_concurrency)
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
-        connection = readonly_connection(self.state.database_path)
-        callbacks = 0
-
-        def progress() -> int:
-            nonlocal callbacks
-            callbacks += 1
-            return int(callbacks > self.query_step_limit)
-
-        connection.set_progress_handler(progress, 1000)
+        self._query_slots.acquire()
+        connection: sqlite3.Connection | None = None
         try:
+            connection = readonly_connection(self.state.database_path)
+            callbacks = 0
+
+            def progress() -> int:
+                nonlocal callbacks
+                callbacks += 1
+                return int(callbacks > self.query_step_limit)
+
+            connection.set_progress_handler(progress, 1000)
             row = connection.execute(
                 "SELECT value_json FROM publication_metadata WHERE key = 'meta'"
             ).fetchone()
@@ -160,7 +169,9 @@ class CorpusStore:
                 ) from None
             raise
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
+            self._query_slots.release()
 
     @property
     def release_id(self) -> str:

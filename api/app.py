@@ -31,6 +31,7 @@ from api.limits import (
 )
 from api.release import ReleaseError, load_release
 from api.search import MatchMode
+from api.security import PerIpRateLimiter, RateDecision, RatePolicy
 from api.store import CorpusStore, FrequencySort, SearchDirection, TierRequirement
 
 LOGGER = logging.getLogger("kakarayan.api")
@@ -57,6 +58,10 @@ def _record(event: str, **values: object) -> None:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     configured = settings or Settings.from_environment()
+    rate_limiter = PerIpRateLimiter(
+        RatePolicy(configured.requests_per_minute, configured.request_burst),
+        RatePolicy(configured.exports_per_minute, configured.export_burst),
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -65,7 +70,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         started = time.perf_counter()
         try:
             state = await asyncio.to_thread(load_release, configured)
-            app.state.store = CorpusStore(state, configured.query_step_limit)
+            app.state.store = CorpusStore(
+                state,
+                configured.query_step_limit,
+                configured.query_concurrency,
+            )
             _record(
                 "startup",
                 status="ready",
@@ -98,6 +107,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=False,
         allow_methods=["GET"],
         allow_headers=["Accept", "If-None-Match", "X-Kakarayan-Client"],
+        expose_headers=[
+            "Retry-After",
+            "X-Kakarayan-Release",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Scope",
+        ],
         max_age=86400,
     )
     app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=6)
@@ -128,7 +144,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.middleware("http")
     async def request_record(request: Request, call_next: RequestResponseEndpoint) -> Response:
         started = time.perf_counter()
-        response = await call_next(request)
+        decision: RateDecision | None = None
+        path = request.url.path
+        if request.method != "OPTIONS" and path not in {"/healthz", "/readyz"}:
+            client_ip = request.client.host.casefold() if request.client else "unknown"
+            decision = rate_limiter.check(
+                client_ip,
+                is_export=path.endswith(("/datasets/export", "/datasets/export-package")),
+            )
+        response: Response
+        if decision is not None and not decision.allowed:
+            error = ApiError(429, "rate_limited", "Too many requests. Try again shortly.")
+            response = JSONResponse(
+                status_code=error.status,
+                content=error.body(),
+                headers={
+                    _FAILURE_HEADER: error.code,
+                    "Cache-Control": "no-store",
+                    "Retry-After": str(decision.retry_after),
+                },
+            )
+            origin = request.headers.get("origin")
+            if origin in configured.cors_origins:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Expose-Headers"] = (
+                    "Retry-After, X-Kakarayan-Release, X-RateLimit-Limit, "
+                    "X-RateLimit-Remaining, X-RateLimit-Scope"
+                )
+                response.headers.add_vary_header("Origin")
+        else:
+            response = await call_next(request)
+        if decision is not None:
+            response.headers["X-RateLimit-Limit"] = str(decision.limit)
+            response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+            response.headers["X-RateLimit-Scope"] = decision.scope
         current = getattr(request.app.state, "store", None)
         release_id = current.release_id if isinstance(current, CorpusStore) else None
         response.headers["X-Content-Type-Options"] = "nosniff"

@@ -28,6 +28,12 @@ The serving process then needs only:
 - `KAKARAYAN_SQLITE_SHA256`: optional independently pinned expanded checksum.
 - `KAKARAYAN_QUERY_STEP_LIMIT`: SQLite progress callbacks allowed per request; defaults to
   `2000000` for long analytical requests.
+- `KAKARAYAN_REQUESTS_PER_MINUTE`: sustained request rate per client IP; defaults to `60`.
+- `KAKARAYAN_REQUEST_BURST`: immediately available general-request tokens; defaults to `20`.
+- `KAKARAYAN_EXPORTS_PER_MINUTE`: sustained export rate per client IP; defaults to `5`.
+- `KAKARAYAN_EXPORT_BURST`: immediately available export tokens; defaults to `5`.
+- `KAKARAYAN_QUERY_CONCURRENCY`: SQLite connections allowed to execute together; defaults
+  to `4`.
 
 Startup performs no network request, decompression, or full integrity scan. It checks the
 schema and release identities, opens SQLite immutable and read-only, and exposes `/readyz`
@@ -54,6 +60,12 @@ and `/openapi.json`.
 Search pages allow up to 1,000 records, previews up to 250 rows, and exports up to 100,000
 rows per selected XML level. Exports stream directly from immutable SQLite into CSV, TSV,
 JSON Lines, or ZIP output, without collecting the complete file in API memory.
+
+Rate limits use in-process token buckets keyed by the client address supplied by Uvicorn's
+trusted proxy handling. Export requests consume both a general token and an export token.
+When a bucket is empty the API returns `429` with `Retry-After`. Health and readiness checks
+and CORS preflights are exempt. The SQLite semaphore queues database work above the global
+concurrency setting instead of starting more simultaneous queries.
 
 `api/Dockerfile` builds the same service for a public container host. The current guarded
 workflow can publish a release-pinned Hugging Face Docker Space. Other hosts must preserve
