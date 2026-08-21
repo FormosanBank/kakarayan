@@ -139,7 +139,10 @@ def dataset_projection(fields: Sequence[DatasetField]) -> str:
 
 
 def _selected_form(forms: Sequence[Mapping[str, Any]]) -> str:
-    by_kind = {str(item["kind"]): str(item["text"]) for item in forms if item["text"]}
+    by_kind: dict[str, str] = {}
+    for item in forms:
+        if item["text"]:
+            by_kind.setdefault(str(item["kind"]), str(item["text"]))
     return by_kind.get("standard") or by_kind.get("original") or by_kind.get("alternate") or ""
 
 

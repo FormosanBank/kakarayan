@@ -163,8 +163,8 @@ export function TranslationTool({
       <NavigationBlocker
         active={running}
         message={tx(
-          "Translation is still running. Leave this page and cancel it?",
-          "翻譯仍在進行中。要離開此頁並取消翻譯嗎？",
+          "Translation is still running. Wait for it to finish before leaving. Leave and cancel it anyway?",
+          "翻譯仍在進行中。請等待完成後再離開。仍要離開並取消翻譯嗎？",
         )}
       />
       <div className="tool-heading">
