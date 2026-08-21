@@ -221,17 +221,45 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await expect(page.getByRole("table")).toBeVisible();
 });
 
-test("developer routes expose the query contract and static metadata", async ({page}) => {
+test("developer routes expose the query contract and static metadata", async ({browserName, context, page}) => {
+  if (browserName === "chromium") {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  }
   await page.goto("#/developers");
-  await expect(page.getByRole("heading", {name: "Live API v1"})).toBeVisible();
-  await expect(page.locator(".api-choice__primary")).toContainText("available");
-  await expect(page.getByRole("link", {name: "Open API reference"})).toHaveAttribute("href", /\/docs$/u);
+  await expect(page.getByRole("heading", {name: "Live query API"})).toBeVisible();
+  await expect(page.locator(".developer-services")).toContainText("available");
+  await expect(page.getByRole("link", {name: "API reference", exact: true})).toHaveAttribute("href", /\/docs$/u);
   await page.getByRole("button", {name: "Run request"}).click();
   await expect(page.locator(".api-explorer__response")).toContainText('"headword": "lima"');
-  await page.getByRole("combobox", {name: "Request"}).selectOption("concordance");
+  await page.getByRole("button", {name: "Sentences", exact: true}).click();
+  await expect(page.getByRole("button", {name: "Sentences", exact: true})).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", {name: "Run request"}).click();
   await expect(page.locator(".api-explorer__response")).toContainText('"standard":');
-  await expect(page.locator(".code-samples")).toContainText("/concordance?");
+  await expect(page.locator(".code-example")).toContainText("/concordance");
+  await page.getByRole("tab", {name: "JavaScript"}).click();
+  await expect(page.getByRole("tabpanel")).toContainText("URLSearchParams");
+  if (browserName === "chromium") {
+    await page.getByRole("button", {name: "Copy code"}).click();
+    await expect(page.getByRole("button", {name: "Copied"})).toBeVisible();
+  }
+  await page.getByRole("combobox", {name: "Search in"}).selectOption("translation");
+  await expect(page.getByRole("textbox", {name: "Translation language tag"})).toHaveValue("eng");
+  await expect(page.locator(".api-request-preview")).toContainText("translation_language");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  for (const block of await page.locator(".code-lines").all()) {
+    const sizes = await block.evaluate((element) => ({
+      client: element.clientWidth,
+      scroll: element.scrollWidth,
+      whiteSpace: getComputedStyle(element).whiteSpace,
+    }));
+    expect(sizes.scroll).toBeLessThanOrEqual(sizes.client + 1);
+    expect(sizes.whiteSpace).toBe("normal");
+  }
+  await page.getByRole("button", {name: "Traditional Chinese"}).click();
+  await expect(page.getByRole("heading", {name: "API 測試工具"})).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await page.setViewportSize({width: 320, height: 700});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   await expectAccessible(page);
 });
 
