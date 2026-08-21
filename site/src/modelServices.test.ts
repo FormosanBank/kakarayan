@@ -8,7 +8,12 @@ vi.mock("@gradio/client", () => ({
   handle_file: gradio.handleFile,
 }));
 
-import {transcribe, translate, type ServiceStage} from "./modelServices";
+import {
+  closeModelServiceConnections,
+  transcribe,
+  translate,
+  type ServiceStage,
+} from "./modelServices";
 
 interface Event {
   type: "data" | "status";
@@ -59,6 +64,7 @@ const asrService = {
 
 describe("public model adapters", () => {
   beforeEach(() => {
+    closeModelServiceConnections();
     gradio.connect.mockReset();
     gradio.handleFile.mockClear();
   });
@@ -90,7 +96,18 @@ describe("public model adapters", () => {
       translationService.space,
       expect.any(Object),
     );
-    expect(mock.close).toHaveBeenCalled();
+    expect(mock.close).not.toHaveBeenCalled();
+  });
+
+  it("reuses one provider connection across sequential translations", async () => {
+    const mock = service([{type: "data", data: ["lima", ""]}]);
+    gradio.connect.mockResolvedValue(mock.client);
+
+    await translate(request, translationService, options().value);
+    await translate({...request, text: "good"}, translationService, options().value);
+
+    expect(gradio.connect).toHaveBeenCalledTimes(1);
+    expect(mock.submit).toHaveBeenCalledTimes(2);
   });
 
   it("reports a cold-start status from the provider connection", async () => {
@@ -133,7 +150,7 @@ describe("public model adapters", () => {
 
     await expect(result).rejects.toMatchObject({name: "AbortError"});
     expect(cancel).toHaveBeenCalled();
-    expect(close).toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("times out an unresponsive provider job", async () => {
@@ -162,6 +179,7 @@ describe("public model adapters", () => {
       "malformed response",
     );
 
+    closeModelServiceConnections();
     gradio.connect.mockRejectedValueOnce(new Error("provider unavailable"));
     await expect(translate(request, translationService, options().value)).rejects.toThrow(
       "provider unavailable",

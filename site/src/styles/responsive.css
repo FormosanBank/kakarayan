@@ -378,6 +378,15 @@
     flex-direction: column;
   }
 
+  .model-progress {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .model-progress ol {
+    grid-column: 1 / -1;
+    justify-content: space-between;
+  }
+
   .review-card {
     min-height: 260px;
     padding: 28px 20px;

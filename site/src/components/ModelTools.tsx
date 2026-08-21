@@ -2,7 +2,7 @@ import {useEffect, useMemo, useRef, useState, type FormEvent} from "react";
 
 import {translate, type ServiceStage, type TranslationRequest} from "../modelServices";
 import {useI18n} from "../i18n";
-import {Link} from "../routing";
+import {Link, NavigationBlocker} from "../routing";
 import {manualStudyCard, saveCard} from "../study";
 import type {Language, ModelCatalog} from "../types";
 import {StatusBadge} from "./Layout";
@@ -43,7 +43,9 @@ export function TranslationTool({
   const [metadata, setMetadata] = useState("");
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
   const [status, setStatus] = useState("");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const controller = useRef<AbortController | null>(null);
+  const startedAt = useRef(0);
   const language = languages.find((item) => item.id === selectedLanguageId) ?? languages[0];
   const service = catalog.services.find(
     (item) =>
@@ -67,6 +69,13 @@ export function TranslationTool({
   );
 
   useEffect(() => () => controller.current?.abort(), []);
+  const running = !["idle", "complete", "cancelled", "error"].includes(stage);
+  useEffect(() => {
+    if (!running) return;
+    const update = () => setElapsedSeconds(Math.floor((performance.now() - startedAt.current) / 1000));
+    const timer = window.setInterval(update, 1_000);
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -74,6 +83,8 @@ export function TranslationTool({
     controller.current?.abort();
     const next = new AbortController();
     controller.current = next;
+    startedAt.current = performance.now();
+    setElapsedSeconds(0);
     setResult("");
     setMetadata("");
     try {
@@ -89,7 +100,24 @@ export function TranslationTool({
           signal: next.signal,
           onStage: (nextStage, message) => {
             setStage(nextStage);
-            setStatus(message ?? "");
+            if (nextStage === "connecting") {
+              setStatus(
+                message?.includes("waking")
+                  ? tx("Waking the translation service…", "正在喚醒翻譯服務…")
+                  : tx("Connecting to the translation service…", "正在連線至翻譯服務…"),
+              );
+            } else if (nextStage === "pending") {
+              const position = message?.match(/\d+/u)?.[0];
+              setStatus(
+                position
+                  ? tx(`Waiting in queue · position ${position}`, `正在排隊 · 第 ${position} 位`)
+                  : tx("Waiting in the model queue…", "正在模型佇列中等待…"),
+              );
+            } else if (nextStage === "generating") {
+              setStatus(tx("Translating…", "正在翻譯…"));
+            } else {
+              setStatus("");
+            }
           },
         },
       );
@@ -132,6 +160,13 @@ export function TranslationTool({
 
   return (
     <section className="model-tool" aria-labelledby="translation-heading">
+      <NavigationBlocker
+        active={running}
+        message={tx(
+          "Translation is still running. Leave this page and cancel it?",
+          "翻譯仍在進行中。要離開此頁並取消翻譯嗎？",
+        )}
+      />
       <div className="tool-heading">
         <h3 id="translation-heading">{tx("Machine translation", "機器翻譯")}</h3>
         <StatusBadge value={service?.status ?? "unavailable"} />
@@ -217,7 +252,21 @@ export function TranslationTool({
           )}
         </div>
       </form>
-      {status && (
+      {running && (
+        <div className="model-progress" role="status" aria-live="polite">
+          <span className="model-progress__spinner" aria-hidden="true" />
+          <div>
+            <strong>{status}</strong>
+            <small>{number(elapsedSeconds)} {tx("seconds elapsed", "秒")}</small>
+          </div>
+          <ol aria-label={tx("Translation progress", "翻譯進度") }>
+            <li data-state={stage === "connecting" ? "current" : "complete"}>{tx("Connect", "連線")}</li>
+            <li data-state={stage === "pending" ? "current" : stage === "connecting" ? "upcoming" : "complete"}>{tx("Queue", "排隊")}</li>
+            <li data-state={stage === "generating" ? "current" : "upcoming"}>{tx("Translate", "翻譯")}</li>
+          </ol>
+        </div>
+      )}
+      {status && !running && (
         <p className={`callout callout--${stage === "error" ? "error" : "info"}`} role="status">
           {status}
         </p>

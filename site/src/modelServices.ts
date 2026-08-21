@@ -28,6 +28,48 @@ export interface BrowserModelService {
   endpoint: string;
 }
 
+interface GradioJob extends AsyncIterable<GradioEvent> {
+  cancel: () => Promise<void> | void;
+}
+
+interface GradioClient {
+  close: () => void;
+  submit: (endpoint: string, payload: Record<string, unknown>) => GradioJob;
+}
+
+const connections = new Map<string, Promise<GradioClient>>();
+
+async function modelClient(
+  space: string,
+  onStage: RunOptions["onStage"],
+): Promise<GradioClient> {
+  const existing = connections.get(space);
+  if (existing) return existing;
+  const {Client} = await import("@gradio/client");
+  const connection = Client.connect(space, {
+    events: ["data", "status"],
+    status_callback: (status) => {
+      if (status.status === "sleeping" || status.status === "starting") {
+        onStage("connecting", "The public Space is waking up. This can take a few minutes.");
+      }
+    },
+  }).then((client) => client as GradioClient);
+  connections.set(space, connection);
+  try {
+    return await connection;
+  } catch (cause) {
+    if (connections.get(space) === connection) connections.delete(space);
+    throw cause;
+  }
+}
+
+export function closeModelServiceConnections() {
+  for (const connection of connections.values()) {
+    void connection.then((client) => client.close(), () => undefined);
+  }
+  connections.clear();
+}
+
 async function runGradio(
   space: string,
   endpoint: string,
@@ -36,11 +78,7 @@ async function runGradio(
 ): Promise<unknown[]> {
   if (signal.aborted) throw new DOMException("Request cancelled", "AbortError");
   onStage("connecting", "Connecting to the public Hugging Face Space…");
-  const {Client} = await import("@gradio/client");
-  type ClientInstance = Awaited<ReturnType<typeof Client.connect>>;
-  type Job = ReturnType<ClientInstance["submit"]>;
-  let client: ClientInstance | null = null;
-  let job: Job | null = null;
+  let job: GradioJob | null = null;
   let interrupted: DOMException | null = null;
   let rejectInterruption: ((reason: DOMException) => void) | null = null;
 
@@ -48,7 +86,6 @@ async function runGradio(
     if (interrupted) return;
     interrupted = reason;
     if (job) void job.cancel();
-    client?.close();
     rejectInterruption?.(reason);
   };
   const abort = () => interrupt(new DOMException("Request cancelled", "AbortError"));
@@ -68,23 +105,10 @@ async function runGradio(
     if (interrupted) reject(interrupted);
   });
 
-  const connection = Client.connect(space, {
-    events: ["data", "status"],
-    status_callback: (status) => {
-      if (status.status === "sleeping" || status.status === "starting") {
-        onStage("connecting", "The public Space is waking up. This can take a few minutes.");
-      }
-    },
-  });
-  void connection.then(
-    (connected) => {
-      if (interrupted) connected.close();
-    },
-    () => undefined,
-  );
+  const connection = modelClient(space, onStage);
   let result: unknown[] | null = null;
   try {
-    client = await Promise.race([connection, interruption]);
+    const client = await Promise.race([connection, interruption]);
     job = client.submit(endpoint, payload);
     const consume = async () => {
       for await (const event of job as AsyncIterable<GradioEvent>) {
@@ -112,10 +136,15 @@ async function runGradio(
     if (!result) throw new Error("The public model returned no result");
     onStage("complete");
     return result;
+  } catch (cause) {
+    if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+      if (connections.get(space) === connection) connections.delete(space);
+      void connection.then((connected) => connected.close(), () => undefined);
+    }
+    throw cause;
   } finally {
     window.clearTimeout(timer);
     signal.removeEventListener("abort", abort);
-    client?.close();
   }
 }
 
