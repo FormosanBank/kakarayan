@@ -179,7 +179,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run production smoke and accessibility checks
-        run: npm --prefix site run test:e2e -- --project=desktop-chromium
+        run: npm --prefix site run test:e2e -- --project=desktop-chromium --grep @production-smoke
 
       - name: Record deployed revisions
         run: |

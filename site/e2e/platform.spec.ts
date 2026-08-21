@@ -66,7 +66,7 @@ test("boot and resource screens show structured loading states", async ({page}) 
   await expect(page.locator(".download-results strong")).toHaveText(/^\d+$/u);
 });
 
-test("the release-pinned shell, routes, and locale switch work", async ({page}) => {
+test("the release-pinned shell, routes, and locale switch work", {tag: "@production-smoke"}, async ({page}) => {
   await page.goto("");
   await expect(page.getByRole("heading", {level: 1})).toContainText("FormosanBank");
   await expect(page.locator(".release-pill")).toHaveText(/^fb-\d{8}-[0-9a-f]{7,12}$/u);
@@ -100,6 +100,38 @@ test("the release-pinned shell, routes, and locale switch work", async ({page}) 
   await expect(page).toHaveURL(/\/kakarayan\/research$/u);
   await page.getByRole("button", {name: "英文"}).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
+});
+
+test("production lookup and finite dataset routes respond", {tag: "@production-smoke"}, async ({page}) => {
+  await disableServiceWorkerForRouting(page);
+  await page.goto("lookup?type=dictionary");
+  await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
+  await page.getByLabel("Word or meaning").fill("lima");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  await expect(page.locator(".dictionary-entry").first()).toBeVisible();
+
+  await page.goto("lookup?type=sentences");
+  await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
+  await page.getByLabel("Word or phrase").fill("lima");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  await expect(page.locator(".result-card--summary").first()).toBeVisible();
+
+  await page.goto("research");
+  const previewResponse = page.waitForResponse(/\/datasets\/preview\?/u);
+  await page.getByRole("combobox", {name: "Language", exact: true}).first().selectOption({label: "Amis"});
+  const preview = await previewResponse;
+  expect(preview.ok()).toBe(true);
+  await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+
+  const exportUrl = new URL(preview.url());
+  exportUrl.pathname = exportUrl.pathname.replace("/preview", "/export");
+  exportUrl.searchParams.set("max_rows", "1");
+  exportUrl.searchParams.set("format", "csv");
+  const exported = await page.request.get(exportUrl.toString());
+  expect(exported.ok()).toBe(true);
+  expect(exported.headers()["content-type"]).toContain("text/csv");
+  expect((await exported.text()).trim().split("\n")).toHaveLength(2);
+  await expectAccessible(page);
 });
 
 test("the GitHub Pages fallback restores a clean deep link", async ({page}) => {
@@ -388,7 +420,7 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expectAccessible(page);
 });
 
-test("static resources remain usable when the query service is unavailable", async ({page}) => {
+test("static resources remain usable when the query service is unavailable", {tag: "@production-smoke"}, async ({page}) => {
   await disableServiceWorkerForRouting(page);
   await page.route("**/readyz", (route) =>
     route.fulfill({status: 503, contentType: "application/json", body: "{}"}),

@@ -67,6 +67,6 @@ When a bucket is empty the API returns `429` with `Retry-After`. Health and read
 and CORS preflights are exempt. The SQLite semaphore queues database work above the global
 concurrency setting instead of starting more simultaneous queries.
 
-`api/Dockerfile` builds the same service for a public container host. The current guarded
-workflow can publish a release-pinned Hugging Face Docker Space. Other hosts must preserve
-the same activation, immutable-release, health-check, CORS, and rollback contracts.
+`api/Dockerfile` builds the service deployed on the Tokyo Lightsail host. Any future host
+must preserve the same activation, immutable-release, health-check, CORS, and rollback
+contracts. Hugging Face remains separate and is used only by the optional MT and ASR tools.

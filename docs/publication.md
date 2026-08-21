@@ -3,9 +3,6 @@
 Kakarayan publishes one immutable data release, activates that exact release in the required
 query API, and then deploys the matching static site. The order is intentional:
 
-Production-scale validation results for the current v1 architecture are recorded in
-[v1-evidence.md](v1-evidence.md).
-
 ```text
 FormosanBank commit -> draft data release -> published data release
                     -> query API ready on that release
@@ -21,9 +18,7 @@ An administrator configures these once:
 1. Set **Settings > Pages > Build and deployment > Source** to **GitHub Actions**.
 2. Create the `data-release` environment and require the intended maintainer approval.
 3. Keep the `github-pages` environment restricted to `main`.
-4. Choose one query API host. For Lightsail, follow [lightsail.md](lightsail.md). For the
-   guarded Hugging Face deployment, create the `hugging-face-space` environment, set its
-   `HF_SPACE_REPO` variable to `owner/name`, and add a narrowly scoped `HF_TOKEN` secret.
+4. Deploy the query API on the Tokyo Lightsail host using [lightsail.md](lightsail.md).
 5. After the selected API is ready, set repository variable `KAKARAYAN_API_URL` to its
    public HTTPS base URL.
 6. Enable the dependency graph when an administrator is available. It improves dependency
@@ -51,11 +46,14 @@ Dispatch **Build and publish a data release** on `main` with:
 
 - `source_ref`: the exact intended FormosanBank ref or 40-character commit;
 - `dry_run: true` for a validation-only build, or `false` to prepare a draft release.
+- `verify_determinism: true` only for publisher or schema changes that require a second
+  complete build; leave it `false` for routine releases.
 
 The workflow resolves the source ref once, captures one model catalogue, parses the source
 once, and builds one complete release. It verifies schemas, SQLite, checksums, artifact
-inventory, source identity, and rights. The full-release query benchmark runs after the first
-verified build and before the deterministic rebuild so a performance failure stops early.
+inventory, source identity, and rights. The full-release query benchmark runs after the
+verified build so a performance failure stops early. When `verify_determinism` is enabled,
+the workflow then rebuilds the complete release and compares manifests before reconciliation.
 Indexed searches retain a 300 ms loopback p95 budget. The one-character Chinese substring
 case has a 400 ms budget because trigram indexes require at least three characters. A real
 run transfers the already verified output to the protected `data-release` job and creates
@@ -78,22 +76,10 @@ never be reused for different bytes.
 
 ## Deploy the query API
 
-For the small Tokyo Lightsail proof of concept, follow
+For the supported Tokyo Lightsail deployment, follow
 [the Lightsail runbook](lightsail.md). It builds the same generic API image, activates
 the published release into a host-mounted data directory, and puts Caddy HTTPS in front
 of the service. Continue with Pages only after `/readyz` reports the selected release.
-
-After publishing the data release, dispatch **Deploy query API to Hugging Face** with its
-release ID. The workflow:
-
-1. Requires a published, non-prerelease GitHub data release.
-2. Requires its manifest and compressed SQLite asset.
-3. Assembles a minimal Docker Space pinned to the immutable release manifest URL.
-4. Replaces the configured Space contents and pushes one release commit.
-
-The container runs `api.prepare_release` while the image is built. Download, expansion,
-checksum verification, and SQLite integrity checks therefore finish before the serving
-process starts. Uvicorn starts from only the local active database and manifest.
 
 Wait until:
 
@@ -116,7 +102,8 @@ The workflow:
 4. Assembles `site/public/api` plus curated download metadata.
 5. Requires the configured API `/readyz` to match the selected release.
 6. Builds and verifies the site under a 10 MiB total and 2 MiB per-file budget.
-7. Runs the production Chromium contract and accessibility journey.
+7. Runs focused production lookup, dataset, locale, accessibility, and degradation smoke
+   checks. The full fixture-backed browser suite remains in CI.
 8. Uploads and deploys the exact verified Pages artifact.
 
 Pages contains no corpus index, record shard, query database, or prepared bulk dataset.
@@ -173,7 +160,7 @@ shell files, every static metadata envelope, and strict size budgets.
 
 Data releases are immutable. Keep the prior published release available.
 
-1. Dispatch the API workflow with the prior release ID.
+1. Activate the prior release on Lightsail using [lightsail.md](lightsail.md).
 2. Wait for `/readyz` to report that ID.
 3. Dispatch Pages with the same prior release ID.
 4. Verify lookup, record detail, downloads, and static release metadata.
@@ -185,7 +172,8 @@ Do not deploy Pages first and do not replace assets under an existing release ta
 - A failed data build creates no published release.
 - A failed draft can be inspected or deleted through GitHub; do not reuse its tag with
   changed bytes.
-- A failed API deployment leaves the previously deployed Space revision available.
+- A failed Lightsail activation leaves the previous database in place until the atomic
+  replacement succeeds.
 - A failed Pages build does not replace the current Pages deployment.
 - A release mismatch makes the API unready or stops Pages before upload.
 - Generated local `build/` output is disposable; source XML and published releases are not.

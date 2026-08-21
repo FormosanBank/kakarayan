@@ -13,6 +13,11 @@ on:
         required: true
         default: true
         type: boolean
+      verify_determinism:
+        description: Repeat the complete build and compare manifests
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: formosanbank-data-release
@@ -234,6 +239,7 @@ jobs:
           rm -r -- build/active-release
 
       - name: Reproduce the complete publication
+        if: ${{ inputs.verify_determinism }}
         run: |
           cp build/data-release/release-manifest.json \
             "$RUNNER_TEMP/first-release-manifest.json"

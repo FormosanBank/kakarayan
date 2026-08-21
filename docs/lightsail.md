@@ -1,4 +1,4 @@
-# Lightsail proof-of-concept deployment
+# Lightsail query API deployment
 
 This runbook deploys the Kakarayan query API and its read-only SQLite database to
 one small Ubuntu Lightsail instance in Tokyo. GitHub Pages continues to serve the
@@ -49,7 +49,7 @@ In the Lightsail console:
    while allowing the Lightsail browser SSH client.
 5. Do not add a public rule for port 7860. Compose binds that port to loopback.
 
-For the proof of concept, create a free hostname by replacing the dots in the
+For the initial deployment, create a free hostname by replacing the dots in the
 static IP with dashes and appending `.sslip.io`. For example:
 
 ```text
@@ -164,7 +164,7 @@ Set `KAKARAYAN_HOSTNAME` to the hostname made from the attached static IP. Leave
 the production and local frontend origins in `KAKARAYAN_CORS_ORIGINS`. The `.env`
 file contains no password and is ignored by Git, but it remains host-specific. The default
 `KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantially longer analytical queries than
-the original proof of concept. Keep the initial request controls at 60 requests per minute,
+the original deployment. Keep the initial request controls at 60 requests per minute,
 5 exports per minute, and 4 concurrent SQLite queries. They can be tuned in `.env` without
 changing code.
 
@@ -219,9 +219,9 @@ In `FormosanBank/kakarayan` on GitHub:
    rights decisions, counts, and asset sizes.
 7. Publish the draft without changing its assets.
 
-The real workflow already performs a deterministic second build, schema checks,
-SQLite checks, rights enforcement, and query benchmarks. A separate dry run is
-optional, but running both doubles the expensive corpus build.
+The workflow performs schema checks, SQLite checks, rights enforcement, reconciliation,
+and query benchmarks. Leave `verify_determinism` disabled for a routine release. Enable it
+before material publisher or schema changes when a second complete build is worth the time.
 
 Record the release ID shown in `release-manifest.json`. It has a form like
 `fb-YYYYMMDD-abcdef12`. The public manifest URL is:
@@ -366,7 +366,7 @@ The baseline is the $5 monthly Lightsail bundle. An attached static IP has no ad
 charge, and Caddy certificates are free. The plan includes 20 GB SSD and 1 TB monthly
 transfer. Optional Lightsail snapshots are billed separately per stored GB.
 
-The 512 MiB instance is appropriate for this proof of concept because the service
+The 512 MiB instance is appropriate for the current deployment because the service
 has one read-only process, a local indexed database, streamed exports, and no corpus
 build at request time. The API permits 100,000 export rows per selected XML level and uses
 448 MiB of the container budget; Caddy may use the remaining 64 MiB. Watch memory, swap,
