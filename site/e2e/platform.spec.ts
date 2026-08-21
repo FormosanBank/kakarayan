@@ -60,6 +60,17 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   const summary = page.locator(".result-card--summary").first();
   await expect(summary).toBeVisible();
   await expect(summary).toContainText(/lima/iu);
+  const summaryBox = await summary.boundingBox();
+  const sentenceBox = await summary.locator(".kwic").boundingBox();
+  const translationBox = await summary.locator(".translation-text").first().boundingBox();
+  if (!summaryBox || !sentenceBox || !translationBox) {
+    throw new Error("Sentence summary geometry unavailable");
+  }
+  expect(Math.abs(translationBox.x - sentenceBox.x)).toBeLessThanOrEqual(1);
+  expect(translationBox.width).toBeGreaterThan(summaryBox.width * 0.7);
+  expect(await summary.locator(".translation-text").first().evaluate(
+    (element) => getComputedStyle(element).fontSize,
+  )).toBe("14px");
   expect(requests.some((url) => url.includes("/concordance?"))).toBe(true);
   expect(requests.some((url) => url.includes("/data/search/"))).toBe(false);
   expect(requests.some((url) => /\/sentences\/[^/?]+$/u.test(url))).toBe(false);

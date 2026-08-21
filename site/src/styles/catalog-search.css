@@ -671,7 +671,7 @@
 .dictionary-entry__meaning > span,
 .dictionary-entry__details dt,
 .tier-pair dt,
-.translations span {
+.translation-meta {
   color: var(--muted);
   font-size: 12px;
   font-weight: 600;
@@ -759,6 +759,10 @@
   background: var(--surface);
 }
 
+.result-card--summary .translations p {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .search-feedback {
   min-height: 44px;
   padding-top: 14px;
@@ -785,6 +789,9 @@
 
 .translation-text {
   min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 
