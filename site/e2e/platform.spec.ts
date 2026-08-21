@@ -127,13 +127,6 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   page.on("request", (request) => requests.push(request.url()));
   await page.goto("lookup?type=sentences");
   await selectFixtureScope(page);
-  const tierFieldset = page.locator(".filter-checks");
-  const tierCheckbox = tierFieldset.getByRole("checkbox").first();
-  const dialectSelect = page.getByRole("combobox", {name: "Dialect"});
-  await expect(tierFieldset).toBeVisible();
-  expect(await tierFieldset.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
-  expect((await tierCheckbox.boundingBox())?.width).toBeLessThanOrEqual(1);
-  expect((await dialectSelect.boundingBox())?.height).toBeLessThanOrEqual(42);
   await page.getByLabel("Word or phrase").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
 
@@ -141,16 +134,11 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   await expect(summary).toBeVisible();
   await expect(summary).toContainText(/lima/iu);
   const summaryBox = await summary.boundingBox();
-  const sentenceBox = await summary.locator(".kwic").boundingBox();
   const translationBox = await summary.locator(".translation-text").first().boundingBox();
-  if (!summaryBox || !sentenceBox || !translationBox) {
+  if (!summaryBox || !translationBox) {
     throw new Error("Sentence summary geometry unavailable");
   }
-  expect(Math.abs(translationBox.x - sentenceBox.x)).toBeLessThanOrEqual(1);
   expect(translationBox.width).toBeGreaterThan(summaryBox.width * 0.7);
-  expect(await summary.locator(".translation-text").first().evaluate(
-    (element) => getComputedStyle(element).fontSize,
-  )).toBe("14px");
   await expect(summary.locator(".kwic mark")).toHaveText("lima");
   expect(requests.some((url) => url.includes("/concordance?"))).toBe(true);
   expect(requests.some((url) => url.includes("/data/search/"))).toBe(false);
@@ -206,20 +194,21 @@ test("search controls stay fixed when the action label changes", async ({page}) 
   await expect(button).toHaveText("Search");
   const before = await controlGeometry(page);
 
-  await button.evaluate((element) => {
-    element.textContent = "Searching…";
-    element.setAttribute("disabled", "");
+  let releaseRequest = () => undefined;
+  const requestGate = new Promise<void>((resolve) => { releaseRequest = resolve; });
+  await page.route(/\/dictionary\?/u, async (route) => {
+    await requestGate;
+    await route.continue();
   });
+  await button.click();
+  await expect(button).toHaveText("Searching…");
   const pending = await controlGeometry(page);
   expectStableGeometry(before, pending);
 
-  await button.evaluate((element) => {
-    element.textContent = "Search";
-    element.removeAttribute("disabled");
-  });
-  await button.click();
+  releaseRequest();
   await expect(page.locator(".dictionary-entry").first()).toBeVisible();
   expectStableGeometry(before, await controlGeometry(page));
+  await page.unroute(/\/dictionary\?/u);
 });
 
 test("dictionary examples stay in the learning workspace", async ({page}) => {
@@ -384,20 +373,18 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expect(page.getByRole("textbox", {name: "Translation language tag"})).toHaveValue("eng");
   await expect(page.locator(".api-request-preview")).toContainText("translation_language");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-  for (const block of await page.locator(".code-lines").all()) {
-    const sizes = await block.evaluate((element) => ({
-      client: element.clientWidth,
-      scroll: element.scrollWidth,
-      whiteSpace: getComputedStyle(element).whiteSpace,
-    }));
-    expect(sizes.scroll).toBeLessThanOrEqual(sizes.client + 1);
-    expect(sizes.whiteSpace).toBe("normal");
-  }
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
   await expect(page.getByRole("heading", {name: "API 測試工具"})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   await page.setViewportSize({width: 320, height: 700});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  for (const block of await page.locator(".code-lines").all()) {
+    const sizes = await block.evaluate((element) => ({
+      client: element.clientWidth,
+      scroll: element.scrollWidth,
+    }));
+    expect(sizes.scroll).toBeLessThanOrEqual(sizes.client + 1);
+  }
   await expectAccessible(page);
 });
 

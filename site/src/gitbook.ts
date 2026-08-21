@@ -1,7 +1,6 @@
 import type {Locale} from "./i18n";
 
 export const GITBOOK_BASE_URL = "https://ai4commsci.gitbook.io/formosanbank";
-export const GITBOOK_SOURCE_URL = "https://github.com/FormosanBank/FormosanBankGitbook";
 
 export interface GitBookPage {
   en: string;
@@ -99,8 +98,4 @@ export function gitBookPagePath(page: GitBookPage, locale: Locale): string {
 export function gitBookPageUrl(page: GitBookPage, locale: Locale): string {
   const path = gitBookPagePath(page, locale);
   return path ? `${GITBOOK_BASE_URL}/${path}` : GITBOOK_BASE_URL;
-}
-
-export function hasGitBookTranslation(page: GitBookPage, locale: Locale): boolean {
-  return locale !== "zh-Hant" || Boolean(page.zh);
 }

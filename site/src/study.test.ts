@@ -1,11 +1,4 @@
-import {
-  cardFromDictionary,
-  cardsAsAnkiTsv,
-  cardsAsCsv,
-  manualStudyCard,
-  scheduleCard,
-  type StudyCard,
-} from "./study";
+import {cardsAsAnkiTsv, cardsAsCsv, manualStudyCard, scheduleCard, type StudyCard} from "./study";
 
 const card: StudyCard = {
   id: "card-1",
@@ -66,37 +59,6 @@ describe("local study scheduling", () => {
   it("protects tabular exports from formulas", () => {
     expect(cardsAsAnkiTsv([{...card, front: "=1+1"}])).toContain("'=1+1");
     expect(cardsAsCsv([{...card, front: "=1+1"}])).toContain("'=1+1");
-  });
-
-  it("builds dictionary cards from a cited corpus record", () => {
-    const dictionary = cardFromDictionary(
-      {
-        id: "sentence_amis_waco",
-        text_id: "text_amis",
-        corpus_id: "corpus_test",
-        language_id: "lang_amis",
-        dialect: "Xiuguluan",
-        source_path: "Corpora/Test/XML/test.xml",
-        xml_id: "S1",
-        standard: "waco",
-        original: "waco",
-        translations: [{text: "dog", xml_lang: "eng", kind: "", version: ""}],
-        tokens: [],
-        forms: [],
-        phonology: [],
-        tier_translations: [],
-        words: [],
-        audio: [],
-      },
-      "fb-20260101-abcdef12",
-      "waco",
-      ["dog", "dog"],
-      "eng",
-    );
-    expect(dictionary.front).toBe("waco");
-    expect(dictionary.back).toBe("dog");
-    expect(dictionary.deck).toBe("Saved words");
-    expect(dictionary.source?.recordId).toBe("sentence_amis_waco");
   });
 
   it("builds a labelled manual card without corpus provenance", () => {

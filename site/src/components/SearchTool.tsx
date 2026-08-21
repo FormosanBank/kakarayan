@@ -94,15 +94,16 @@ export function SearchTool({
       (values) => {
         setTargets(values);
         const available = new Set(values.map((item) => item.xml_lang));
-        if (!available.has(targetLanguage)) {
+        setTargetLanguage((current) => {
+          if (available.has(current)) return current;
           const preferred = locale === "zh-Hant" ? "zho" : "eng";
-          setTargetLanguage(available.has(preferred) ? preferred : values[0]?.xml_lang ?? "");
-        }
+          return available.has(preferred) ? preferred : values[0]?.xml_lang ?? "";
+        });
       },
       () => setTargets([]),
     );
     return () => next.abort();
-  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale, targetLanguage]);
+  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale]);
 
   useEffect(() => () => controller.current?.abort(), []);
 

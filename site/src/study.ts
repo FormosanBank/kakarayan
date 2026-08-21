@@ -170,25 +170,6 @@ export function cardFromRecord(
   };
 }
 
-export function cardFromDictionary(
-  record: SearchRecord,
-  releaseId: string,
-  front: string,
-  meanings: string[],
-  targetLanguage: string,
-): StudyCard {
-  const card = cardFromRecord(record, releaseId, targetLanguage);
-  const back = [...new Set(meanings.map((value) => value.trim()).filter(Boolean))].join(" · ");
-  if (!front.trim() || !back) throw new Error("A dictionary card needs a headword and meaning");
-  return {
-    ...card,
-    deck: "Saved words",
-    front: front.trim(),
-    back,
-    tags: [...new Set([...card.tags, "dictionary", targetLanguage].filter(Boolean))].sort(),
-  };
-}
-
 export function cardFromDictionaryEntry(
   entry: DictionaryEntry,
   releaseId: string,

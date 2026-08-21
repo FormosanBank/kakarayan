@@ -348,10 +348,6 @@
     gap: 4px;
   }
 
-  .builder__steps {
-    flex-wrap: wrap;
-  }
-
   .builder__grid {
     grid-template-columns: 1fr;
   }
@@ -364,10 +360,8 @@
   }
 
   .builder__scope-options,
-  .builder__filters,
   .builder__schema dl,
   .dataset-fields,
-  .field-check-grid,
   .builder__level-options {
     grid-template-columns: 1fr;
   }
@@ -380,10 +374,6 @@
   .builder__field-heading {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .builder__estimate {
-    position: static;
   }
 
   .summary-stats,
@@ -498,10 +488,6 @@
   .lookup-direction__options label + label {
     border-top: 1px solid var(--line-strong);
     border-left: 0;
-  }
-
-  .builder__requirements {
-    grid-template-columns: 1fr;
   }
 
   .api-explorer__fields {
