@@ -2,6 +2,7 @@ import {useEffect} from "react";
 
 import {Layout} from "./components/Layout";
 import {Diagnostics} from "./components/Diagnostics";
+import {LoadingState} from "./components/LoadingState";
 import {useAppData} from "./data";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
@@ -20,9 +21,8 @@ import {Link, RoutingProvider, useRoutePath} from "./routing";
 function Loading() {
   const {t} = useI18n();
   return (
-    <main className="boot-state" aria-live="polite">
-      <div className="boot-mark">K</div>
-      <p>{t("common.loading")}</p>
+    <main className="boot-state">
+      <LoadingState kind="page" label={t("common.loading")} />
     </main>
   );
 }

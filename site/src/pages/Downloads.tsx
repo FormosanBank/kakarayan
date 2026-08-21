@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useState} from "react";
 
 import {PageIntro} from "../components/Layout";
+import {LoadingState} from "../components/LoadingState";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData} from "../types";
@@ -164,7 +165,7 @@ export function Downloads({data}: {data: AppData}) {
           <code>{data.meta.source.commit.slice(0, 12)}</code>
         </div>
         <div className="download-results" aria-live="polite">
-          <span><strong>{number(artifacts.length)}</strong> {tx("packages", "個套件")}</span>
+          <span><strong>{manifest ? number(artifacts.length) : "…"}</strong> {tx("packages", "個套件")}</span>
           <Link className="button button--quiet" to="/research">
             {tx("Build a custom dataset", "建立自訂資料集")}
           </Link>
@@ -176,7 +177,13 @@ export function Downloads({data}: {data: AppData}) {
           {tx("Canonical XML remains available from the public FormosanBank repository.", "權威 XML 仍可從公開 FormosanBank 儲存庫取得。")}
         </p>
       )}
-      <div className="artifact-list">
+      {!manifest && !error && (
+        <LoadingState
+          kind="results"
+          label={tx("Loading downloads", "正在載入下載項目")}
+        />
+      )}
+      {manifest && <div className="artifact-list">
         {artifacts.map((artifact) => {
           const rightsEntries = artifact.rights_ids.flatMap((id) => {
             const entry = rightsById.get(id);
@@ -263,7 +270,7 @@ export function Downloads({data}: {data: AppData}) {
             </article>
           );
         })}
-      </div>
+      </div>}
       {!error && manifest && artifacts.length === 0 && (
         <div className="empty-state">
           {tx(

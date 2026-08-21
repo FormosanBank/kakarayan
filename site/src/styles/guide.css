@@ -43,15 +43,14 @@
   background: var(--canvas);
 }
 
-.guide-frame__status {
+.guide-frame__loading {
   position: absolute;
   inset: 0;
   z-index: 1;
-  display: grid;
-  color: var(--body);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
   background: var(--canvas);
-  font-size: 13px;
-  place-items: center;
 }
 
 .guide-frame-fallback {
