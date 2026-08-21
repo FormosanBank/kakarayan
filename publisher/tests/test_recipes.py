@@ -71,13 +71,30 @@ def test_recipe_resolves_and_exports(public_repo: Path, tmp_path: Path) -> None:
     assert output.read_bytes() == second.read_bytes()
 
     loaded["format"] = "jsonl"
-    loaded["fields"] = ["id", "standard", "translations", "glosses"]
+    loaded["fields"] = [
+        "id",
+        "standard",
+        "translations",
+        "word_translations",
+        "morpheme_translations",
+    ]
     jsonl = tmp_path / "selection.jsonl"
     write_recipe_export(records, loaded, jsonl)
     row = json.loads(jsonl.read_text())
-    assert list(row) == ["glosses", "id", "standard", "translations"]
+    assert list(row) == [
+        "id",
+        "morpheme_translations",
+        "standard",
+        "translations",
+        "word_translations",
+    ]
     assert row["translations"] == "eng:A fictional translated line."
-    assert row["glosses"] == "FIVE"
+    assert [(value["form"], value["text"]) for value in json.loads(row["word_translations"])] == [
+        ("lima", "five.word")
+    ]
+    assert [
+        (value["form"], value["text"]) for value in json.loads(row["morpheme_translations"])
+    ] == [("lima", "FIVE")]
 
 
 def test_recipe_runs_against_release_only_hierarchical_packages(

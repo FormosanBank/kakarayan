@@ -17,6 +17,7 @@
     <AUDIO file="sentence.wav" start="1.25" end="3.75"/>
     <W id="w-one" class="noun">
       <FORM kindOf="standard">lima</FORM>
+      <TRANSL xml:lang="eng" kindOf="gloss">five.word</TRANSL>
       <M id="m-one" class="root">
         <TRANSL xml:lang="eng" kindOf="gloss">FIVE</TRANSL>
         <FORM kindOf="standard">lima</FORM>

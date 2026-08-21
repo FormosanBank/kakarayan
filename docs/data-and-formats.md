@@ -68,7 +68,9 @@ process to materialize a full corpus selection.
 | `text_id` | Containing text identifier |
 | `standard` | FormosanBank standardized sentence form |
 | `original` | Source orthography without replacement |
-| `translations` | All sentence translations with XML language tags |
+| `translations` | Sentence-owned translations with XML language tags |
+| `word_translations` | Word-owned translations as JSON with stable word IDs, positions, forms, and language tags |
+| `morpheme_translations` | Morpheme-owned translations as JSON with stable word and morpheme IDs, positions, forms, and language tags |
 | `language_id` | FormosanBank display-language identifier |
 | `corpus_id` | Source corpus identifier |
 | `dialect` | Source dialect label |
@@ -76,7 +78,10 @@ process to materialize a full corpus selection.
 | `tokens` | Ordered surface token sequence |
 | `audio` | Audio file and URL references |
 | `phonology` | Available phonological tiers |
-| `glosses` | Word and morpheme translation tiers |
+
+The legacy `glosses` field is accepted when replaying an older v1 recipe, but it flattens
+word and morpheme values and is not offered for new selections. Use the two owner-aligned
+translation fields instead.
 
 The same serializer supplies preview rows, API exports, and recipe execution. CSV and TSV
 exports escape cells that spreadsheet software could interpret as formulas.

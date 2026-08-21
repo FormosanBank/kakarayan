@@ -339,7 +339,7 @@
 .lookup-direction__options {
   display: inline-grid;
   grid-template-columns: repeat(2, minmax(150px, 1fr));
-  width: fit-content;
+  width: min(100%, 560px);
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
@@ -730,7 +730,23 @@
 }
 
 .translations p.translation-match {
-  border-left: 2px solid var(--ink);
+  padding-inline: 12px;
+  background: var(--surface);
+}
+
+.search-feedback {
+  min-height: 44px;
+  padding-top: 14px;
+}
+
+.search-feedback .callout,
+.search-feedback .result-count {
+  margin: 0;
+}
+
+.result-count {
+  color: var(--body);
+  font-size: 13px;
 }
 
 .translation-meta small {

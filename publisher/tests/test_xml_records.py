@@ -15,7 +15,7 @@ def test_projection_preserves_tiers_and_canonical_counting(public_repo: Path) ->
         "morphemes": 1,
         "forms": 6,
         "phonology": 1,
-        "translations": 3,
+        "translations": 4,
         "audio": 2,
         "tokens": 4,
     }
@@ -36,6 +36,12 @@ def test_projection_preserves_tiers_and_canonical_counting(public_repo: Path) ->
         "toki",
         "rima",
     ]
+    assert {(row["owner_type"], row["text"]) for row in projection.rows["translations"]} == {
+        ("sentence", "A fictional translated line."),
+        ("sentence", "虛構測試句"),
+        ("word", "five.word"),
+        ("morpheme", "FIVE"),
+    }
 
 
 def test_truku_resolution_matches_canonical_rule(public_repo: Path) -> None:

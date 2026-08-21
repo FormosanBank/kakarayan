@@ -9,9 +9,9 @@ const navigation = [
   ["/lookup", "nav.lookup"],
   ["/learn", "nav.learn"],
   ["/research", "nav.research"],
-  ["/docs", "nav.guide"],
   ["/downloads", "nav.download"],
   ["/developers", "nav.developers"],
+  ["/docs", "nav.guide"],
 ] as const;
 
 const resourceNavigation = [
@@ -36,7 +36,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
           </NavLink>
           <nav className="primary-nav" aria-label={tx("Primary", "主要導覽")}>
             {navigation.map(([to, key]) => (
-              <NavLink key={to} to={to}>{t(key)}</NavLink>
+              <NavLink key={to} to={to} data-label={t(key)}>{t(key)}</NavLink>
             ))}
           </nav>
           <div className="topbar-tools">

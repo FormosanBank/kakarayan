@@ -157,6 +157,73 @@
   background: var(--surface);
 }
 
+.model-progress {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  margin-top: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+}
+
+.model-progress__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: model-progress-spin 0.8s linear infinite;
+}
+
+.model-progress strong,
+.model-progress small {
+  display: block;
+}
+
+.model-progress strong {
+  font-size: 14px;
+}
+
+.model-progress small {
+  margin-top: 2px;
+  color: var(--muted);
+  font: 400 11px/1.4 var(--font-mono);
+}
+
+.model-progress ol {
+  display: flex;
+  gap: 14px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.model-progress li {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.model-progress li[data-state="current"] {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.model-progress li[data-state="complete"]::before {
+  content: "✓ ";
+}
+
+@keyframes model-progress-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-progress__spinner {
+    animation: none;
+  }
+}
+
 .model-disclosure--summary {
   display: grid;
   gap: 5px;

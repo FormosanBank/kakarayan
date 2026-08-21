@@ -21,6 +21,14 @@ test("the release-pinned shell, routes, and locale switch work", async ({page}) 
   await page.goto("");
   await expect(page.getByRole("heading", {level: 1})).toContainText("FormosanBank");
   await expect(page.locator(".release-pill")).toHaveText(/^fb-\d{8}-[0-9a-f]{7,12}$/u);
+  expect(await page.locator(".primary-nav a").allTextContents()).toEqual([
+    "Lookup",
+    "Learn",
+    "Research",
+    "Download",
+    "Developers",
+    "Docs",
+  ]);
   await expectAccessible(page);
 
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
@@ -61,7 +69,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 
   await page.goto("#/lookup?type=dictionary");
   await selectFixtureScope(page);
-  await page.getByRole("radio", {name: "Translation"}).check();
+  await page.getByRole("radio", {name: "Search in English"}).check();
   await page.getByLabel("Word or meaning").fill("five");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
@@ -127,10 +135,14 @@ test("research preview, finite recipe, export, and summaries share the API", asy
 
 test("developer routes expose the query contract and static metadata", async ({page}) => {
   await page.goto("#/developers");
-  await expect(page.getByRole("heading", {name: "Query API v1"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Live API v1"})).toBeVisible();
   await expect(page.locator(".api-choice__primary")).toContainText("available");
+  await expect(page.getByRole("link", {name: "Open API reference"})).toHaveAttribute("href", /\/docs$/u);
   await page.getByRole("button", {name: "Run request"}).click();
-  await expect(page.locator(".api-explorer__response")).toContainText('"api_version": "v1"');
+  await expect(page.locator(".api-explorer__response")).toContainText('"headword": "lima"');
+  await page.getByRole("combobox", {name: "Request"}).selectOption("concordance");
+  await page.getByRole("button", {name: "Run request"}).click();
+  await expect(page.locator(".api-explorer__response")).toContainText('"standard":');
   await expect(page.locator(".code-samples")).toContainText("/concordance?");
   await expectAccessible(page);
 });

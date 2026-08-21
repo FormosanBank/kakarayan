@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import io
 import json
@@ -126,10 +127,33 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
                 "part-0000.jsonl",
                 "rights.json",
             ]
+            dictionary = json.loads(archive.read("data-dictionary.json"))
+            assert "both owner_type and owner_id" in dictionary["tier_ownership"]["joins"]
+            sentence = json.loads(archive.read("part-0000.jsonl").splitlines()[0])
+            assert [item["text"] for item in sentence["tiers"]["translations"]] == [
+                "A fictional translated line."
+            ]
+            assert [item["text"] for item in sentence["words"][0]["tiers"]["translations"]] == [
+                "five.word"
+            ]
+            assert [
+                item["text"]
+                for item in sentence["words"][0]["morphemes"][0]["tiers"]["translations"]
+            ] == ["FIVE"]
+    with zipfile.ZipFile(first.output / "prepared" / "csv-tables.zip") as archive:
+        translations = list(
+            csv.DictReader(io.StringIO(archive.read("translations.csv").decode("utf-8-sig")))
+        )
+        assert {(row["owner_type"], row["text"]) for row in translations} == {
+            ("sentence", "A fictional translated line."),
+            ("sentence", "虛構測試句"),
+            ("word", "five.word"),
+            ("morpheme", "FIVE"),
+        }
 
     with closing(sqlite3.connect(first.output / "formosanbank.sqlite")) as database:
         assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)
-        assert database.execute("SELECT COUNT(*) FROM translations").fetchone() == (3,)
+        assert database.execute("SELECT COUNT(*) FROM translations").fetchone() == (4,)
         embedded_meta = json.loads(
             database.execute(
                 "SELECT value_json FROM publication_metadata WHERE key = 'meta'"

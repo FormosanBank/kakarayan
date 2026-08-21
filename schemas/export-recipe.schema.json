@@ -88,11 +88,13 @@
           "tokens",
           "audio",
           "phonology",
-          "glosses"
+          "glosses",
+          "word_translations",
+          "morpheme_translations"
         ]
       },
       "minItems": 1,
-      "maxItems": 13,
+      "maxItems": 15,
       "uniqueItems": true
     },
     "format": {

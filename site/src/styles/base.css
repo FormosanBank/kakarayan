@@ -52,6 +52,7 @@ html {
   min-width: 320px;
   background: var(--canvas);
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
 }
 
 body {

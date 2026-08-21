@@ -200,7 +200,9 @@ def build_prepared_formats(
         f"Release: {release_id}\n"
         f"Source commit: {source_commit}\n\n"
         "Canonical XML is authoritative. Prepared data preserves repeated tiers and stable "
-        "source locators. CSV and TSV use \\N for null. XLSX guards formula-like strings. "
+        "source locators. Translation tiers retain owner_type and owner_id: sentence, word, "
+        "and morpheme translations must be joined only to the matching owner. CSV and TSV "
+        "use \\N for null. XLSX guards formula-like strings. "
         "Parquet uses Zstandard compression and 50,000-row groups. CLDF is a conservative "
         "Generic ExampleTable projection. Time-aligned files contain references, not audio. "
         "Consult rights.json and each corpus notice before reuse.\n",
