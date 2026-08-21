@@ -65,6 +65,7 @@ Each document uses the envelope in `schemas/static-api.schema.json`. Consumers r
 | `GET /v1/releases/{release}/summaries` | Corpus summary and distributions |
 | `GET /v1/releases/{release}/datasets/preview` | At most 25 projected rows |
 | `GET /v1/releases/{release}/datasets/export` | Finite CSV, TSV, or JSON Lines export |
+| `GET /v1/releases/{release}/datasets/export-package` | S/W/M tables in one ZIP |
 
 ## Search
 
@@ -105,29 +106,39 @@ records.
 ## Dataset preview and export
 
 Dataset routes accept the same scope, direction, match, translation-language, and tier
-requirements as search. Repeated `field` parameters select from:
+requirements as search. Set `record_level=sentence|word|morpheme`. Repeated `field`
+parameters select columns valid for that level. Shared columns include:
 
 ```text
-id text_id standard original translations language_id corpus_id dialect
-source_path tokens audio phonology word_translations morpheme_translations
+id xml_id parent_id text_id sentence_id word_id position form standard original
+alternate_forms translations phonology audio unclear language_id corpus_id dialect source_path
 ```
 
-`translations` contains sentence-owned translations only. `word_translations` and
-`morpheme_translations` contain compact JSON arrays with stable owner IDs, positions,
-forms, language tags, and translations. This ownership must be preserved when flattening
-or joining exported data. The legacy `glosses` field remains accepted for existing v1
-recipes but is not offered by the interface because it does not retain owner alignment.
+Sentence rows also support `tokens`, `token_count`, and `source`. W and M rows support
+`class` and `sclass`. Invalid level and field combinations return 422. Tier values belong
+only to the selected owner. Parent identifiers support lossless joins across S, W, and M.
 
-Preview returns at most 25 rows and reports `estimated_rows`, `returned_rows`, and
-`truncated`. Export requires `max_rows` from 1 through 1,000, accepts `format=csv|tsv|jsonl`,
-and rejects responses above 5 MiB. CSV and TSV cells beginning with spreadsheet formula
-characters are escaped.
+Set `complete_fields=true` to exclude rows missing any selected optional tier or attribute.
+The Research builder always uses this mode. The default remains `false` for compatibility
+with earlier sentence API clients.
+
+Preview returns at most 25 rows and reports `record_level`, `estimated_rows`,
+`returned_rows`, and `truncated`. Export requires `max_rows` from 1 through 1,000, accepts
+`format=csv|tsv|jsonl`, and rejects responses above 5 MiB. CSV and TSV cells beginning with
+spreadsheet formula characters are escaped.
+
+For `export-package`, repeat `record_level` and pass level-specific fields as
+`sentence_field`, `word_field`, and `morpheme_field`. The response contains one table per
+selected level plus `manifest.json`.
 
 Full-corpus work belongs to prepared downloads. There is no unbounded custom export or
 background job in v1.
 
+Legacy `glosses`, `word_translations`, and `morpheme_translations` remain accepted on
+sentence exports for existing recipes. New selections use W and M rows directly.
+
 The UI recipe format is defined by `schemas/export-recipe.schema.json`. Publisher execution
-and the HTTP export share the same fields and selection semantics.
+and the HTTP export share the same level, column, completeness, and matching semantics.
 
 ## Errors
 
