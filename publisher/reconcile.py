@@ -18,7 +18,6 @@ from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Any
 
-import pyarrow as pa
 import pyarrow.parquet as pq
 from openpyxl import load_workbook
 
@@ -204,13 +203,19 @@ def _parquet_archive(
     counts: dict[str, int] = {}
     found: dict[str, dict[str, Any]] = {}
     duration = 0.0
-    with zipfile.ZipFile(path) as archive:
+    with (
+        zipfile.ZipFile(path) as archive,
+        tempfile.TemporaryDirectory(prefix="kakarayan-parquet-") as temporary,
+    ):
+        member_path = Path(temporary) / "member.parquet"
+        names = set(archive.namelist())
         for table, columns in TABLE_COLUMNS.items():
             name = f"{table}.parquet"
-            if name not in archive.namelist():
+            if name not in names:
                 raise ReconciliationError(f"{path.name} has no {name}")
-            data = archive.read(name)
-            parquet = pq.ParquetFile(pa.BufferReader(data))
+            with archive.open(name) as source, member_path.open("wb") as target:
+                shutil.copyfileobj(source, target, length=1024 * 1024)
+            parquet = pq.ParquetFile(member_path)
             counts[table] = parquet.metadata.num_rows
             _require_equal(
                 f"{path.name}:{name} fields",
@@ -220,14 +225,20 @@ def _parquet_archive(
             sample_id = samples.get(table, {}).get("id")
             if sample_id is not None:
                 rows = pq.read_table(
-                    pa.BufferReader(data),
+                    member_path,
                     filters=[("id", "=", sample_id)],
                 ).to_pylist()
                 if rows:
                     found[table] = _coerce_row(table, rows[0])
             if table == "audio":
-                values = pq.read_table(pa.BufferReader(data), columns=["duration"])["duration"]
-                duration = math.fsum(float(value.as_py()) for value in values if value.is_valid)
+                durations = (
+                    float(value.as_py())
+                    for batch in parquet.iter_batches(columns=["duration"], batch_size=50_000)
+                    for value in batch["duration"]
+                    if value.is_valid
+                )
+                duration = math.fsum(durations)
+            member_path.unlink()
     return counts, found, duration
 
 

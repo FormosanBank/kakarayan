@@ -8,6 +8,7 @@ import re
 import sqlite3
 import tempfile
 import zipfile
+from collections import defaultdict
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from itertools import chain
@@ -25,6 +26,7 @@ from publisher.release_db import open_release
 from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS
 
 _BATCH_SIZE = 50_000
+_HIERARCHY_BATCH_SIZE = 500
 _XLSX_ROWS_PER_SHEET = 1_000_000
 
 
@@ -120,21 +122,55 @@ def write_parquet(database: Path, output: Path, release_id: str) -> dict[str, ob
     return schemas
 
 
-def _tiers(
+_TIER_TABLES = ("forms", "phonology", "translations", "audio")
+
+
+def _batch_rows(
     connection: sqlite3.Connection,
+    table: str,
+    foreign_key: str,
+    parent_ids: list[str],
+    order: str,
+) -> list[dict[str, Any]]:
+    placeholders = ", ".join("?" for _ in parent_ids)
+    return [
+        dict(row)
+        for row in connection.execute(
+            f"SELECT * FROM {table} WHERE {foreign_key} IN ({placeholders}) ORDER BY {order}",
+            parent_ids,
+        )
+    ]
+
+
+def _batch_tiers(
+    connection: sqlite3.Connection,
+    sentence_ids: list[str],
+) -> dict[str, dict[tuple[str, str], list[dict[str, Any]]]]:
+    placeholders = ", ".join("?" for _ in sentence_ids)
+    result: dict[str, dict[tuple[str, str], list[dict[str, Any]]]] = {}
+    for table in _TIER_TABLES:
+        owners: defaultdict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+        rows = connection.execute(
+            f"SELECT tier.* FROM {table} tier "
+            "JOIN tier_scope scope ON scope.owner_type = tier.owner_type "
+            "AND scope.owner_id = tier.owner_id "
+            f"WHERE scope.sentence_id IN ({placeholders}) "
+            "ORDER BY scope.sentence_id, tier.owner_type, tier.owner_id, tier.position, tier.id",
+            sentence_ids,
+        )
+        for row in rows:
+            item = dict(row)
+            owners[(str(item["owner_type"]), str(item["owner_id"]))].append(item)
+        result[table] = dict(owners)
+    return result
+
+
+def _owner_tiers(
+    tiers: dict[str, dict[tuple[str, str], list[dict[str, Any]]]],
     owner_type: str,
     owner_id: str,
 ) -> dict[str, list[dict[str, Any]]]:
-    return {
-        table: [
-            dict(row)
-            for row in connection.execute(
-                f"SELECT * FROM {table} WHERE owner_type = ? AND owner_id = ? ORDER BY position",
-                (owner_type, owner_id),
-            )
-        ]
-        for table in ("forms", "phonology", "translations", "audio")
-    }
+    return {table: tiers[table].get((owner_type, owner_id), []) for table in _TIER_TABLES}
 
 
 def _sentence_records(
@@ -148,38 +184,54 @@ def _sentence_records(
         else "source_path, source_ordinal, sentence_id"
     )
     cursor = connection.execute(f"SELECT * FROM sentence_view ORDER BY {order}")
-    for sentence_row in cursor:
-        sentence = dict(sentence_row)
-        sentence_id = sentence["sentence_id"]
-        sentence["tiers"] = _tiers(connection, "sentence", sentence_id)
-        sentence["tokens"] = [
-            dict(row)
-            for row in connection.execute(
-                "SELECT * FROM tokens WHERE sentence_id = ? ORDER BY position",
-                (sentence_id,),
-            )
-        ]
-        words = [
-            dict(row)
-            for row in connection.execute(
-                "SELECT * FROM words WHERE parent_id = ? ORDER BY position",
-                (sentence_id,),
-            )
-        ]
+    while sentence_rows := cursor.fetchmany(_HIERARCHY_BATCH_SIZE):
+        sentences = [dict(row) for row in sentence_rows]
+        sentence_ids = [str(sentence["sentence_id"]) for sentence in sentences]
+        tiers = _batch_tiers(connection, sentence_ids)
+
+        tokens_by_sentence: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        for token in _batch_rows(
+            connection,
+            "tokens",
+            "sentence_id",
+            sentence_ids,
+            "sentence_id, position, id",
+        ):
+            tokens_by_sentence[str(token["sentence_id"])].append(token)
+
+        words_by_sentence: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        words = _batch_rows(
+            connection,
+            "words",
+            "parent_id",
+            sentence_ids,
+            "parent_id, position, id",
+        )
+        morphemes_by_word: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        placeholders = ", ".join("?" for _ in sentence_ids)
+        morpheme_rows = connection.execute(
+            "SELECT m.* FROM morphemes m JOIN words w ON w.id = m.parent_id "
+            f"WHERE w.parent_id IN ({placeholders}) "
+            "ORDER BY w.parent_id, w.position, m.position, m.id",
+            sentence_ids,
+        )
+        for morpheme_row in morpheme_rows:
+            morpheme = dict(morpheme_row)
+            morpheme_id = str(morpheme["id"])
+            morpheme["tiers"] = _owner_tiers(tiers, "morpheme", morpheme_id)
+            morphemes_by_word[str(morpheme["parent_id"])].append(morpheme)
         for word in words:
-            word["tiers"] = _tiers(connection, "word", word["id"])
-            morphemes = [
-                dict(row)
-                for row in connection.execute(
-                    "SELECT * FROM morphemes WHERE parent_id = ? ORDER BY position",
-                    (word["id"],),
-                )
-            ]
-            for morpheme in morphemes:
-                morpheme["tiers"] = _tiers(connection, "morpheme", morpheme["id"])
-            word["morphemes"] = morphemes
-        sentence["words"] = words
-        yield sentence
+            word_id = str(word["id"])
+            word["tiers"] = _owner_tiers(tiers, "word", word_id)
+            word["morphemes"] = morphemes_by_word[word_id]
+            words_by_sentence[str(word["parent_id"])].append(word)
+
+        for sentence in sentences:
+            sentence_id = str(sentence["sentence_id"])
+            sentence["tiers"] = _owner_tiers(tiers, "sentence", sentence_id)
+            sentence["tokens"] = tokens_by_sentence[sentence_id]
+            sentence["words"] = words_by_sentence[sentence_id]
+            yield sentence
 
 
 def write_hierarchical_jsonl(
