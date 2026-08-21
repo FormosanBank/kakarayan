@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 
 from api.app import create_app
 from api.config import Settings
-from api.dataset_fields import project_record
 from api.exports import spreadsheet_safe
 from api.limits import (
     DATASET_EXPORT_MAX_ROWS,
@@ -247,8 +246,6 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         ("field", "id"),
         ("field", "standard"),
         ("field", "translations"),
-        ("field", "word_translations"),
-        ("field", "morpheme_translations"),
         ("max_rows", "1"),
     ]
     preview = client.get(release_path(client, "datasets/preview"), params=params)
@@ -257,39 +254,15 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert preview.json()["returned_rows"] == 1
     assert preview.json()["truncated"] is True
     item = preview.json()["items"][0]
-    assert list(item) == [
-        "id",
-        "standard",
-        "translations",
-        "word_translations",
-        "morpheme_translations",
-    ]
+    assert list(item) == ["id", "standard", "translations"]
     assert "FIVE" not in item["translations"]
-    word_translation = json.loads(item["word_translations"])
-    morpheme_translation = json.loads(item["morpheme_translations"])
-    assert [(value["form"], value["text"]) for value in word_translation] == [("lima", "five.word")]
-    assert [(value["form"], value["text"]) for value in morpheme_translation] == [("lima", "FIVE")]
-    assert word_translation[0]["word_id"] != morpheme_translation[0]["morpheme_id"]
-    detail = client.get(release_path(client, f"sentences/{item['id']}")).json()
-    assert item == project_record(
-        detail,
-        [
-            "id",
-            "standard",
-            "translations",
-            "word_translations",
-            "morpheme_translations",
-        ],
-    )
 
     exported = client.get(
         release_path(client, "datasets/export"), params=[*params, ("format", "tsv")]
     )
     assert exported.status_code == 200
     assert exported.headers["x-kakarayan-row-count"] == "1"
-    assert exported.text.startswith(
-        "id\tstandard\ttranslations\tword_translations\tmorpheme_translations\n"
-    )
+    assert exported.text.startswith("id\tstandard\ttranslations\n")
 
     larger_export = client.get(
         release_path(client, "datasets/export"),
@@ -426,6 +399,33 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     assert morpheme_item["form"] == "lima"
     assert morpheme_item["translations"] == "eng:FIVE"
     assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
+
+
+def test_unclear_requirement_includes_translation_and_phonology_tiers(
+    settings: Settings,
+) -> None:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute("UPDATE forms SET unclear = 0")
+        connection.execute("UPDATE phonology SET unclear = 0")
+        connection.execute("UPDATE translations SET unclear = 0")
+        connection.execute(
+            "UPDATE translations SET unclear = 1 WHERE owner_type = 'sentence' AND xml_lang = 'zho'"
+        )
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get(
+            release_path(client, "datasets/preview"),
+            params=[
+                ("language_id", "lang_amis"),
+                ("requirement", "unclear"),
+                ("field", "id"),
+                ("field", "form"),
+            ],
+        )
+
+    assert response.status_code == 200
+    assert response.json()["estimated_rows"] == 1
+    assert response.json()["items"][0]["form"] == "toki rima"
 
 
 def test_dataset_multi_level_package_has_one_table_per_xml_level(client: TestClient) -> None:

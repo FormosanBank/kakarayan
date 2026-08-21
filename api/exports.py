@@ -21,6 +21,8 @@ def spreadsheet_safe(value: object) -> object:
 def dataset_chunks(
     result: DatasetStream,
     export_format: Literal["csv", "tsv", "jsonl"],
+    *,
+    spreadsheet_safe_cells: bool = True,
 ) -> Iterator[bytes]:
     fields = list(result.fields)
     output = io.StringIO(newline="")
@@ -36,7 +38,12 @@ def dataset_chunks(
     for row in result.rows:
         output.seek(0)
         output.truncate()
-        writer.writerow({field: spreadsheet_safe(row[field]) for field in fields})
+        writer.writerow(
+            {
+                field: spreadsheet_safe(row[field]) if spreadsheet_safe_cells else row[field]
+                for field in fields
+            }
+        )
         yield output.getvalue().encode()
 
 
@@ -83,6 +90,8 @@ class _ZipSink(io.RawIOBase):
 def zip_chunks(
     members: Iterable[tuple[str, Iterator[bytes]]],
     manifest: bytes,
+    *,
+    manifest_name: str = "manifest.json",
 ) -> Iterator[bytes]:
     sink = _ZipSink()
     with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
@@ -92,7 +101,7 @@ def zip_chunks(
                     member.write(chunk)
                     yield from sink.drain()
             yield from sink.drain()
-        with archive.open(_zip_info("manifest.json"), "w", force_zip64=True) as member:
+        with archive.open(_zip_info(manifest_name), "w", force_zip64=True) as member:
             member.write(manifest)
             yield from sink.drain()
     yield from sink.drain()

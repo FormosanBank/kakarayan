@@ -817,9 +817,15 @@ class CorpusStore:
             clauses.append("EXISTS (SELECT 1 FROM words w WHERE w.parent_id = s.id)")
         if "unclear" in requirements:
             clauses.append(
-                "EXISTS (SELECT 1 FROM forms f JOIN tier_scope_view ts "
+                "(EXISTS (SELECT 1 FROM forms f JOIN tier_scope_view ts "
                 "ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id "
-                "WHERE ts.sentence_id = s.id AND f.unclear > 0)"
+                "WHERE ts.sentence_id = s.id AND f.unclear > 0) "
+                "OR EXISTS (SELECT 1 FROM phonology p JOIN tier_scope_view ts "
+                "ON ts.owner_type = p.owner_type AND ts.owner_id = p.owner_id "
+                "WHERE ts.sentence_id = s.id AND p.unclear > 0) "
+                "OR EXISTS (SELECT 1 FROM translations tr JOIN tier_scope_view ts "
+                "ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id "
+                "WHERE ts.sentence_id = s.id AND tr.unclear > 0))"
             )
 
     def concordance(
@@ -1163,7 +1169,7 @@ class CorpusStore:
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
     ) -> DatasetQuery:
-        supported = allowed_dataset_fields(record_level, include_legacy=True)
+        supported = allowed_dataset_fields(record_level)
         if not fields or any(field not in supported for field in fields):
             raise ApiError(
                 422,

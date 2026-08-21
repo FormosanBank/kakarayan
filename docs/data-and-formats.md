@@ -30,9 +30,9 @@ set includes normalized tabular packages, the SQLite read model, and specialist 
 produced by `publisher/prepared.py`. Canonical XML remains available in FormosanBank. The
 Downloads page shows sizes, checksums, included tiers, rights, and citation evidence.
 
-The production release exposes 11 curated downloads. Hierarchical JSONL partitions used
-by export recipes are bundled into one archive. Corpus-specific canonical XML is not
-duplicated in the Kakarayan release.
+The production release exposes 11 curated downloads. Hierarchical JSONL partitions are
+bundled into one archive. Corpus-specific canonical XML is not duplicated in the Kakarayan
+release.
 
 The time-alignment package stores every valid sentence timing and media reference in one
 JSONL table. It also includes EAF, WebVTT, and SRT files for media with multiple cues, plus
@@ -79,10 +79,6 @@ Sentence-only columns are `tokens`, `token_count`, and `source`. W and M rows ma
 `class` and `sclass`. Provenance columns are repeated on every level: `language_id`,
 `corpus_id`, `dialect`, and `source_path`.
 
-Legacy sentence fields `glosses`, `word_translations`, and `morpheme_translations` remain
-accepted for old v1 recipes and API calls. The interface does not offer them because they
-flatten child tiers into an S row.
-
 The same serializer supplies preview rows, API exports, and recipe execution. CSV and TSV
 exports escape cells that spreadsheet software could interpret as formulas.
 
@@ -92,7 +88,9 @@ A downloaded recipe records the exact release, selected XML levels, columns for 
 complete-row behavior, output format, and spreadsheet-safety policy. It validates against
 `schemas/export-recipe.schema.json`.
 
-Execute a recipe against the matching full release directory:
+Execute a recipe against the matching full release directory. Recipe execution verifies and
+activates that release's SQLite database in a temporary directory, then uses the same query
+and streaming serializer as the web API:
 
 ```bash
 uv run python -m publisher.recipes \

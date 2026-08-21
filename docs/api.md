@@ -135,9 +135,6 @@ selected level plus `manifest.json`.
 Full-corpus work still belongs to prepared downloads. Custom exports are finite and run in
 the request, with no background job in v1.
 
-Legacy `glosses`, `word_translations`, and `morpheme_translations` remain accepted on
-sentence exports for existing recipes. New selections use W and M rows directly.
-
 The UI recipe format is defined by `schemas/export-recipe.schema.json`. Publisher execution
 and the HTTP export share the same level, column, completeness, and matching semantics.
 

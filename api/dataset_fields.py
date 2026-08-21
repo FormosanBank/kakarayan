@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import json
-from collections.abc import Mapping, Sequence
-from typing import Any, Literal
+from collections.abc import Sequence
+from typing import Literal
 
 RecordLevel = Literal["sentence", "word", "morpheme"]
 RECORD_LEVELS: tuple[RecordLevel, ...] = ("sentence", "word", "morpheme")
@@ -34,10 +33,6 @@ DatasetField = Literal[
     "dialect",
     "source_path",
     "audio",
-    # Accepted for backward-compatible sentence recipes and API calls.
-    "glosses",
-    "word_translations",
-    "morpheme_translations",
 ]
 
 DATASET_FIELDS_BY_LEVEL: dict[RecordLevel, tuple[DatasetField, ...]] = {
@@ -109,19 +104,6 @@ DATASET_FIELDS_BY_LEVEL: dict[RecordLevel, tuple[DatasetField, ...]] = {
     ),
 }
 
-LEGACY_SENTENCE_FIELDS: tuple[DatasetField, ...] = (
-    "glosses",
-    "word_translations",
-    "morpheme_translations",
-)
-DATASET_FIELDS: tuple[DatasetField, ...] = tuple(
-    dict.fromkeys(
-        field
-        for fields in (*DATASET_FIELDS_BY_LEVEL.values(), LEGACY_SENTENCE_FIELDS)
-        for field in fields
-    )
-)
-
 
 def default_dataset_fields(level: RecordLevel) -> tuple[DatasetField, ...]:
     ancestry: tuple[DatasetField, ...]
@@ -134,13 +116,8 @@ def default_dataset_fields(level: RecordLevel) -> tuple[DatasetField, ...]:
     return (*ancestry, "form", "translations", "language_id", "corpus_id", "dialect", "source_path")
 
 
-def allowed_dataset_fields(
-    level: RecordLevel, *, include_legacy: bool = False
-) -> tuple[DatasetField, ...]:
-    fields = DATASET_FIELDS_BY_LEVEL[level]
-    if level == "sentence" and include_legacy:
-        return (*fields, *LEGACY_SENTENCE_FIELDS)
-    return fields
+def allowed_dataset_fields(level: RecordLevel) -> tuple[DatasetField, ...]:
+    return DATASET_FIELDS_BY_LEVEL[level]
 
 
 def _owner(level: RecordLevel) -> tuple[str, str]:
@@ -176,69 +153,8 @@ def _tier_values(
     )), '')"""
 
 
-def _legacy_sentence_expression(field: DatasetField) -> str:
-    if field == "glosses":
-        return """COALESCE((SELECT group_concat(value, ' | ') FROM (
-            SELECT tr.text AS value FROM translations tr
-            JOIN tier_scope_view ts
-              ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
-            WHERE ts.sentence_id = s.id AND tr.owner_type <> 'sentence'
-            ORDER BY tr.owner_type, tr.owner_id, tr.position
-        )), '') AS glosses"""
-    if field == "word_translations":
-        return """COALESCE((SELECT '[' || group_concat(value, ',') || ']' FROM (
-            SELECT json_object(
-              'word_id', w_child.id,
-              'word_position', w_child.position,
-              'form', COALESCE((
-                SELECT f.text FROM forms f
-                WHERE f.owner_type = 'word' AND f.owner_id = w_child.id
-                ORDER BY CASE f.kind WHEN 'standard' THEN 0 WHEN 'original' THEN 1
-                         WHEN 'alternate' THEN 2 ELSE 3 END, f.position LIMIT 1
-              ), ''),
-              'translation_position', tr.position,
-              'xml_lang', tr.xml_lang,
-              'text', tr.text,
-              'kind', tr.kind
-            ) AS value
-            FROM translations tr JOIN words w_child ON w_child.id = tr.owner_id
-            WHERE tr.owner_type = 'word' AND w_child.parent_id = s.id
-            ORDER BY w_child.position, tr.position
-        )), '[]') AS word_translations"""
-    if field == "morpheme_translations":
-        return """COALESCE((SELECT '[' || group_concat(value, ',') || ']' FROM (
-            SELECT json_object(
-              'word_id', w_child.id,
-              'word_position', w_child.position,
-              'morpheme_id', m_child.id,
-              'morpheme_position', m_child.position,
-              'form', COALESCE((
-                SELECT f.text FROM forms f
-                WHERE f.owner_type = 'morpheme' AND f.owner_id = m_child.id
-                ORDER BY CASE f.kind WHEN 'standard' THEN 0 WHEN 'original' THEN 1
-                         WHEN 'alternate' THEN 2 ELSE 3 END, f.position LIMIT 1
-              ), ''),
-              'translation_position', tr.position,
-              'xml_lang', tr.xml_lang,
-              'text', tr.text,
-              'kind', tr.kind
-            ) AS value
-            FROM translations tr
-            JOIN morphemes m_child ON m_child.id = tr.owner_id
-            JOIN words w_child ON w_child.id = m_child.parent_id
-            WHERE tr.owner_type = 'morpheme' AND w_child.parent_id = s.id
-            ORDER BY w_child.position, m_child.position, tr.position
-        )), '[]') AS morpheme_translations"""
-    raise KeyError(field)
-
-
 def dataset_expression(level: RecordLevel, field: DatasetField) -> str:
     """Return one level-aware SQLite projection expression."""
-    if field in LEGACY_SENTENCE_FIELDS:
-        if level != "sentence":
-            raise KeyError(field)
-        return _legacy_sentence_expression(field)
-
     owner_type, alias = _owner(level)
     simple = {
         "id": f"{alias}.id",
@@ -357,89 +273,3 @@ def dataset_completeness_clauses(level: RecordLevel, fields: Sequence[DatasetFie
         elif field == "tokens":
             clauses.append("EXISTS (SELECT 1 FROM tokens tok WHERE tok.sentence_id = s.id)")
     return clauses
-
-
-def _selected_form(forms: Sequence[Mapping[str, Any]]) -> str:
-    by_kind: dict[str, str] = {}
-    for item in forms:
-        if item["text"]:
-            by_kind.setdefault(str(item["kind"]), str(item["text"]))
-    return by_kind.get("standard") or by_kind.get("original") or by_kind.get("alternate") or ""
-
-
-def _owner_rows(
-    record: Mapping[str, Any],
-    owner: Mapping[str, Any],
-    owner_type: str,
-    table: str,
-) -> Sequence[Mapping[str, Any]]:
-    tiers = owner.get("tiers")
-    if isinstance(tiers, Mapping):
-        rows = tiers.get(table)
-        if isinstance(rows, Sequence):
-            return rows
-    source = "tier_translations" if table == "translations" else table
-    return [
-        item
-        for item in record[source]
-        if item["owner_type"] == owner_type and item["owner_id"] == owner["id"]
-    ]
-
-
-def _record_value(record: Mapping[str, Any], field: DatasetField) -> object:
-    """Serialize legacy sentence recipes from hierarchical release records."""
-    if field == "translations":
-        return " | ".join(f"{item['xml_lang']}:{item['text']}" for item in record["translations"])
-    if field == "tokens":
-        return " ".join(item["surface"] for item in record["tokens"])
-    if field == "phonology":
-        return " | ".join(item["text"] for item in record["phonology"])
-    if field == "glosses":
-        return " | ".join(
-            item["text"] for item in record["tier_translations"] if item["owner_type"] != "sentence"
-        )
-    if field == "word_translations":
-        values = []
-        for word in record["words"]:
-            form = _selected_form(_owner_rows(record, word, "word", "forms"))
-            for translation in _owner_rows(record, word, "word", "translations"):
-                values.append(
-                    {
-                        "word_id": word["id"],
-                        "word_position": word["position"],
-                        "form": form,
-                        "translation_position": translation["position"],
-                        "xml_lang": translation["xml_lang"],
-                        "text": translation["text"],
-                        "kind": translation["kind"],
-                    }
-                )
-        return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
-    if field == "morpheme_translations":
-        values = []
-        for word in record["words"]:
-            for morpheme in word["morphemes"]:
-                form = _selected_form(_owner_rows(record, morpheme, "morpheme", "forms"))
-                for translation in _owner_rows(record, morpheme, "morpheme", "translations"):
-                    values.append(
-                        {
-                            "word_id": word["id"],
-                            "word_position": word["position"],
-                            "morpheme_id": morpheme["id"],
-                            "morpheme_position": morpheme["position"],
-                            "form": form,
-                            "translation_position": translation["position"],
-                            "xml_lang": translation["xml_lang"],
-                            "text": translation["text"],
-                            "kind": translation["kind"],
-                        }
-                    )
-        return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
-    if field == "audio":
-        return " | ".join(item["url"] or item["file"] or item["source"] for item in record["audio"])
-    return record[field]
-
-
-def project_record(record: Mapping[str, Any], fields: Sequence[DatasetField]) -> dict[str, object]:
-    """Serialize one legacy nested sentence recipe."""
-    return {field: _record_value(record, field) for field in fields}
