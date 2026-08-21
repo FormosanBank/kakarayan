@@ -9,6 +9,7 @@ import json
 import logging
 import sqlite3
 import time
+import zipfile
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Annotated, Literal
@@ -21,7 +22,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
-from api.dataset_fields import DATASET_FIELDS, DatasetField
+from api.dataset_fields import DatasetField, RecordLevel, default_dataset_fields
 from api.errors import ApiError, api_error_handler, validation_error_handler
 from api.release import ReleaseError, load_release
 from api.search import MatchMode
@@ -51,6 +52,32 @@ def _spreadsheet_safe(value: object) -> object:
     if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
         return f"'{value}"
     return value
+
+
+def _dataset_bytes(result: dict, export_format: Literal["csv", "tsv", "jsonl"]) -> bytes:
+    fields = result["fields"]
+    output = io.StringIO(newline="")
+    if export_format == "jsonl":
+        for row in result["items"]:
+            output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    else:
+        delimiter = "\t" if export_format == "tsv" else ","
+        writer = csv.DictWriter(
+            output, fieldnames=fields, delimiter=delimiter, lineterminator="\n"
+        )
+        writer.writeheader()
+        writer.writerows(
+            {field: _spreadsheet_safe(row[field]) for field in fields}
+            for row in result["items"]
+        )
+    return output.getvalue().encode()
+
+
+def _zip_member(archive: zipfile.ZipFile, name: str, body: bytes) -> None:
+    info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.external_attr = 0o100644 << 16
+    archive.writestr(info, body)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -358,6 +385,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         match: MatchMode,
         requirement: list[TierRequirement] | None,
         field: list[DatasetField] | None,
+        record_level: RecordLevel,
+        complete_fields: bool,
         max_rows: int,
     ) -> dict:
         return release_store(request, release_id).dataset(
@@ -369,7 +398,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             translation_language=translation_language,
             match=match,
             requirements=requirement or (),
-            fields=field or DATASET_FIELDS,
+            fields=field or default_dataset_fields(record_level),
+            record_level=record_level,
+            complete_fields=complete_fields,
             max_rows=max_rows,
         )
 
@@ -387,6 +418,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         match: MatchMode = "exact",
         requirement: Annotated[list[TierRequirement] | None, Query()] = None,
         field: Annotated[list[DatasetField] | None, Query()] = None,
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
         max_rows: Annotated[int, Query(ge=1, le=25)] = 12,
     ) -> dict:
         _cache(response, immutable=True)
@@ -402,6 +435,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             match,
             requirement,
             field,
+            record_level,
+            complete_fields,
             max_rows,
         )
 
@@ -422,6 +457,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         match: MatchMode = "exact",
         requirement: Annotated[list[TierRequirement] | None, Query()] = None,
         field: Annotated[list[DatasetField] | None, Query()] = None,
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
         max_rows: Annotated[int, Query(ge=1, le=1000)] = 1000,
         format: Literal["csv", "tsv", "jsonl"] = "csv",
     ) -> Response:
@@ -439,29 +476,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             match,
             requirement,
             field,
+            record_level,
+            complete_fields,
             max_rows,
         )
-        fields = result["fields"]
-        output = io.StringIO(newline="")
-        if format == "jsonl":
-            for row in result["items"]:
-                output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
-            media_type = "application/x-ndjson"
-        else:
-            delimiter = "\t" if format == "tsv" else ","
-            writer = csv.DictWriter(
-                output, fieldnames=fields, delimiter=delimiter, lineterminator="\n"
-            )
-            writer.writeheader()
-            writer.writerows(
-                {field: _spreadsheet_safe(row[field]) for field in fields}
-                for row in result["items"]
-            )
-            media_type = "text/tab-separated-values" if format == "tsv" else "text/csv"
-        body = output.getvalue().encode()
+        body = _dataset_bytes(result, format)
         if len(body) > 5 * 1024 * 1024:
             raise ApiError(413, "export_too_large", "The export exceeds the 5 MiB response limit")
-        filename = f"kakarayan-{release_id}.{format}"
+        media_type = {
+            "csv": "text/csv",
+            "tsv": "text/tab-separated-values",
+            "jsonl": "application/x-ndjson",
+        }[format]
+        filename = f"kakarayan-{release_id}-{record_level}s.{format}"
         return Response(
             body,
             media_type=media_type,
@@ -469,6 +496,102 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "Cache-Control": "public, max-age=31536000, immutable",
                 "Content-Disposition": f'attachment; filename="{filename}"',
                 "X-Kakarayan-Row-Count": str(result["returned_rows"]),
+            },
+        )
+
+    @app.get(
+        "/v1/releases/{release_id}/datasets/export-package",
+        tags=["datasets"],
+        response_model=None,
+    )
+    def dataset_export_package(
+        request: Request,
+        release_id: ReleaseId,
+        language_id: LanguageId,
+        corpus_id: OptionalCorpus = None,
+        dialect: OptionalDialect = None,
+        q: Annotated[str | None, Query(min_length=1, max_length=256)] = None,
+        direction: SearchDirection = "formosan",
+        translation_language: Annotated[str | None, Query(max_length=32)] = None,
+        match: MatchMode = "exact",
+        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        record_level: Annotated[list[RecordLevel] | None, Query()] = None,
+        sentence_field: Annotated[list[DatasetField] | None, Query()] = None,
+        word_field: Annotated[list[DatasetField] | None, Query()] = None,
+        morpheme_field: Annotated[list[DatasetField] | None, Query()] = None,
+        complete_fields: bool = True,
+        max_rows: Annotated[int, Query(ge=1, le=1000)] = 1000,
+        format: Literal["csv", "tsv", "jsonl"] = "csv",
+    ) -> Response:
+        current = release_store(request, release_id)
+        current.assert_export_allowed(language_id, corpus_id)
+        levels = list(dict.fromkeys(record_level or ()))
+        if not levels:
+            raise ApiError(422, "invalid_parameter", "Choose at least one XML record level")
+        field_map = {
+            "sentence": sentence_field,
+            "word": word_field,
+            "morpheme": morpheme_field,
+        }
+        results = [
+            dataset_result(
+                request,
+                release_id,
+                language_id,
+                corpus_id,
+                dialect,
+                q,
+                direction,
+                translation_language,
+                match,
+                requirement,
+                field_map[level],
+                level,
+                complete_fields,
+                max_rows,
+            )
+            for level in levels
+        ]
+        manifest = {
+            "release_id": release_id,
+            "complete_fields": complete_fields,
+            "max_rows_per_level": max_rows,
+            "format": format,
+            "tables": [
+                {
+                    "record_level": result["record_level"],
+                    "fields": result["fields"],
+                    "estimated_rows": result["estimated_rows"],
+                    "returned_rows": result["returned_rows"],
+                    "truncated": result["truncated"],
+                }
+                for result in results
+            ],
+        }
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w") as archive:
+            for result in results:
+                level = result["record_level"]
+                _zip_member(archive, f"{level}s.{format}", _dataset_bytes(result, format))
+            _zip_member(
+                archive,
+                "manifest.json",
+                (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode(),
+            )
+        body = output.getvalue()
+        if len(body) > 5 * 1024 * 1024:
+            raise ApiError(413, "export_too_large", "The export package exceeds the 5 MiB limit")
+        return Response(
+            body,
+            media_type="application/zip",
+            headers={
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "Content-Disposition": (
+                    f'attachment; filename="kakarayan-{release_id}-xml-levels.zip"'
+                ),
+                "X-Kakarayan-Row-Count": str(
+                    sum(int(result["returned_rows"]) for result in results)
+                ),
             },
         )
 

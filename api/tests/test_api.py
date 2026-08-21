@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import gzip
+import io
 import json
 import logging
 import sqlite3
+import zipfile
 from contextlib import closing
 
 from fastapi.testclient import TestClient
@@ -281,6 +283,105 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         params={"language_id": "lang_amis", "max_rows": 1001},
     )
     assert unbounded.status_code == 422
+
+
+def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
+    client: TestClient,
+) -> None:
+    sentence = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "sentence"),
+            ("complete_fields", "true"),
+            ("field", "id"),
+            ("field", "original"),
+            ("field", "standard"),
+        ],
+    )
+    assert sentence.status_code == 200
+    assert sentence.json()["record_level"] == "sentence"
+    assert sentence.json()["estimated_rows"] == 1
+    assert sentence.json()["items"][0]["original"].startswith("Lima waco")
+
+    word = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "word"),
+            ("complete_fields", "true"),
+            ("q", "lima"),
+            ("match", "exact"),
+            ("field", "id"),
+            ("field", "sentence_id"),
+            ("field", "form"),
+            ("field", "translations"),
+        ],
+    )
+    assert word.status_code == 200
+    word_item = word.json()["items"][0]
+    assert word.json()["estimated_rows"] == 1
+    assert word_item["form"] == "lima"
+    assert word_item["translations"] == "eng:five.word"
+    assert word_item["sentence_id"]
+
+    morpheme = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "morpheme"),
+            ("complete_fields", "true"),
+            ("q", "lima"),
+            ("match", "exact"),
+            ("field", "id"),
+            ("field", "word_id"),
+            ("field", "sentence_id"),
+            ("field", "form"),
+            ("field", "translations"),
+        ],
+    )
+    assert morpheme.status_code == 200
+    morpheme_item = morpheme.json()["items"][0]
+    assert morpheme_item["form"] == "lima"
+    assert morpheme_item["translations"] == "eng:FIVE"
+    assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
+
+
+def test_dataset_multi_level_package_has_one_table_per_xml_level(client: TestClient) -> None:
+    response = client.get(
+        release_path(client, "datasets/export-package"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "sentence"),
+            ("record_level", "word"),
+            ("record_level", "morpheme"),
+            ("sentence_field", "id"),
+            ("sentence_field", "form"),
+            ("word_field", "id"),
+            ("word_field", "sentence_id"),
+            ("word_field", "form"),
+            ("morpheme_field", "id"),
+            ("morpheme_field", "word_id"),
+            ("morpheme_field", "form"),
+            ("format", "csv"),
+        ],
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        assert archive.namelist() == [
+            "sentences.csv",
+            "words.csv",
+            "morphemes.csv",
+            "manifest.json",
+        ]
+        assert archive.read("words.csv").decode().startswith("id,sentence_id,form\n")
+        manifest = json.loads(archive.read("manifest.json"))
+        assert [table["record_level"] for table in manifest["tables"]] == [
+            "sentence",
+            "word",
+            "morpheme",
+        ]
 
 
 def test_spreadsheet_export_cells_are_formula_safe() -> None:

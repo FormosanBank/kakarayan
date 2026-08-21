@@ -10,7 +10,13 @@ from contextlib import contextmanager
 from typing import Any, Literal
 
 from api.cursors import CursorValue, decode_cursor, encode_cursor, query_fingerprint
-from api.dataset_fields import DATASET_FIELDS, DatasetField, dataset_projection
+from api.dataset_fields import (
+    DatasetField,
+    RecordLevel,
+    allowed_dataset_fields,
+    dataset_completeness_clauses,
+    dataset_projection,
+)
 from api.errors import ApiError
 from api.release import ReleaseState, readonly_connection
 from api.search import MatchMode, normalize_surface, normalize_text
@@ -1055,13 +1061,14 @@ class CorpusStore:
         translation_language: str | None,
         match: MatchMode,
         requirements: Sequence[TierRequirement],
+        record_level: RecordLevel,
     ) -> tuple[str | None, list[str], list[object]]:
         normalized = (
             normalize_surface(q or "") if direction == "formosan" else normalize_text(q or "")
         )
         if q is not None and not normalized:
             raise ApiError(422, "invalid_parameter", "The query is empty after normalization")
-        if normalized:
+        if normalized and record_level == "sentence":
             candidates, candidate_parameters = self._candidate_sentences(
                 normalized=normalized,
                 language_id=language_id,
@@ -1076,6 +1083,33 @@ class CorpusStore:
         else:
             candidates = None
             clauses, parameters = self._scope(language_id, corpus_id, dialect)
+            if normalized:
+                owner_type, owner_alias = {
+                    "word": ("word", "w"),
+                    "morpheme": ("morpheme", "m"),
+                }[record_level]
+                if direction == "formosan":
+                    predicate, predicate_parameters = _predicate(
+                        "f.normalized", normalized, match, "formosan"
+                    )
+                    clauses.append(
+                        "EXISTS (SELECT 1 FROM forms f "
+                        f"WHERE f.owner_type = '{owner_type}' "
+                        f"AND f.owner_id = {owner_alias}.id AND {predicate})"
+                    )
+                else:
+                    predicate, predicate_parameters = _predicate(
+                        "tr.normalized", normalized, match, "translation"
+                    )
+                    language_clause = " AND tr.xml_lang = ?" if translation_language else ""
+                    clauses.append(
+                        "EXISTS (SELECT 1 FROM translations tr "
+                        f"WHERE tr.owner_type = '{owner_type}' "
+                        f"AND tr.owner_id = {owner_alias}.id AND {predicate}{language_clause})"
+                    )
+                    if translation_language:
+                        predicate_parameters = (*predicate_parameters, translation_language)
+                parameters.extend(predicate_parameters)
         self._tier_requirements(clauses, requirements)
         return candidates, clauses, parameters
 
@@ -1091,10 +1125,17 @@ class CorpusStore:
         match: MatchMode,
         requirements: Sequence[TierRequirement],
         fields: Sequence[DatasetField],
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
         max_rows: int,
     ) -> dict[str, Any]:
-        if not fields or any(field not in DATASET_FIELDS for field in fields):
-            raise ApiError(422, "invalid_parameter", "Choose at least one supported dataset field")
+        supported = allowed_dataset_fields(record_level, include_legacy=True)
+        if not fields or any(field not in supported for field in fields):
+            raise ApiError(
+                422,
+                "invalid_parameter",
+                f"Choose supported {record_level} dataset fields",
+            )
         candidates, clauses, parameters = self._dataset_clauses(
             language_id=language_id,
             corpus_id=corpus_id,
@@ -1104,29 +1145,50 @@ class CorpusStore:
             translation_language=translation_language,
             match=match,
             requirements=requirements,
+            record_level=record_level,
         )
+        if complete_fields:
+            clauses.extend(dataset_completeness_clauses(record_level, fields))
         where = " AND ".join(clauses) if clauses else "1 = 1"
         prefix = f"WITH candidate_ids AS ({candidates})" if candidates else ""
-        source = (
-            "candidate_ids candidate JOIN sentences s ON s.id = candidate.sentence_id "
-            "JOIN texts t ON t.id = s.parent_id"
+        sentence_source = (
+            "candidate_ids candidate JOIN sentences s ON s.id = candidate.sentence_id"
             if candidates
-            else "sentences s JOIN texts t ON t.id = s.parent_id"
+            else "sentences s"
         )
-        projection = dataset_projection(fields)
+        source, order = {
+            "sentence": (
+                f"{sentence_source} JOIN texts t ON t.id = s.parent_id",
+                "t.source_path, s.position, s.id",
+            ),
+            "word": (
+                f"{sentence_source} JOIN words w ON w.parent_id = s.id "
+                "JOIN texts t ON t.id = s.parent_id",
+                "t.source_path, s.position, w.position, w.id",
+            ),
+            "morpheme": (
+                f"{sentence_source} JOIN words w ON w.parent_id = s.id "
+                "JOIN morphemes m ON m.parent_id = w.id "
+                "JOIN texts t ON t.id = s.parent_id",
+                "t.source_path, s.position, w.position, m.position, m.id",
+            ),
+        }[record_level]
+        projection = dataset_projection(record_level, fields)
         with self.connect() as connection:
             rows = [
                 dict(row)
                 for row in connection.execute(
                     f"{prefix} SELECT {projection}, COUNT(*) OVER() AS _estimated_rows "
                     f"FROM {source} WHERE {where} "
-                    "ORDER BY t.source_path, s.position, s.id LIMIT ?",
+                    f"ORDER BY {order} LIMIT ?",
                     (*parameters, max_rows),
                 )
             ]
         estimated_rows = int(rows[0].pop("_estimated_rows")) if rows else 0
         return {
             "release_id": self.release_id,
+            "record_level": record_level,
+            "complete_fields": complete_fields,
             "estimated_rows": estimated_rows,
             "returned_rows": len(rows),
             "truncated": estimated_rows > len(rows),
