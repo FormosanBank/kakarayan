@@ -1175,16 +1175,20 @@ class CorpusStore:
         }[record_level]
         projection = dataset_projection(record_level, fields)
         with self.connect() as connection:
+            estimated_rows = int(
+                connection.execute(
+                    f"{prefix} SELECT COUNT(*) FROM {source} WHERE {where}",
+                    parameters,
+                ).fetchone()[0]
+            )
             rows = [
                 dict(row)
                 for row in connection.execute(
-                    f"{prefix} SELECT {projection}, COUNT(*) OVER() AS _estimated_rows "
-                    f"FROM {source} WHERE {where} "
+                    f"{prefix} SELECT {projection} FROM {source} WHERE {where} "
                     f"ORDER BY {order} LIMIT ?",
                     (*parameters, max_rows),
                 )
             ]
-        estimated_rows = int(rows[0].pop("_estimated_rows")) if rows else 0
         return {
             "release_id": self.release_id,
             "record_level": record_level,
