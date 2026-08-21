@@ -36,7 +36,7 @@
         }
       ],
       "properties": {
-        "query": {"type": "string", "maxLength": 256},
+        "query": {"type": "string", "maxLength": 2048},
         "match": {
           "enum": ["exact", "prefix", "contains"]
         },
@@ -73,7 +73,7 @@
           "maxItems": 10000,
           "uniqueItems": true
         },
-        "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "max_rows": {"type": "integer", "minimum": 1, "maximum": 100000},
         "record_unit": {"const": "sentence"},
         "record_units": {
           "type": "array",

@@ -10,9 +10,16 @@ from contextlib import closing
 
 from fastapi.testclient import TestClient
 
-from api.app import _spreadsheet_safe, create_app
+from api.app import create_app
 from api.config import Settings
 from api.dataset_fields import project_record
+from api.exports import spreadsheet_safe
+from api.limits import (
+    DATASET_EXPORT_MAX_ROWS,
+    DATASET_PREVIEW_MAX_ROWS,
+    QUERY_MAX_CHARS,
+    SEARCH_PAGE_MAX_ROWS,
+)
 
 
 def release_path(client: TestClient, path: str) -> str:
@@ -199,9 +206,15 @@ def test_summaries_bounds_errors_cors_and_read_only(client: TestClient) -> None:
     assert summary.json()["sentences"] == 2
     assert summary.json()["source_types"] >= len(summary.json()["source_frequencies"])
 
-    too_long = client.get(
+    longer_query = client.get(
         release_path(client, "dictionary"),
         params={"q": "x" * 257, "language_id": "lang_amis"},
+    )
+    assert longer_query.status_code == 200
+
+    too_long = client.get(
+        release_path(client, "dictionary"),
+        params={"q": "x" * (QUERY_MAX_CHARS + 1), "language_id": "lang_amis"},
     )
     assert too_long.status_code == 422
     assert too_long.json()["error"]["field"] == "q"
@@ -278,11 +291,79 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         "id\tstandard\ttranslations\tword_translations\tmorpheme_translations\n"
     )
 
-    unbounded = client.get(
+    larger_export = client.get(
         release_path(client, "datasets/export"),
         params={"language_id": "lang_amis", "max_rows": 1001},
     )
+    assert larger_export.status_code == 200
+
+    unbounded = client.get(
+        release_path(client, "datasets/export"),
+        params={"language_id": "lang_amis", "max_rows": DATASET_EXPORT_MAX_ROWS + 1},
+    )
     assert unbounded.status_code == 422
+
+
+def test_streaming_export_is_not_limited_to_five_mebibytes(settings: Settings) -> None:
+    large_translation = "a" * (5 * 1024 * 1024 + 1)
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute(
+            "UPDATE translations SET text = ? WHERE owner_type = 'sentence' AND xml_lang = 'eng'",
+            (large_translation,),
+        )
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get(
+            release_path(client, "datasets/export"),
+            params=[
+                ("language_id", "lang_amis"),
+                ("field", "id"),
+                ("field", "translations"),
+                ("max_rows", "2"),
+                ("format", "jsonl"),
+            ],
+        )
+
+    assert response.status_code == 200
+    assert len(response.content) > 5 * 1024 * 1024
+    assert response.headers["x-kakarayan-row-count"] == "2"
+
+
+def test_public_capacity_limits_accept_larger_queries(client: TestClient) -> None:
+    release = release_path(client, "dictionary")
+    assert (
+        client.get(
+            release,
+            params={"q": "lima", "language_id": "lang_amis", "limit": 101},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            release,
+            params={
+                "q": "lima",
+                "language_id": "lang_amis",
+                "limit": SEARCH_PAGE_MAX_ROWS + 1,
+            },
+        ).status_code
+        == 422
+    )
+    preview = release_path(client, "datasets/preview")
+    assert (
+        client.get(
+            preview,
+            params={"language_id": "lang_amis", "max_rows": 26},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.get(
+            preview,
+            params={"language_id": "lang_amis", "max_rows": DATASET_PREVIEW_MAX_ROWS + 1},
+        ).status_code
+        == 422
+    )
 
 
 def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
@@ -386,8 +467,8 @@ def test_dataset_multi_level_package_has_one_table_per_xml_level(client: TestCli
 
 def test_spreadsheet_export_cells_are_formula_safe() -> None:
     for prefix in ("=", "+", "-", "@", "\t", "\r"):
-        assert _spreadsheet_safe(f"{prefix}danger") == f"'{prefix}danger"
-    assert _spreadsheet_safe("ordinary text") == "ordinary text"
+        assert spreadsheet_safe(f"{prefix}danger") == f"'{prefix}danger"
+    assert spreadsheet_safe("ordinary text") == "ordinary text"
 
 
 def test_request_records_use_route_templates_without_raw_queries(
@@ -421,7 +502,7 @@ def test_request_records_use_route_templates_without_raw_queries(
 
     client.get(
         release_path(client, "dictionary"),
-        params={"q": "x" * 257, "language_id": "lang_amis"},
+        params={"q": "x" * (QUERY_MAX_CHARS + 1), "language_id": "lang_amis"},
     )
     failure = next(
         item

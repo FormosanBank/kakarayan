@@ -7,6 +7,7 @@ import sqlite3
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from api.cursors import CursorValue, decode_cursor, encode_cursor, query_fingerprint
@@ -31,6 +32,29 @@ DICTIONARY_EXAMPLE_LIMIT = 2
 DICTIONARY_MEANING_LIMIT = 12
 DICTIONARY_PRONUNCIATION_LIMIT = 8
 DICTIONARY_VALUE_MAX_CHARS = 320
+
+
+@dataclass(frozen=True)
+class DatasetQuery:
+    prefix: str
+    source: str
+    where: str
+    order: str
+    projection: str
+    parameters: tuple[object, ...]
+    fields: tuple[DatasetField, ...]
+
+
+@dataclass(frozen=True)
+class DatasetStream:
+    release_id: str
+    record_level: RecordLevel
+    complete_fields: bool
+    estimated_rows: int
+    returned_rows: int
+    truncated: bool
+    fields: tuple[DatasetField, ...]
+    rows: Iterator[dict[str, Any]]
 
 
 def _bounded_text(value: object, maximum: int) -> tuple[str, bool]:
@@ -1113,7 +1137,7 @@ class CorpusStore:
         self._tier_requirements(clauses, requirements)
         return candidates, clauses, parameters
 
-    def dataset(
+    def _dataset_query(
         self,
         *,
         language_id: str,
@@ -1127,8 +1151,7 @@ class CorpusStore:
         fields: Sequence[DatasetField],
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
-        max_rows: int,
-    ) -> dict[str, Any]:
+    ) -> DatasetQuery:
         supported = allowed_dataset_fields(record_level, include_legacy=True)
         if not fields or any(field not in supported for field in fields):
             raise ApiError(
@@ -1174,30 +1197,115 @@ class CorpusStore:
             ),
         }[record_level]
         projection = dataset_projection(record_level, fields)
+        return DatasetQuery(
+            prefix=prefix,
+            source=source,
+            where=where,
+            order=order,
+            projection=projection,
+            parameters=tuple(parameters),
+            fields=tuple(fields),
+        )
+
+    def stream_dataset(
+        self,
+        *,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirements: Sequence[TierRequirement],
+        fields: Sequence[DatasetField],
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
+        max_rows: int,
+    ) -> DatasetStream:
+        query = self._dataset_query(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirements,
+            fields=fields,
+            record_level=record_level,
+            complete_fields=complete_fields,
+        )
         with self.connect() as connection:
             estimated_rows = int(
                 connection.execute(
-                    f"{prefix} SELECT COUNT(*) FROM {source} WHERE {where}",
-                    parameters,
+                    f"{query.prefix} SELECT COUNT(*) FROM {query.source} WHERE {query.where}",
+                    query.parameters,
                 ).fetchone()[0]
             )
-            rows = [
-                dict(row)
-                for row in connection.execute(
-                    f"{prefix} SELECT {projection} FROM {source} WHERE {where} "
-                    f"ORDER BY {order} LIMIT ?",
-                    (*parameters, max_rows),
+
+        returned_rows = min(estimated_rows, max_rows)
+
+        def rows() -> Iterator[dict[str, Any]]:
+            with self.connect() as connection:
+                cursor = connection.execute(
+                    f"{query.prefix} SELECT {query.projection} FROM {query.source} "
+                    f"WHERE {query.where} ORDER BY {query.order} LIMIT ?",
+                    (*query.parameters, max_rows),
                 )
-            ]
+                for row in cursor:
+                    yield dict(row)
+
+        return DatasetStream(
+            release_id=self.release_id,
+            record_level=record_level,
+            complete_fields=complete_fields,
+            estimated_rows=estimated_rows,
+            returned_rows=returned_rows,
+            truncated=estimated_rows > returned_rows,
+            fields=query.fields,
+            rows=rows(),
+        )
+
+    def dataset(
+        self,
+        *,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        q: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        requirements: Sequence[TierRequirement],
+        fields: Sequence[DatasetField],
+        record_level: RecordLevel = "sentence",
+        complete_fields: bool = False,
+        max_rows: int,
+    ) -> dict[str, Any]:
+        stream = self.stream_dataset(
+            language_id=language_id,
+            corpus_id=corpus_id,
+            dialect=dialect,
+            q=q,
+            direction=direction,
+            translation_language=translation_language,
+            match=match,
+            requirements=requirements,
+            fields=fields,
+            record_level=record_level,
+            complete_fields=complete_fields,
+            max_rows=max_rows,
+        )
         return {
-            "release_id": self.release_id,
-            "record_level": record_level,
-            "complete_fields": complete_fields,
-            "estimated_rows": estimated_rows,
-            "returned_rows": len(rows),
-            "truncated": estimated_rows > len(rows),
-            "fields": list(fields),
-            "items": rows,
+            "release_id": stream.release_id,
+            "record_level": stream.record_level,
+            "complete_fields": stream.complete_fields,
+            "estimated_rows": stream.estimated_rows,
+            "returned_rows": stream.returned_rows,
+            "truncated": stream.truncated,
+            "fields": list(stream.fields),
+            "items": list(stream.rows),
         }
 
     def assert_export_allowed(self, language_id: str, corpus_id: str | None) -> None:

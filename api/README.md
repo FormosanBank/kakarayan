@@ -26,6 +26,8 @@ The serving process then needs only:
 - `KAKARAYAN_DB_PATH`: active local SQLite path.
 - `KAKARAYAN_CORS_ORIGINS`: comma-separated exact browser origins.
 - `KAKARAYAN_SQLITE_SHA256`: optional independently pinned expanded checksum.
+- `KAKARAYAN_QUERY_STEP_LIMIT`: SQLite progress callbacks allowed per request; defaults to
+  `2000000` for long analytical requests.
 
 Startup performs no network request, decompression, or full integrity scan. It checks the
 schema and release identities, opens SQLite immutable and read-only, and exposes `/readyz`
@@ -48,6 +50,10 @@ uv run uvicorn api.app:app --port 8000 --no-access-log
 The API has no write route, arbitrary SQL, regular-expression query, user-supplied URL, or
 audio upload. Query text and corpus content are not logged. OpenAPI is available at `/docs`
 and `/openapi.json`.
+
+Search pages allow up to 1,000 records, previews up to 250 rows, and exports up to 100,000
+rows per selected XML level. Exports stream directly from immutable SQLite into CSV, TSV,
+JSON Lines, or ZIP output, without collecting the complete file in API memory.
 
 `api/Dockerfile` builds the same service for a public container host. The current guarded
 workflow can publish a release-pinned Hugging Face Docker Space. Other hosts must preserve

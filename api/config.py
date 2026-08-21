@@ -6,9 +6,21 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from api.limits import DEFAULT_SQLITE_PROGRESS_CALLBACKS
+
 
 def _origins(value: str) -> tuple[str, ...]:
     return tuple(item.strip().rstrip("/") for item in value.split(",") if item.strip())
+
+
+def _positive_integer(value: str, name: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a positive integer") from error
+    if parsed <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return parsed
 
 
 @dataclass(frozen=True)
@@ -17,7 +29,7 @@ class Settings:
     database_path: Path
     expected_sha256: str | None
     cors_origins: tuple[str, ...]
-    query_step_limit: int = 200_000
+    query_step_limit: int = DEFAULT_SQLITE_PROGRESS_CALLBACKS
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -35,6 +47,13 @@ class Settings:
                     "KAKARAYAN_CORS_ORIGINS",
                     "https://formosanbank.github.io,http://localhost:5173,http://127.0.0.1:5173",
                 )
+            ),
+            query_step_limit=_positive_integer(
+                os.environ.get(
+                    "KAKARAYAN_QUERY_STEP_LIMIT",
+                    str(DEFAULT_SQLITE_PROGRESS_CALLBACKS),
+                ),
+                "KAKARAYAN_QUERY_STEP_LIMIT",
             ),
         )
 
