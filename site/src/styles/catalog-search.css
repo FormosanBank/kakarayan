@@ -754,11 +754,6 @@
   line-height: 1.55;
 }
 
-.translations p.translation-match {
-  padding-inline: 12px;
-  background: var(--surface);
-}
-
 .result-card--summary .translations p {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -799,7 +794,7 @@
   padding: 1px 3px;
   border-radius: 3px;
   color: var(--ink);
-  background: #fff1b8;
+  background: #ececec;
 }
 
 .result-card__details {

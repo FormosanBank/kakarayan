@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useState, type ReactNode} from "react";
 
 import {sentenceDetail} from "../apiClient";
 import {useI18n} from "../i18n";
@@ -45,15 +45,21 @@ function HighlightedText({
 }) {
   if (!active) return text;
   const needle = query.trim();
-  const match = needle ? text.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase()) : -1;
-  if (match < 0) return text;
-  return (
-    <>
-      {text.slice(0, match)}
-      <mark>{text.slice(match, match + needle.length)}</mark>
-      {text.slice(match + needle.length)}
-    </>
-  );
+  if (!needle) return text;
+  const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu");
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index;
+    const value = match[0];
+    if (!value) continue;
+    if (index > cursor) parts.push(text.slice(cursor, index));
+    parts.push(<mark key={`${index}-${value}`}>{value}</mark>);
+    cursor = index + value.length;
+  }
+  if (!parts.length) return text;
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }
 
 function SentenceText({
@@ -374,16 +380,28 @@ export function SearchResultCard({
         {summary.dialect && <span>{summary.dialect}</span>}
         <span>{corpus?.name ?? summary.corpus_id}</span>
       </div>
-      <h3 className="kwic">{summary.standard || summary.original}</h3>
+      <h3 className="kwic">
+        <HighlightedText
+          text={summary.standard || summary.original}
+          query={query}
+          active={direction === "formosan"}
+        />
+      </h3>
       <div className="translations">
         {summary.translations
           .filter((item) => !targetLanguage || item.xml_lang === targetLanguage)
           .slice(0, 3)
-          .map((item, index) => (
-            <p key={`${item.xml_lang}-${index}`}>
-              <span className="translation-text">{item.text}</span>
-            </p>
-          ))}
+          .map((item, index) => {
+            const isMatch = direction === "translation" &&
+              translationTextMatches(item.text, query, mode);
+            return (
+              <p key={`${item.xml_lang}-${index}`} className={isMatch ? "translation-match" : undefined}>
+                <span className="translation-text">
+                  <HighlightedText text={item.text} query={query} active={isMatch} />
+                </span>
+              </p>
+            );
+          })}
       </div>
       <button className="button button--quiet" onClick={() => setOpen(true)} disabled={open}>
         {open ? tx("Loading record…", "正在載入記錄…") : tx("Open full record", "開啟完整記錄")}

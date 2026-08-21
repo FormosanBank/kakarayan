@@ -71,6 +71,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   expect(await summary.locator(".translation-text").first().evaluate(
     (element) => getComputedStyle(element).fontSize,
   )).toBe("14px");
+  await expect(summary.locator(".kwic mark")).toHaveText("lima");
   expect(requests.some((url) => url.includes("/concordance?"))).toBe(true);
   expect(requests.some((url) => url.includes("/data/search/"))).toBe(false);
   expect(requests.some((url) => /\/sentences\/[^/?]+$/u.test(url))).toBe(false);
@@ -84,6 +85,16 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
     "href",
     /FormosanBank\/blob\/[0-9a-f]{40}\//u,
   );
+
+  await page.goto("#/lookup?type=sentences&language=lang_amis");
+  await page.reload();
+  await page.getByText("Search options", {exact: true}).click();
+  await page.getByRole("radio", {name: "Search in English"}).check();
+  await page.getByText("Contains", {exact: true}).click();
+  await page.getByLabel("Word or phrase").fill("fictional");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  const reverseSummary = page.locator(".result-card--summary").first();
+  await expect(reverseSummary.locator(".translation-text mark")).toHaveText("fictional");
 
   await page.goto("#/lookup?type=dictionary");
   await selectFixtureScope(page);
