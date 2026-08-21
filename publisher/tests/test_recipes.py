@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 from pathlib import Path
 from typing import cast
 
@@ -15,6 +16,34 @@ def test_frontend_recipe_fixture_validates() -> None:
     root = Path(__file__).resolve().parents[2]
     recipe = json.loads((root / "tests" / "fixtures" / "export-recipe.json").read_text())
     validate_document(recipe, root / "schemas" / "export-recipe.schema.json")
+
+
+def test_xml_level_recipe_resolves_complete_rows_and_writes_package(
+    public_repo: Path, tmp_path: Path
+) -> None:
+    release = build_release(public_repo, tmp_path / "release")
+    root = Path(__file__).resolve().parents[2]
+    recipe = json.loads((root / "tests" / "fixtures" / "export-recipe.json").read_text())
+    recipe["release_id"] = release.release_id
+    records = resolve_recipe(release.output, recipe)
+    assert isinstance(records, dict)
+    assert records["sentence"][0]["translations"] == "eng:A fictional translated line."
+    assert records["word"][0]["form"] == "lima"
+    assert records["morpheme"][0]["translations"] == "eng:FIVE"
+
+    output = tmp_path / "xml-levels.zip"
+    write_recipe_export(records, recipe, output)
+    with zipfile.ZipFile(output) as archive:
+        assert archive.namelist() == [
+            "sentences.csv",
+            "words.csv",
+            "morphemes.csv",
+            "recipe.json",
+        ]
+        assert archive.read("words.csv").decode().startswith("id,sentence_id,form\n")
+    second = tmp_path / "xml-levels-again.zip"
+    write_recipe_export(records, recipe, second)
+    assert output.read_bytes() == second.read_bytes()
 
 
 def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
@@ -58,6 +87,7 @@ def test_recipe_resolves_and_exports(public_repo: Path, tmp_path: Path) -> None:
 
     loaded = load_recipe(path, schema)
     records = resolve_recipe(release.output, loaded)
+    assert isinstance(records, list)
     assert [record["xml_id"] for record in records] == ["s-one"]
     assert records[0]["audio"][0]["file"] == "sentence.wav"
 
@@ -108,6 +138,7 @@ def test_recipe_runs_against_release_only_hierarchical_packages(
         release_only=True,
     )
     records = resolve_recipe(release.output, _recipe(release.release_id))
+    assert isinstance(records, list)
     assert [record["xml_id"] for record in records] == ["s-one"]
     assert records[0]["translations"][0]["text"] == "A fictional translated line."
 
@@ -128,6 +159,7 @@ def test_recipe_matches_from_translation_back_to_formosan(
         }
     )
     records = resolve_recipe(release.output, document)
+    assert isinstance(records, list)
     assert [record["xml_id"] for record in records] == ["s-one"]
 
     selection["translation_language"] = "zho"

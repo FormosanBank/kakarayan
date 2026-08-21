@@ -28,9 +28,12 @@
         "dialects",
         "requirements"
       ],
-      "anyOf": [
-        {"required": ["record_unit"]},
-        {"required": ["record_units", "complete_fields"]}
+      "oneOf": [
+        {"required": ["record_unit"], "not": {"required": ["record_units"]}},
+        {
+          "required": ["record_units", "complete_fields"],
+          "not": {"required": ["record_unit"]}
+        }
       ],
       "properties": {
         "query": {"type": "string", "maxLength": 256},
@@ -158,5 +161,19 @@
       "uniqueItems": true
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"selection": {"required": ["record_unit"]}}
+      },
+      "then": {"properties": {"fields": {"type": "array"}}}
+    },
+    {
+      "if": {
+        "properties": {"selection": {"required": ["record_units"]}}
+      },
+      "then": {"properties": {"fields": {"type": "object"}}}
+    }
+  ],
   "additionalProperties": false
 }

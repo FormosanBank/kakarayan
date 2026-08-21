@@ -313,9 +313,7 @@ def dataset_projection(level: RecordLevel, fields: Sequence[DatasetField]) -> st
     return ",\n".join(dataset_expression(level, field) for field in fields)
 
 
-def dataset_completeness_clauses(
-    level: RecordLevel, fields: Sequence[DatasetField]
-) -> list[str]:
+def dataset_completeness_clauses(level: RecordLevel, fields: Sequence[DatasetField]) -> list[str]:
     """Require optional selected fields to contain owner-level evidence."""
     owner_type, alias = _owner(level)
     clauses: list[str] = []

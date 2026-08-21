@@ -32,7 +32,10 @@ def main(argv: list[str] | None = None) -> int:
             build_release(arguments.repo, release, include_prepared=False)
             records = resolve_recipe(release, recipe)
     write_recipe_export(records, recipe, arguments.output)
-    print(f"Wrote {len(records)} records to {arguments.output}")
+    count = (
+        sum(len(rows) for rows in records.values()) if isinstance(records, dict) else len(records)
+    )
+    print(f"Wrote {count} records to {arguments.output}")
     return 0
 
 

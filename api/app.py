@@ -62,13 +62,10 @@ def _dataset_bytes(result: dict, export_format: Literal["csv", "tsv", "jsonl"]) 
             output.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
     else:
         delimiter = "\t" if export_format == "tsv" else ","
-        writer = csv.DictWriter(
-            output, fieldnames=fields, delimiter=delimiter, lineterminator="\n"
-        )
+        writer = csv.DictWriter(output, fieldnames=fields, delimiter=delimiter, lineterminator="\n")
         writer.writeheader()
         writer.writerows(
-            {field: _spreadsheet_safe(row[field]) for field in fields}
-            for row in result["items"]
+            {field: _spreadsheet_safe(row[field]) for field in fields} for row in result["items"]
         )
     return output.getvalue().encode()
 

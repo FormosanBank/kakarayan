@@ -280,6 +280,7 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
             ORDER BY position LIMIT 1
           ) AS original_form,
           s.audio_url,
+          s.source,
           s.token_count
         FROM sentences s
         JOIN texts t ON t.id = s.parent_id;
