@@ -7,7 +7,8 @@
   top: 0;
   z-index: 30;
   height: 76px;
-  background: rgb(255 255 255 / 96%);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--canvas);
 }
 
 .topbar__inner {
@@ -66,14 +67,29 @@
 }
 
 .primary-nav a {
+  display: grid;
   color: var(--charcoal);
   font-size: 14px;
   font-weight: 500;
   text-decoration: none;
 }
 
+.primary-nav a::after {
+  height: 0;
+  overflow: hidden;
+  content: attr(data-label);
+  font-weight: 700;
+  visibility: hidden;
+}
+
+.primary-nav a:hover {
+  color: var(--ink);
+  font-weight: 700;
+}
+
 .primary-nav a.active {
   color: var(--ink);
+  font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 5px;
 }

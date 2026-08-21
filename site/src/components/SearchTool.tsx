@@ -72,6 +72,7 @@ export function SearchTool({
   const controller = useRef<AbortController | null>(null);
 
   const selectedLanguage = data.languages.find((language) => language.id === languageId);
+  const selectedTranslationLanguage = translationLanguageName(targetLanguage, locale);
   const relevantCorpora = useMemo(
     () => data.corpora.filter((corpus) => corpus.languages.includes(languageId)),
     [data.corpora, languageId],
@@ -187,15 +188,22 @@ export function SearchTool({
       )}
       <form className="search-form" onSubmit={submit}>
         <fieldset className="lookup-direction">
-          <legend>{tx("Search in", "搜尋語言")}</legend>
+          <legend>{tx("Search text language", "搜尋文字的語言")}</legend>
           <div className="lookup-direction__options">
             <label>
               <input type="radio" checked={direction === "formosan"} onChange={() => setDirection("formosan")} />
-              <span><strong>{selectedLanguage ? languageName(selectedLanguage) : "Formosan"}</strong></span>
+              <span>
+                <strong>
+                  {tx("Search in", "搜尋")}{" "}
+                  {selectedLanguage ? languageName(selectedLanguage) : "Formosan"}
+                </strong>
+              </span>
             </label>
             <label>
               <input type="radio" checked={direction === "translation"} onChange={() => setDirection("translation")} />
-              <span><strong>{tx("Translation", "翻譯")}</strong></span>
+              <span>
+                <strong>{tx("Search in", "搜尋")} {selectedTranslationLanguage}</strong>
+              </span>
             </label>
           </div>
         </fieldset>
@@ -257,9 +265,11 @@ export function SearchTool({
         </details>
       </form>
 
-      {error && <p className="callout callout--error">{error}</p>}
+      <div className="search-feedback" aria-live="polite">
+        {error && <p className="callout callout--error">{error}</p>}
+        {searched && !error && <p className="result-count">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
+      </div>
       {notice && <p className="search-notice" role="status">{notice}</p>}
-      {searched && <p className="result-count" aria-live="polite">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
       {!busy && searched && resultCount === 0 && <div className="empty-state">{t("search.noResults")}</div>}
 
       {kind === "dictionary" ? (

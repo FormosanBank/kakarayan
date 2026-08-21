@@ -388,8 +388,34 @@
   }
 
   .footer__inner {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
     align-items: flex-start;
-    flex-direction: column;
+  }
+
+  .footer__brand,
+  .footer nav,
+  .footer .diagnostic-actions {
+    grid-column: 1;
+    width: 100%;
+  }
+
+  .footer nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 20px;
+    justify-content: start;
+  }
+
+  .footer nav a {
+    min-height: 40px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .footer .diagnostic-actions {
+    align-items: flex-start;
   }
 }
 
