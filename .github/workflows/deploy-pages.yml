@@ -59,7 +59,10 @@ jobs:
                   | select(.draft == false and .prerelease == false)
                   | select(.tag_name | startswith("data-"))
                   | select(any(.assets[]; .name == "site-metadata.zip"))
-                ][0].tag_name // ""
+                ]
+                | sort_by(.published_at)
+                | last
+                | .tag_name // ""
               '
             )"
           fi
