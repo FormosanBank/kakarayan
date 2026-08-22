@@ -117,6 +117,7 @@ test("production lookup and finite dataset routes respond", {tag: "@production-s
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 
   await page.goto("research");
+  await page.getByLabel("Word or phrase").fill("lima");
   const previewResponse = page.waitForResponse(/\/datasets\/preview\?/u);
   await page.getByRole("combobox", {name: "Language", exact: true}).first().selectOption({label: "Amis"});
   const preview = await previewResponse;
