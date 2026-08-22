@@ -22,7 +22,7 @@ export function CandidateGroups({
   return (
     <div className="candidate-groups">
       {entries.map((entry) => {
-        const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(entry.display_form)}&language=${encodeURIComponent(entry.language_id)}&target=${encodeURIComponent(targetLanguage)}&direction=formosan&mode=exact${corpusId ? `&corpus=${encodeURIComponent(corpusId)}` : ""}`;
+        const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(entry.headword)}&language=${encodeURIComponent(entry.language_id)}&target=${encodeURIComponent(targetLanguage)}&direction=formosan&mode=exact${corpusId ? `&corpus=${encodeURIComponent(corpusId)}` : ""}`;
         return (
           <article key={entry.id} className="dictionary-entry">
             <header>

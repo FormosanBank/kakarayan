@@ -57,7 +57,7 @@ export function Learn({data}: {data: AppData}) {
 
   function viewSentences(entry: DictionaryEntry) {
     if (entry.language_id !== languageId) changeLanguage(entry.language_id);
-    setPendingSentenceQuery(entry.display_form);
+    setPendingSentenceQuery(entry.headword);
     setLookupKind("sentences");
     setTab("lookup");
   }
