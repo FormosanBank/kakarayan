@@ -245,6 +245,12 @@ test("search controls stay fixed when the action label changes", async ({page}) 
 });
 
 test("dictionary examples stay in the learning workspace", async ({page}) => {
+  await page.route(/\/dictionary\?/u, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json() as {items: Array<{display_form: string}>};
+    if (body.items[0]) body.items[0].display_form = '"Lima';
+    await route.fulfill({response, json: body});
+  });
   await page.goto("learn");
   await page.getByLabel("Word or meaning").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
