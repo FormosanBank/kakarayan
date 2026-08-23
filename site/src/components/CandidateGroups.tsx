@@ -1,13 +1,17 @@
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import {translationLanguageName} from "../translationLanguages";
-import type {AppData, DictionaryEntry} from "../types";
+import type {AppData, DictionaryEntry, MatchMode, SearchDirection} from "../types";
+import {QueryHighlight} from "./QueryHighlight";
 
 export function CandidateGroups({
   data,
   entries,
   targetLanguage,
   corpusId,
+  query,
+  mode,
+  direction,
   onSave,
   onViewSentences,
 }: {
@@ -15,6 +19,9 @@ export function CandidateGroups({
   entries: DictionaryEntry[];
   targetLanguage: string;
   corpusId: string;
+  query: string;
+  mode: MatchMode;
+  direction: SearchDirection;
   onSave: (entry: DictionaryEntry) => void;
   onViewSentences?: (entry: DictionaryEntry) => void;
 }) {
@@ -26,7 +33,14 @@ export function CandidateGroups({
         return (
           <article key={entry.id} className="dictionary-entry">
             <header>
-              <h3>{entry.display_form}</h3>
+              <h3>
+                <QueryHighlight
+                  text={entry.display_form}
+                  query={query}
+                  mode={mode}
+                  active={direction === "formosan"}
+                />
+              </h3>
               <span>
                 {number(entry.occurrences)} {tx("occurrences", "筆出現")}
               </span>
@@ -35,7 +49,16 @@ export function CandidateGroups({
               <span>{translationLanguageName(targetLanguage, locale)}</span>
               {entry.meanings.length ? (
                 <ol>
-                  {entry.meanings.map((meaning) => <li key={meaning}>{meaning}</li>)}
+                  {entry.meanings.map((meaning) => (
+                    <li key={meaning}>
+                      <QueryHighlight
+                        text={meaning}
+                        query={query}
+                        mode={mode}
+                        active={direction === "translation"}
+                      />
+                    </li>
+                  ))}
                 </ol>
               ) : (
                 <p>{tx("No tagged word-level meaning.", "沒有已標記的詞級釋義。")}</p>
@@ -46,13 +69,27 @@ export function CandidateGroups({
                 {entry.pronunciations.length > 0 && (
                   <div>
                     <dt>{tx("Pronunciation", "發音")}</dt>
-                    <dd>{entry.pronunciations.join(" · ")}</dd>
+                    <dd>
+                      <QueryHighlight
+                        text={entry.pronunciations.join(" · ")}
+                        query={query}
+                        mode={mode}
+                        active={direction === "formosan"}
+                      />
+                    </dd>
                   </div>
                 )}
                 {entry.variants.length > 1 && (
                   <div>
                     <dt>{tx("Variants", "變體")}</dt>
-                    <dd>{entry.variants.join(" · ")}</dd>
+                    <dd>
+                      <QueryHighlight
+                        text={entry.variants.join(" · ")}
+                        query={query}
+                        mode={mode}
+                        active={direction === "formosan"}
+                      />
+                    </dd>
                   </div>
                 )}
                 <div>

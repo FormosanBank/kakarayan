@@ -205,6 +205,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   const entry = page.locator(".dictionary-entry").first();
   await expect(entry.getByRole("heading")).toContainText("lima");
   await expect(entry).toContainText("English");
+  await expect(entry.locator(".dictionary-entry__meaning mark").first()).toHaveText(/five/iu);
 
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;

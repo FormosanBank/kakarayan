@@ -344,6 +344,9 @@ export function SearchTool({
           entries={dictionaryEntries}
           targetLanguage={targetLanguage}
           corpusId={corpusId}
+          query={query}
+          mode={match}
+          direction={direction}
           onSave={(entry) => void saveDictionary(entry)}
           {...(onViewSentences && {onViewSentences})}
         />
