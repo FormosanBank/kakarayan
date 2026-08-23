@@ -122,6 +122,13 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     assert dictionary.json()["items"][0]["headword"] == "lima"
     assert dictionary.json()["items"][0]["summary_truncated"] is False
 
+    formosan_sentence = client.get(
+        release_path(client, "concordance"),
+        params={"q": "ima", "language_id": "lang_amis", "match": "contains"},
+    )
+    assert formosan_sentence.status_code == 200
+    assert formosan_sentence.json()["items"]
+
     reverse = client.get(
         url,
         params={
@@ -188,6 +195,33 @@ def test_short_reverse_search_supports_a_prior_release_database(settings, tmp_pa
                 "language_id": "lang_amis",
                 "direction": "translation",
                 "translation_language": "zho",
+                "match": "contains",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["items"]
+
+
+def test_formosan_search_supports_a_prior_release_database(settings, tmp_path) -> None:
+    database_path = tmp_path / "prior-release.sqlite"
+    database_path.write_bytes(settings.database_path.read_bytes())
+    with closing(sqlite3.connect(database_path)) as database:
+        database.execute("DROP TABLE formosan_sentence_terms")
+        database.commit()
+    configured = Settings(
+        manifest_path=settings.manifest_path,
+        database_path=database_path,
+        expected_sha256=None,
+        cors_origins=settings.cors_origins,
+    )
+    with TestClient(create_app(configured)) as client:
+        response = client.get(
+            release_path(client, "concordance"),
+            params={
+                "q": "ima",
+                "language_id": "lang_amis",
+                "direction": "formosan",
                 "match": "contains",
             },
         )

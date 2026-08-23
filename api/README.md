@@ -85,10 +85,10 @@ cache and may memory-map up to 2 GiB of the shared immutable file. Analytical wo
 most one of the two global query slots, leaving the other available for dictionary,
 sentence, and record-detail requests.
 
-Current releases also include `translation_sentence_terms`, a compact language-scoped
-search projection. It keeps exact, prefix, and short Chinese substring sentence searches
-inside the selected Formosan and translation languages. The API retains a slower compatible
-path for an already published release that predates this projection.
+Current releases also include compact, language-scoped `formosan_sentence_terms` and
+`translation_sentence_terms` search projections. They resolve matching sentences before
+loading complete records, avoiding scattered joins across millions of tier rows. The API
+retains compatible paths for already published releases that predate these projections.
 
 `api/Dockerfile` builds the service deployed on the Tokyo Lightsail host. Any future host
 must preserve the same activation, immutable-release, health-check, CORS, and rollback

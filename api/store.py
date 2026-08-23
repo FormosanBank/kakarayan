@@ -205,13 +205,15 @@ class CorpusStore:
             raise
         probe = self._connections.get_nowait()
         try:
-            self._has_translation_sentence_terms = (
-                probe.execute(
-                    "SELECT 1 FROM sqlite_schema "
-                    "WHERE type = 'table' AND name = 'translation_sentence_terms'"
-                ).fetchone()
-                is not None
-            )
+            search_tables = {
+                str(row["name"])
+                for row in probe.execute(
+                    "SELECT name FROM sqlite_schema WHERE type = 'table' "
+                    "AND name IN ('formosan_sentence_terms', 'translation_sentence_terms')"
+                )
+            }
+            self._has_formosan_sentence_terms = "formosan_sentence_terms" in search_tables
+            self._has_translation_sentence_terms = "translation_sentence_terms" in search_tables
         finally:
             self._connections.put(probe)
 
@@ -397,6 +399,34 @@ class CorpusStore:
         scope, scope_parameters = self._scope(language_id, corpus_id, dialect)
         where = " AND ".join(scope)
         if direction == "formosan":
+            if self._has_formosan_sentence_terms:
+                term_clauses = ["term.language_id = ?"]
+                formosan_term_parameters: list[object] = [language_id]
+                if corpus_id:
+                    term_clauses.append("t.corpus_id = ?")
+                    formosan_term_parameters.append(corpus_id)
+                if dialect:
+                    term_clauses.append("t.dialect = ?")
+                    formosan_term_parameters.append(dialect)
+                if match == "contains" and len(normalized) < 3:
+                    term_clause = "term.normalized LIKE ? ESCAPE '\\'"
+                    formosan_term_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
+                else:
+                    term_clause, formosan_term_match_parameters = _predicate(
+                        "term.normalized", normalized, match, "formosan"
+                    )
+                term_clauses.append(term_clause)
+                formosan_term_parameters.extend(formosan_term_match_parameters)
+                return (
+                    f"""
+                    SELECT DISTINCT term.sentence_id
+                    FROM formosan_sentence_terms term
+                    JOIN sentences s ON s.id = term.sentence_id
+                    JOIN texts t ON t.id = s.parent_id
+                    WHERE {" AND ".join(term_clauses)}
+                    """,
+                    tuple(formosan_term_parameters),
+                )
             token_clause, token_parameters = _predicate(
                 "tok.normalized", normalized, match, "formosan"
             )
