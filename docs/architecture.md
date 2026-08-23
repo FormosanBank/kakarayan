@@ -43,9 +43,10 @@ logic changes without a new corpus commit. Its manifest records:
 - compressed and expanded identity for the query database.
 
 The site requires all static envelopes to agree on release ID, source commit, and Kakarayan
-commit. It then checks `/readyz` and enables interactive queries only when the API serves the
-same release. Static documentation, catalogues, downloads, and local cards remain usable if
-the query service is unavailable. A static or API release mismatch fails closed.
+commit. It then checks `/readyz` with a short timeout and enables interactive queries only
+when the API serves the same release. Static documentation, catalogues, downloads, and local
+cards remain usable if the query service is unavailable or busy. A static or API release
+mismatch fails closed.
 
 ## React boundary
 
@@ -78,6 +79,7 @@ The API owns:
 - previews and finite streamed CSV, TSV, or JSON Lines exports;
 - per-IP general and export rate limits;
 - one global SQLite query-concurrency boundary;
+- bounded queue waits and route-specific query deadlines;
 - health, readiness, release identity, and privacy-preserving operational records.
 
 Successful release-scoped GET responses are public and immutable. Validation and readiness
@@ -117,6 +119,8 @@ does not build a browser search engine or a second source projection.
 - GitHub Pages serves the application and static metadata.
 - GitHub Releases serves immutable prepared downloads and the compressed query read model.
 - The Tokyo Lightsail Docker deployment serves the query API.
+- Its immutable SQLite read model includes language-scoped Formosan sentence, translation
+  sentence, and reverse-dictionary terms so lookup does not scan complete tier inventories.
 - Hugging Face model services provide optional MT and ASR.
 - The FormosanBank GitBook remains the maintained long-form documentation source embedded
   by the Docs route.

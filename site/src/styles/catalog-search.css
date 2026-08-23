@@ -572,11 +572,13 @@
   line-height: 1.65;
 }
 
-.kwic mark {
+.query-highlight {
   padding: 1px 3px;
   border-radius: 3px;
   color: var(--ink);
   background: #ececec;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .tier-pair {
@@ -620,6 +622,10 @@
   margin: 0;
 }
 
+.search-feedback__cancel {
+  margin: 0;
+}
+
 .result-count {
   color: var(--body);
   font-size: 13px;
@@ -640,13 +646,6 @@
   font-size: 14px;
   font-weight: 400;
   overflow-wrap: anywhere;
-}
-
-.translations mark {
-  padding: 1px 3px;
-  border-radius: 3px;
-  color: var(--ink);
-  background: #ececec;
 }
 
 .result-card__details {

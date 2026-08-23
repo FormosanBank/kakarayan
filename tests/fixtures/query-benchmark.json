@@ -63,6 +63,22 @@
       "maximum_gzip_bytes": 102400
     },
     {
+      "name": "reverse dictionary common word",
+      "path": "/v1/releases/{release_id}/dictionary",
+      "parameters": {
+        "q": "mother",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "eng",
+        "match": "exact",
+        "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
       "name": "reverse dictionary contains",
       "path": "/v1/releases/{release_id}/dictionary",
       "parameters": {

@@ -257,6 +257,101 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
         CREATE INDEX tier_scope_sentence
         ON tier_scope(sentence_id, owner_type, owner_id);
 
+        CREATE TABLE formosan_sentence_terms (
+          language_id TEXT NOT NULL,
+          normalized TEXT NOT NULL,
+          sentence_id TEXT NOT NULL,
+          PRIMARY KEY (language_id, normalized, sentence_id)
+        ) WITHOUT ROWID;
+
+        INSERT INTO formosan_sentence_terms
+        SELECT t.language_id, tok.normalized, tok.sentence_id
+        FROM tokens tok
+        JOIN sentences s ON s.id = tok.sentence_id
+        JOIN texts t ON t.id = s.parent_id
+        WHERE tok.normalized <> ''
+        GROUP BY t.language_id, tok.normalized, tok.sentence_id;
+
+        INSERT OR IGNORE INTO formosan_sentence_terms
+        SELECT t.language_id, f.normalized, ts.sentence_id
+        FROM forms f
+        JOIN tier_scope ts
+          ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id
+        JOIN sentences s ON s.id = ts.sentence_id
+        JOIN texts t ON t.id = s.parent_id
+        WHERE f.normalized <> ''
+        GROUP BY t.language_id, f.normalized, ts.sentence_id;
+
+        CREATE TABLE translation_sentence_terms (
+          language_id TEXT NOT NULL,
+          xml_lang TEXT NOT NULL,
+          normalized TEXT NOT NULL,
+          sentence_id TEXT NOT NULL,
+          PRIMARY KEY (language_id, xml_lang, normalized, sentence_id)
+        ) WITHOUT ROWID;
+
+        INSERT INTO translation_sentence_terms
+        SELECT t.language_id, tr.xml_lang, tr.normalized, ts.sentence_id
+        FROM translations tr
+        JOIN tier_scope ts
+          ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+        JOIN sentences s ON s.id = ts.sentence_id
+        JOIN texts t ON t.id = s.parent_id
+        WHERE tr.normalized <> ''
+        GROUP BY t.language_id, tr.xml_lang, tr.normalized, ts.sentence_id;
+
+        CREATE TABLE reverse_dictionary_terms (
+          language_id TEXT NOT NULL,
+          xml_lang TEXT NOT NULL,
+          normalized TEXT NOT NULL,
+          corpus_id TEXT NOT NULL,
+          dialect TEXT NOT NULL,
+          headword TEXT NOT NULL,
+          display_form TEXT NOT NULL,
+          occurrences INTEGER NOT NULL,
+          PRIMARY KEY (
+            language_id, xml_lang, normalized, corpus_id, dialect, headword, display_form
+          )
+        ) WITHOUT ROWID;
+
+        INSERT INTO reverse_dictionary_terms
+        WITH candidates AS (
+          SELECT t.language_id, tr.xml_lang, tr.normalized, t.corpus_id, t.dialect,
+                 f.normalized AS headword, f.text AS display_form
+          FROM translations tr
+          JOIN tier_scope ts
+            ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+          JOIN sentences s ON s.id = ts.sentence_id
+          JOIN texts t ON t.id = s.parent_id
+          JOIN forms f
+            ON f.owner_type = tr.owner_type AND f.owner_id = tr.owner_id
+          WHERE tr.owner_type <> 'sentence' AND tr.normalized <> '' AND f.normalized <> ''
+          UNION ALL
+          SELECT t.language_id, tr.xml_lang, tr.normalized, t.corpus_id, t.dialect,
+                 tok.normalized AS headword, tok.surface AS display_form
+          FROM translations tr
+          JOIN tier_scope ts
+            ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+          JOIN sentences s ON s.id = ts.sentence_id
+          JOIN texts t ON t.id = s.parent_id
+          JOIN tokens tok ON tr.owner_type = 'word' AND tok.word_id = tr.owner_id
+          WHERE tr.normalized <> '' AND tok.normalized <> ''
+          UNION ALL
+          SELECT t.language_id, tr.xml_lang, tr.normalized, t.corpus_id, t.dialect,
+                 tok.normalized AS headword, tok.surface AS display_form
+          FROM translations tr
+          JOIN sentences s
+            ON tr.owner_type = 'sentence' AND s.id = tr.owner_id AND s.token_count = 1
+          JOIN texts t ON t.id = s.parent_id
+          JOIN tokens tok ON tok.sentence_id = s.id
+          WHERE tr.normalized <> '' AND tok.normalized <> ''
+        )
+        SELECT language_id, xml_lang, normalized, corpus_id, dialect,
+               headword, display_form, COUNT(*)
+        FROM candidates
+        GROUP BY language_id, xml_lang, normalized, corpus_id, dialect,
+                 headword, display_form;
+
         CREATE VIEW sentence_view AS
         SELECT
           s.id AS sentence_id,

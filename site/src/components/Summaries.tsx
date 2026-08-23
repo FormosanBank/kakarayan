@@ -1,6 +1,7 @@
-import {useMemo, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 
 import {summaries} from "../apiClient";
+import {apiErrorMessage, isAbortError} from "../apiErrors";
 import {useI18n} from "../i18n";
 import type {AppData} from "../types";
 import {LoadingState} from "./LoadingState";
@@ -41,6 +42,8 @@ export function Summaries({data}: {data: AppData}) {
     [data.corpora, languageId],
   );
 
+  useEffect(() => () => controller.current?.abort(), []);
+
   async function run() {
     if (!languageId) return;
     controller.current?.abort();
@@ -52,8 +55,8 @@ export function Summaries({data}: {data: AppData}) {
     try {
       setResult(await summaries(data.meta.release_id, languageId, corpusId, next.signal));
     } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
-        setError(cause instanceof Error ? cause.message : String(cause));
+      if (!isAbortError(cause)) {
+        setError(apiErrorMessage(cause, tx));
       }
     } finally {
       if (controller.current === next) setBusy(false);
@@ -81,11 +84,25 @@ export function Summaries({data}: {data: AppData}) {
             </select>
           </label>
         </div>
-        <button className="button button--primary" disabled={!languageId || busy || !data.query.available} onClick={() => void run()}>
-          {busy ? tx("Computing…", "計算中…") : tx("Compute summaries", "計算摘要")}
-        </button>
+        <div className="button-row">
+          <button className="button button--primary" disabled={!languageId || busy || !data.query.available} onClick={() => void run()}>
+            {busy ? tx("Computing…", "計算中…") : tx("Compute summaries", "計算摘要")}
+          </button>
+          {busy && (
+            <button className="text-button" type="button" onClick={() => controller.current?.abort()}>
+              {tx("Cancel", "取消")}
+            </button>
+          )}
+        </div>
       </div>
-      {error && <p className="callout callout--error">{error}</p>}
+      {error && (
+        <div className="callout callout--error callout--action">
+          <span>{error}</span>
+          <button className="text-button" type="button" onClick={() => void run()}>
+            {tx("Try again", "重試")}
+          </button>
+        </div>
+      )}
       {busy && (
         <LoadingState
           columns={[tx("Form", "形式"), tx("Count", "數量")]}

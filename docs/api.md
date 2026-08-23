@@ -154,7 +154,9 @@ Errors use:
 
 Clients should branch on `code`. Expected categories include invalid input, release
 mismatch, missing records, rate limiting, excessive query work, rights denial, and service
-not ready. A `rate_limited` response uses status 429 and includes `Retry-After`.
+not ready. A `rate_limited` response uses status 429 and includes `Retry-After`. A
+saturated query pool returns `503 server_busy` with the same header instead of waiting
+indefinitely.
 
 ## HTTP and privacy behavior
 
@@ -166,6 +168,8 @@ not ready. A `rate_limited` response uses status 429 and includes `Retry-After`.
 - Operational records include method, route template, status, duration, bytes, release ID,
   and a failure code when applicable. They exclude URLs, raw queries, sentence text,
   recordings, and model input.
+- `Server-Timing` reports API processing time so browser diagnostics can separate server
+  work from network and TLS latency.
 
 ## Request controls
 
@@ -174,12 +178,15 @@ The single production API process uses per-IP token buckets:
 - 60 sustained requests per minute, with up to 20 immediate requests after an idle period;
 - 5 sustained dataset exports per minute, with up to 5 immediate exports after an idle
   period;
-- 4 SQLite queries executing at once across all users.
+- 2 SQLite queries executing at once across all users;
+- 1 dataset or aggregate query executing at once, preserving the other lane for lookup.
 
 Export requests consume both kinds of request token. Requests above the rate return 429.
-Database work above the concurrency limit waits for a slot, keeping the small server from
-starting too many large reads at once. `/healthz`, `/readyz`, and CORS `OPTIONS` requests do
-not consume tokens.
+Database work above the concurrency limit waits for at most one second, then returns
+`503 server_busy`. `/readyz` checks the already-validated active manifest without entering
+the database queue. Normal queries, previews, and exports also have hard deadlines so an
+abandoned request cannot hold capacity indefinitely. `/healthz`, `/readyz`, and CORS
+`OPTIONS` requests do not consume tokens.
 
 These counters live in the one API process and reset when its container restarts. They are
 not a billing, identity, or access-control system. CORS controls browser origins only;
@@ -221,7 +228,14 @@ The serving process requires a database and active manifest prepared before star
 | `KAKARAYAN_REQUEST_BURST` | Immediately available general tokens; default 20 |
 | `KAKARAYAN_EXPORTS_PER_MINUTE` | Sustained exports per minute per client IP; default 5 |
 | `KAKARAYAN_EXPORT_BURST` | Immediately available export tokens; default 5 |
-| `KAKARAYAN_QUERY_CONCURRENCY` | SQLite queries executing together; default 4 |
+| `KAKARAYAN_QUERY_CONCURRENCY` | SQLite queries executing together; default 2 |
+| `KAKARAYAN_ANALYTICAL_QUERY_CONCURRENCY` | Dataset and aggregate queries executing together; default 1 |
+| `KAKARAYAN_QUERY_QUEUE_WAIT_SECONDS` | Maximum wait for a query slot; default 1 |
+| `KAKARAYAN_QUERY_TIMEOUT_SECONDS` | Normal query deadline; default 10 |
+| `KAKARAYAN_DATASET_PREVIEW_TIMEOUT_SECONDS` | Dataset preview deadline; default 15 |
+| `KAKARAYAN_DATASET_EXPORT_TIMEOUT_SECONDS` | Dataset export deadline; default 120 |
+| `KAKARAYAN_SQLITE_CACHE_MIB` | Persistent cache per pooled SQLite connection; default 128 MiB |
+| `KAKARAYAN_SQLITE_MMAP_MIB` | Immutable database mapping ceiling per connection; default 2,048 MiB |
 
 Use `python -m api.prepare_release` during deployment. Runtime startup never downloads or
 decompresses a release.

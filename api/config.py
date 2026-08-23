@@ -7,11 +7,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from api.limits import (
+    DEFAULT_ANALYTICAL_QUERY_CONCURRENCY,
+    DEFAULT_DATASET_EXPORT_TIMEOUT_SECONDS,
+    DEFAULT_DATASET_PREVIEW_TIMEOUT_SECONDS,
     DEFAULT_EXPORT_BURST,
     DEFAULT_EXPORTS_PER_MINUTE,
     DEFAULT_QUERY_CONCURRENCY,
+    DEFAULT_QUERY_QUEUE_WAIT_SECONDS,
+    DEFAULT_QUERY_TIMEOUT_SECONDS,
     DEFAULT_REQUEST_BURST,
     DEFAULT_REQUESTS_PER_MINUTE,
+    DEFAULT_SQLITE_CACHE_MIB,
+    DEFAULT_SQLITE_MMAP_MIB,
     DEFAULT_SQLITE_PROGRESS_CALLBACKS,
 )
 
@@ -30,6 +37,16 @@ def _positive_integer(value: str, name: str) -> int:
     return parsed
 
 
+def _positive_number(value: str, name: str) -> float:
+    try:
+        parsed = float(value)
+    except ValueError as error:
+        raise ValueError(f"{name} must be a positive number") from error
+    if parsed <= 0:
+        raise ValueError(f"{name} must be a positive number")
+    return parsed
+
+
 @dataclass(frozen=True)
 class Settings:
     manifest_path: Path
@@ -42,6 +59,13 @@ class Settings:
     exports_per_minute: int = DEFAULT_EXPORTS_PER_MINUTE
     export_burst: int = DEFAULT_EXPORT_BURST
     query_concurrency: int = DEFAULT_QUERY_CONCURRENCY
+    analytical_query_concurrency: int = DEFAULT_ANALYTICAL_QUERY_CONCURRENCY
+    query_queue_wait_seconds: float = DEFAULT_QUERY_QUEUE_WAIT_SECONDS
+    query_timeout_seconds: float = DEFAULT_QUERY_TIMEOUT_SECONDS
+    dataset_preview_timeout_seconds: float = DEFAULT_DATASET_PREVIEW_TIMEOUT_SECONDS
+    dataset_export_timeout_seconds: float = DEFAULT_DATASET_EXPORT_TIMEOUT_SECONDS
+    sqlite_cache_mib: int = DEFAULT_SQLITE_CACHE_MIB
+    sqlite_mmap_mib: int = DEFAULT_SQLITE_MMAP_MIB
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -96,6 +120,55 @@ class Settings:
                 ),
                 "KAKARAYAN_QUERY_CONCURRENCY",
             ),
+            analytical_query_concurrency=_positive_integer(
+                os.environ.get(
+                    "KAKARAYAN_ANALYTICAL_QUERY_CONCURRENCY",
+                    str(DEFAULT_ANALYTICAL_QUERY_CONCURRENCY),
+                ),
+                "KAKARAYAN_ANALYTICAL_QUERY_CONCURRENCY",
+            ),
+            query_queue_wait_seconds=_positive_number(
+                os.environ.get(
+                    "KAKARAYAN_QUERY_QUEUE_WAIT_SECONDS",
+                    str(DEFAULT_QUERY_QUEUE_WAIT_SECONDS),
+                ),
+                "KAKARAYAN_QUERY_QUEUE_WAIT_SECONDS",
+            ),
+            query_timeout_seconds=_positive_number(
+                os.environ.get(
+                    "KAKARAYAN_QUERY_TIMEOUT_SECONDS",
+                    str(DEFAULT_QUERY_TIMEOUT_SECONDS),
+                ),
+                "KAKARAYAN_QUERY_TIMEOUT_SECONDS",
+            ),
+            dataset_preview_timeout_seconds=_positive_number(
+                os.environ.get(
+                    "KAKARAYAN_DATASET_PREVIEW_TIMEOUT_SECONDS",
+                    str(DEFAULT_DATASET_PREVIEW_TIMEOUT_SECONDS),
+                ),
+                "KAKARAYAN_DATASET_PREVIEW_TIMEOUT_SECONDS",
+            ),
+            dataset_export_timeout_seconds=_positive_number(
+                os.environ.get(
+                    "KAKARAYAN_DATASET_EXPORT_TIMEOUT_SECONDS",
+                    str(DEFAULT_DATASET_EXPORT_TIMEOUT_SECONDS),
+                ),
+                "KAKARAYAN_DATASET_EXPORT_TIMEOUT_SECONDS",
+            ),
+            sqlite_cache_mib=_positive_integer(
+                os.environ.get(
+                    "KAKARAYAN_SQLITE_CACHE_MIB",
+                    str(DEFAULT_SQLITE_CACHE_MIB),
+                ),
+                "KAKARAYAN_SQLITE_CACHE_MIB",
+            ),
+            sqlite_mmap_mib=_positive_integer(
+                os.environ.get(
+                    "KAKARAYAN_SQLITE_MMAP_MIB",
+                    str(DEFAULT_SQLITE_MMAP_MIB),
+                ),
+                "KAKARAYAN_SQLITE_MMAP_MIB",
+            ),
         )
 
     def validate(self) -> None:
@@ -108,6 +181,17 @@ class Settings:
                 self.exports_per_minute,
                 self.export_burst,
                 self.query_concurrency,
+                self.analytical_query_concurrency,
+                self.query_queue_wait_seconds,
+                self.query_timeout_seconds,
+                self.dataset_preview_timeout_seconds,
+                self.dataset_export_timeout_seconds,
+                self.sqlite_cache_mib,
+                self.sqlite_mmap_mib,
             )
         ):
             raise ValueError("Service resource limits must be positive")
+        if self.analytical_query_concurrency > self.query_concurrency:
+            raise ValueError(
+                "KAKARAYAN_ANALYTICAL_QUERY_CONCURRENCY cannot exceed KAKARAYAN_QUERY_CONCURRENCY"
+            )

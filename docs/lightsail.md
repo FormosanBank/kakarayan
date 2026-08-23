@@ -1,7 +1,7 @@
 # Lightsail query API deployment
 
 This runbook deploys the Kakarayan query API and its read-only SQLite database to
-one small Ubuntu Lightsail instance in Tokyo. GitHub Pages continues to serve the
+one Ubuntu Lightsail instance in Tokyo. GitHub Pages continues to serve the
 React site. GitHub Releases continues to store immutable data-release files.
 
 The deployed request path is:
@@ -72,7 +72,7 @@ chmod 600 /absolute/path/to/hunter-ssh-tokyo.pem
 ssh -i /absolute/path/to/hunter-ssh-tokyo.pem ubuntu@STATIC_IP
 ```
 
-Inspect the small machine before changing it:
+Inspect the machine before changing it:
 
 ```bash
 uname -a
@@ -81,9 +81,10 @@ swapon --show
 df -h /
 ```
 
-The API container may use up to 448 MiB and Caddy up to 64 MiB. Image building,
-large exports, and release activation also need temporary headroom. Add a 2 GiB swap file
-once:
+The production 4 GiB host gives the API a 3 GiB ceiling and Caddy a 128 MiB
+ceiling. The remaining memory is available to Ubuntu, Docker, filesystem cache,
+and deployment work. Add a 2 GiB swap file once as protection against short
+deployment spikes:
 
 ```bash
 if [ ! -f /swapfile ]; then
@@ -98,8 +99,8 @@ free -h
 ```
 
 Swap is slower than RAM. It is a safety net for deployment spikes, not a way to
-make slow queries fast. If normal traffic uses swap continuously, move to the 1 GiB
-Lightsail plan.
+make slow queries fast. If normal traffic uses swap continuously, inspect the
+active query workload and memory use before increasing concurrency or host size.
 
 ## 3. Install Docker Engine and Compose
 
@@ -148,7 +149,7 @@ Clone the public repository and check out the pull-request branch:
 sudo install -d -o ubuntu -g ubuntu /opt/kakarayan
 git clone https://github.com/FormosanBank/kakarayan.git /opt/kakarayan
 cd /opt/kakarayan
-git checkout audit/lean-v1-remediation
+git checkout <PULL_REQUEST_BRANCH>
 git status --short --branch
 ```
 
@@ -162,11 +163,18 @@ nano .env
 
 Set `KAKARAYAN_HOSTNAME` to the hostname made from the attached static IP. Leave
 the production and local frontend origins in `KAKARAYAN_CORS_ORIGINS`. The `.env`
-file contains no password and is ignored by Git, but it remains host-specific. The default
-`KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantially longer analytical queries than
-the original deployment. Keep the initial request controls at 60 requests per minute,
-5 exports per minute, and 4 concurrent SQLite queries. They can be tuned in `.env` without
-changing code.
+file contains no password and is ignored by Git, but it remains host-specific.
+Keep the 4 GiB host defaults of `3g` for the API and `128m` for Caddy. The default
+`KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantial analytical queries. Keep
+the initial request controls at 60 requests per minute, 5 exports per minute, and
+2 concurrent SQLite queries. Only one dataset or aggregate query may run at once,
+which leaves one lane available for dictionary, sentence, and record-detail requests.
+The API reuses both read-only connections with a 128 MiB SQLite cache per connection
+and a 2 GiB immutable-file mapping ceiling. The larger instance still has two vCPUs,
+so extra RAM improves cache and headroom without adding more query workers. A request
+waits at most one second for a slot. Normal queries, previews, and exports have
+separate 10, 15, and 120 second deadlines. These values can be tuned in `.env`
+without changing code.
 
 The application keys its limits from Uvicorn's resolved client address. Caddy supplies the
 client address through proxy headers, and Uvicorn trusts those headers because the API port
@@ -351,8 +359,8 @@ For later FormosanBank updates:
 5. Restart with `docker compose up -d` and verify `/readyz`.
 6. Deploy Pages with that same release ID.
 
-Keep the previous published GitHub release for rollback. On a 20 GB disk, do not
-keep extra database copies in the host data directory.
+Keep the previous published GitHub release for rollback. Do not leave partial or
+stale database copies in the host data directory after a successful activation.
 
 ## Rollback
 
@@ -360,19 +368,37 @@ Run the activation command with the prior published manifest, start the stack, a
 confirm `/readyz`. Then deploy Pages with the prior release ID. GitHub Releases are
 the durable immutable source, so rollback does not require a server snapshot.
 
+## Resizing or replacing the host
+
+The current production host was created from a Lightsail snapshot and kept the
+same static IP. A replacement VM has a new SSH host key even when it receives the
+old IP. Verify the new fingerprint before trusting it, then confirm all of the
+following before considering the migration complete:
+
+1. `hostname`, `free -h`, and `df -h /` show the intended new machine.
+2. `docker compose ps` shows healthy API and Caddy services.
+3. `docker inspect` shows the intended container memory limits.
+4. `/readyz` reports the same immutable release ID as GitHub Pages.
+5. One real dictionary query and one sentence query succeed over HTTPS.
+
+Moving the static IP preserves the public API URL and TLS hostname. Caddy obtains
+or renews the certificate on the replacement host. No Pages configuration or
+release identity changes are required.
+
 ## Cost and capacity
 
-The baseline is the $5 monthly Lightsail bundle. An attached static IP has no added
-charge, and Caddy certificates are free. The plan includes 20 GB SSD and 1 TB monthly
-transfer. Optional Lightsail snapshots are billed separately per stored GB.
+Production uses the 4 GiB RAM, 2 vCPU, and 80 GB SSD general-purpose Lightsail
+bundle in Tokyo. At the listed plan rate when this runbook was updated, it costs
+$24 per month and includes 4 TB monthly transfer. The attached static IP has no
+added charge while attached, and Caddy certificates are free. Optional Lightsail
+snapshots are billed separately per stored GB.
 
-The 512 MiB instance is appropriate for the current deployment because the service
-has one read-only process, a local indexed database, streamed exports, and no corpus
-build at request time. The API permits 100,000 export rows per selected XML level and uses
-448 MiB of the container budget; Caddy may use the remaining 64 MiB. Watch memory, swap,
-disk, latency, and request failures. Move
-to the 1 GiB plan if the process uses swap during normal traffic, queries queue under
-small bursts, or release updates no longer have enough disk headroom.
+The API permits 100,000 export rows per selected XML level. Its 3 GiB container
+budget gives the persistent SQLite caches and mapped database pages room to reuse
+the indexed data without allowing one process to consume the whole host. Caddy has
+a 128 MiB ceiling. Keep total query concurrency at two and analytical concurrency at
+one because this plan still has two vCPUs. Watch memory, swap, disk, latency, queue
+rejections, and request deadlines before changing those values.
 
 This host does not run MT or ASR models. Those remain independent Hugging Face calls,
 so deploying the lookup API improves corpus tools but does not remove model warm-up

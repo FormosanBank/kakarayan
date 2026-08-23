@@ -1,8 +1,10 @@
-import {useEffect, useState, type ReactNode} from "react";
+import {useEffect, useState} from "react";
 
 import {sentenceDetail} from "../apiClient";
+import {apiErrorMessage} from "../apiErrors";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
+import {queryMatchesText} from "../queryMatching";
 import {translationLanguageName} from "../translationLanguages";
 import type {
   AppData,
@@ -12,14 +14,7 @@ import type {
   SentenceSummary,
 } from "../types";
 import {LoadingState} from "./LoadingState";
-
-function translationTextMatches(value: string, query: string, mode: MatchMode): boolean {
-  const haystack = value.normalize("NFC").toLocaleLowerCase();
-  const needle = query.trim().normalize("NFC").toLocaleLowerCase();
-  if (mode === "exact") return haystack === needle;
-  if (mode === "prefix") return haystack.startsWith(needle);
-  return haystack.includes(needle);
-}
+import {QueryHighlight} from "./QueryHighlight";
 
 function playableUrl(record: SearchRecord, index: number): string {
   const audio = record.audio[index];
@@ -35,53 +30,37 @@ function playableUrl(record: SearchRecord, index: number): string {
   return "";
 }
 
-function HighlightedText({
-  text,
-  query,
-  active,
-}: {
-  text: string;
-  query: string;
-  active: boolean;
-}) {
-  if (!active) return text;
-  const needle = query.trim();
-  if (!needle) return text;
-  const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "giu");
-  const parts: ReactNode[] = [];
-  let cursor = 0;
-  for (const match of text.matchAll(pattern)) {
-    const index = match.index;
-    const value = match[0];
-    if (!value) continue;
-    if (index > cursor) parts.push(text.slice(cursor, index));
-    parts.push(<mark key={`${index}-${value}`}>{value}</mark>);
-    cursor = index + value.length;
-  }
-  if (!parts.length) return text;
-  if (cursor < text.length) parts.push(text.slice(cursor));
-  return <>{parts}</>;
-}
-
 function SentenceText({
   record,
   query,
+  mode,
   highlight,
 }: {
   record: SearchRecord;
   query: string;
+  mode: MatchMode;
   highlight: boolean;
 }) {
   const {tx} = useI18n();
   const text = record.standard || record.original || tx("Untranscribed sentence", "未轉錄句子");
   return (
     <h3 className="kwic">
-      <HighlightedText text={text} query={query} active={highlight} />
+      <QueryHighlight text={text} query={query} mode={mode} active={highlight} />
     </h3>
   );
 }
 
-function Interlinear({record}: {record: SearchRecord}) {
+function Interlinear({
+  record,
+  query,
+  mode,
+  direction,
+}: {
+  record: SearchRecord;
+  query: string;
+  mode: MatchMode;
+  direction: SearchDirection;
+}) {
   const {tx} = useI18n();
   if (!record.words.length) return null;
   return (
@@ -123,13 +102,25 @@ function Interlinear({record}: {record: SearchRecord}) {
                 ),
               ),
             ];
+            const formText = forms.map((item) => item.text).join(" / ");
+            const phonologyText = phonology.map((item) => item.text).join(" / ");
+            const morphemeText = morphemeForms.filter(Boolean).join(" - ");
+            const glossText = glosses.map((item) => item.text).join(" · ");
             return (
               <tr key={word.id}>
                 <th scope="row">{word.position + 1}</th>
-                <td>{forms.map((item) => item.text).join(" / ") || tx("not supplied", "未提供")}</td>
-                <td>{phonology.map((item) => item.text).join(" / ") || tx("not supplied", "未提供")}</td>
-                <td>{morphemeForms.filter(Boolean).join(" - ") || tx("not segmented", "未切分")}</td>
-                <td>{glosses.map((item) => item.text).join(" · ") || tx("not supplied", "未提供")}</td>
+                <td>{formText
+                  ? <QueryHighlight text={formText} query={query} mode={mode} active={direction === "formosan"} />
+                  : tx("not supplied", "未提供")}</td>
+                <td>{phonologyText
+                  ? <QueryHighlight text={phonologyText} query={query} mode={mode} active={direction === "formosan"} />
+                  : tx("not supplied", "未提供")}</td>
+                <td>{morphemeText
+                  ? <QueryHighlight text={morphemeText} query={query} mode={mode} active={direction === "formosan"} />
+                  : tx("not segmented", "未切分")}</td>
+                <td>{glossText
+                  ? <QueryHighlight text={glossText} query={query} mode={mode} active={direction === "translation"} />
+                  : tx("not supplied", "未提供")}</td>
               </tr>
             );
           })}
@@ -188,17 +179,21 @@ function SearchResultDetail({
         <span>{corpus?.name}</span>
       </div>
       <div lang={language?.iso639_3}>
-        <SentenceText record={record} query={query} highlight={direction === "formosan"} />
+        <SentenceText record={record} query={query} mode={mode} highlight={direction === "formosan"} />
       </div>
       {record.original && record.original !== record.standard && (
         <dl className="tier-pair">
           <div>
             <dt>{t("search.original")}</dt>
-            <dd lang={language?.iso639_3}>{record.original}</dd>
+            <dd lang={language?.iso639_3}>
+              <QueryHighlight text={record.original} query={query} mode={mode} active={direction === "formosan"} />
+            </dd>
           </div>
           <div>
             <dt>{t("search.standard")}</dt>
-            <dd lang={language?.iso639_3}>{record.standard}</dd>
+            <dd lang={language?.iso639_3}>
+              <QueryHighlight text={record.standard} query={query} mode={mode} active={direction === "formosan"} />
+            </dd>
           </div>
         </dl>
       )}
@@ -207,7 +202,7 @@ function SearchResultDetail({
           .filter((translation) => !targetLanguage || translation.xml_lang === targetLanguage)
           .map((translation, index) => {
             const isMatch = direction === "translation" &&
-              translationTextMatches(translation.text, query, mode);
+              queryMatchesText(translation.text, query, mode);
             return (
               <p
                 key={`${translation.xml_lang}-${index}`}
@@ -219,7 +214,7 @@ function SearchResultDetail({
                   {isMatch && <small>{tx("match", "相符")}</small>}
                 </span>
                 <span className="translation-text">
-                  <HighlightedText text={translation.text} query={query} active={isMatch} />
+                  <QueryHighlight text={translation.text} query={query} mode={mode} active={isMatch} />
                 </span>
               </p>
             );
@@ -229,12 +224,13 @@ function SearchResultDetail({
       {hasAnalysis && (
         <details className="tier-details">
           <summary>{tx("Interlinear analysis", "逐行對譯分析")}</summary>
-          <Interlinear record={record} />
+          <Interlinear record={record} query={query} mode={mode} direction={direction} />
           {record.phonology
             .filter((item) => item.owner_type === "sentence")
             .map((item) => (
               <p key={`${item.owner_id}-${item.position}`}>
-                <strong>{tx("Sentence phonology", "句子音韻")}</strong> {item.text}
+                <strong>{tx("Sentence phonology", "句子音韻")}</strong>{" "}
+                <QueryHighlight text={item.text} query={query} mode={mode} active={direction === "formosan"} />
               </p>
             ))}
         </details>
@@ -349,13 +345,13 @@ export function SearchResultCard({
       setRecord,
       (cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message : String(cause));
+          setError(apiErrorMessage(cause, tx));
           setOpen(false);
         }
       },
     );
     return () => controller.abort();
-  }, [data.meta.release_id, open, record, summary.id]);
+  }, [data.meta.release_id, open, record, summary.id, tx]);
 
   if (record) {
     return (
@@ -392,9 +388,10 @@ export function SearchResultCard({
         <span>{corpus?.name ?? summary.corpus_id}</span>
       </div>
       <h3 className="kwic">
-        <HighlightedText
+        <QueryHighlight
           text={summary.standard || summary.original}
           query={query}
+          mode={mode}
           active={direction === "formosan"}
         />
       </h3>
@@ -404,11 +401,11 @@ export function SearchResultCard({
           .slice(0, 3)
           .map((item, index) => {
             const isMatch = direction === "translation" &&
-              translationTextMatches(item.text, query, mode);
+              queryMatchesText(item.text, query, mode);
             return (
               <p key={`${item.xml_lang}-${index}`} className={isMatch ? "translation-match" : undefined}>
                 <span className="translation-text">
-                  <HighlightedText text={item.text} query={query} active={isMatch} />
+                  <QueryHighlight text={item.text} query={query} mode={mode} active={isMatch} />
                 </span>
               </p>
             );

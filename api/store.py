@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from queue import Empty, LifoQueue
 from typing import Any, Literal
 
 from api.cursors import CursorValue, decode_cursor, encode_cursor, query_fingerprint
@@ -26,6 +29,7 @@ from api.search import MatchMode, normalize_surface, normalize_text
 SearchDirection = Literal["formosan", "translation"]
 FrequencySort = Literal["count", "form"]
 TierRequirement = Literal["translation", "audio", "phonology", "interlinear", "unclear"]
+QueryWorkload = Literal["interactive", "analytical"]
 SUMMARY_FORM_MAX_CHARS = 480
 SUMMARY_TRANSLATION_MAX_CHARS = 320
 SUMMARY_TRANSLATION_LIMIT = 3
@@ -33,6 +37,50 @@ DICTIONARY_EXAMPLE_LIMIT = 2
 DICTIONARY_MEANING_LIMIT = 12
 DICTIONARY_PRONUNCIATION_LIMIT = 8
 DICTIONARY_VALUE_MAX_CHARS = 320
+
+
+@dataclass
+class QueryBudget:
+    deadline: float
+    cancelled: threading.Event
+    workload: QueryWorkload = "interactive"
+
+    @classmethod
+    def for_timeout(
+        cls,
+        seconds: float,
+        *,
+        workload: QueryWorkload = "interactive",
+    ) -> QueryBudget:
+        return cls(
+            deadline=time.monotonic() + seconds,
+            cancelled=threading.Event(),
+            workload=workload,
+        )
+
+    def cancel(self) -> None:
+        self.cancelled.set()
+
+    def interruption_reason(self) -> str | None:
+        if self.cancelled.is_set():
+            return "cancelled"
+        if time.monotonic() >= self.deadline:
+            return "timeout"
+        return None
+
+
+_ACTIVE_QUERY_BUDGET: ContextVar[QueryBudget | None] = ContextVar(
+    "kakarayan_query_budget", default=None
+)
+
+
+@contextmanager
+def use_query_budget(budget: QueryBudget) -> Iterator[None]:
+    token = _ACTIVE_QUERY_BUDGET.set(budget)
+    try:
+        yield
+    finally:
+        _ACTIVE_QUERY_BUDGET.reset(token)
 
 
 @dataclass(frozen=True)
@@ -127,41 +175,135 @@ class CorpusStore:
         state: ReleaseState,
         query_step_limit: int,
         query_concurrency: int = 4,
+        query_queue_wait_seconds: float = 1.0,
+        query_timeout_seconds: float = 10.0,
+        *,
+        analytical_query_concurrency: int = 1,
+        sqlite_cache_mib: int = 128,
+        sqlite_mmap_mib: int = 2048,
     ) -> None:
+        if analytical_query_concurrency > query_concurrency:
+            raise ValueError("Analytical query concurrency cannot exceed total concurrency")
         self.state = state
         self.query_step_limit = query_step_limit
         self._query_slots = threading.BoundedSemaphore(query_concurrency)
+        self._analytical_slots = threading.BoundedSemaphore(analytical_query_concurrency)
+        self.query_queue_wait_seconds = query_queue_wait_seconds
+        self.query_timeout_seconds = query_timeout_seconds
+        self._connections: LifoQueue[sqlite3.Connection] = LifoQueue(query_concurrency)
+        try:
+            for _ in range(query_concurrency):
+                self._connections.put(
+                    readonly_connection(
+                        self.state.database_path,
+                        cache_mib=sqlite_cache_mib,
+                        mmap_mib=sqlite_mmap_mib,
+                    )
+                )
+        except sqlite3.Error:
+            self.close()
+            raise
+        probe = self._connections.get_nowait()
+        try:
+            search_tables = {
+                str(row["name"])
+                for row in probe.execute(
+                    "SELECT name FROM sqlite_schema WHERE type = 'table' "
+                    "AND name IN ('formosan_sentence_terms', 'translation_sentence_terms', "
+                    "'reverse_dictionary_terms')"
+                )
+            }
+            self._has_formosan_sentence_terms = "formosan_sentence_terms" in search_tables
+            self._has_translation_sentence_terms = "translation_sentence_terms" in search_tables
+            self._has_reverse_dictionary_terms = "reverse_dictionary_terms" in search_tables
+        finally:
+            self._connections.put(probe)
+
+    def close(self) -> None:
+        while True:
+            try:
+                connection = self._connections.get_nowait()
+            except Empty:
+                return
+            connection.close()
+
+    def __enter__(self) -> CorpusStore:
+        return self
+
+    def __exit__(self, *_error: object) -> None:
+        self.close()
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
-        self._query_slots.acquire()
+    def connect(self, budget: QueryBudget | None = None) -> Iterator[sqlite3.Connection]:
+        active_budget = budget or _ACTIVE_QUERY_BUDGET.get()
+        if active_budget is None:
+            active_budget = QueryBudget.for_timeout(self.query_timeout_seconds)
+        self.check_ready()
+        analytical_acquired = False
+        queue_started = time.monotonic()
+        if active_budget.workload == "analytical":
+            analytical_acquired = self._analytical_slots.acquire(
+                timeout=self.query_queue_wait_seconds
+            )
+            if not analytical_acquired:
+                raise ApiError(
+                    503,
+                    "server_busy",
+                    "The analytical query service is busy. Try again shortly.",
+                    headers={"Cache-Control": "no-store", "Retry-After": "1"},
+                )
+        remaining_wait = max(
+            0.0,
+            self.query_queue_wait_seconds - (time.monotonic() - queue_started),
+        )
+        query_acquired = self._query_slots.acquire(timeout=remaining_wait)
+        if not query_acquired:
+            if analytical_acquired:
+                self._analytical_slots.release()
+            raise ApiError(
+                503,
+                "server_busy",
+                "The query service is busy. Try again shortly.",
+                headers={"Cache-Control": "no-store", "Retry-After": "1"},
+            )
         connection: sqlite3.Connection | None = None
+        interruption_reason: str | None = None
         try:
-            connection = readonly_connection(self.state.database_path)
+            try:
+                connection = self._connections.get_nowait()
+            except Empty as error:
+                raise RuntimeError("SQLite connection pool is out of sync") from error
             callbacks = 0
 
             def progress() -> int:
-                nonlocal callbacks
+                nonlocal callbacks, interruption_reason
                 callbacks += 1
-                return int(callbacks > self.query_step_limit)
+                interruption_reason = active_budget.interruption_reason()
+                if interruption_reason is not None:
+                    return 1
+                if callbacks > self.query_step_limit:
+                    interruption_reason = "work_limit"
+                    return 1
+                return 0
 
             connection.set_progress_handler(progress, 1000)
-            row = connection.execute(
-                "SELECT value_json FROM publication_metadata WHERE key = 'meta'"
-            ).fetchone()
-            try:
-                active_release = json.loads(str(row[0]))["release_id"] if row else None
-            except (json.JSONDecodeError, KeyError, TypeError):
-                active_release = None
-            if active_release != self.release_id:
-                raise ApiError(
-                    503,
-                    "release_mismatch",
-                    "The active query database changed. Restart with its matching manifest.",
-                )
             yield connection
         except sqlite3.OperationalError as error:
             if "interrupted" in str(error).lower():
+                if interruption_reason == "cancelled":
+                    raise ApiError(
+                        408,
+                        "query_cancelled",
+                        "The query was cancelled.",
+                        headers={"Cache-Control": "no-store"},
+                    ) from None
+                if interruption_reason == "timeout":
+                    raise ApiError(
+                        504,
+                        "query_timed_out",
+                        "The query took too long. Narrow the scope and try again.",
+                        headers={"Cache-Control": "no-store", "Retry-After": "1"},
+                    ) from None
                 raise ApiError(
                     422,
                     "query_too_expensive",
@@ -170,8 +312,11 @@ class CorpusStore:
             raise
         finally:
             if connection is not None:
-                connection.close()
+                connection.set_progress_handler(None, 0)
+                self._connections.put(connection)
             self._query_slots.release()
+            if analytical_acquired:
+                self._analytical_slots.release()
 
     @property
     def release_id(self) -> str:
@@ -182,8 +327,19 @@ class CorpusStore:
             raise ApiError(404, "release_not_found", "The requested release is not active")
 
     def check_ready(self) -> None:
-        with self.connect():
-            return
+        # Startup validates SQLite. Runtime readiness only checks the small active
+        # manifest so it never competes with user queries for a database slot.
+        try:
+            active = json.loads(self.state.manifest_path.read_bytes())
+            active_release = active.get("release_id") if isinstance(active, dict) else None
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            active_release = None
+        if active_release != self.release_id:
+            raise ApiError(
+                503,
+                "release_mismatch",
+                "The active query database changed. Restart with its matching manifest.",
+            )
 
     def metadata(self, key: str) -> Any:
         return self.state.metadata[key]
@@ -231,9 +387,8 @@ class CorpusStore:
             parameters.append(dialect)
         return clauses, parameters
 
-    @classmethod
     def _candidate_sentences(
-        cls,
+        self,
         *,
         normalized: str,
         language_id: str,
@@ -243,9 +398,37 @@ class CorpusStore:
         translation_language: str | None,
         match: MatchMode,
     ) -> tuple[str, tuple[object, ...]]:
-        scope, scope_parameters = cls._scope(language_id, corpus_id, dialect)
+        scope, scope_parameters = self._scope(language_id, corpus_id, dialect)
         where = " AND ".join(scope)
         if direction == "formosan":
+            if self._has_formosan_sentence_terms:
+                term_clauses = ["term.language_id = ?"]
+                formosan_term_parameters: list[object] = [language_id]
+                if corpus_id:
+                    term_clauses.append("t.corpus_id = ?")
+                    formosan_term_parameters.append(corpus_id)
+                if dialect:
+                    term_clauses.append("t.dialect = ?")
+                    formosan_term_parameters.append(dialect)
+                if match == "contains" and len(normalized) < 3:
+                    term_clause = "term.normalized LIKE ? ESCAPE '\\'"
+                    formosan_term_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
+                else:
+                    term_clause, formosan_term_match_parameters = _predicate(
+                        "term.normalized", normalized, match, "formosan"
+                    )
+                term_clauses.append(term_clause)
+                formosan_term_parameters.extend(formosan_term_match_parameters)
+                return (
+                    f"""
+                    SELECT DISTINCT term.sentence_id
+                    FROM formosan_sentence_terms term
+                    JOIN sentences s ON s.id = term.sentence_id
+                    JOIN texts t ON t.id = s.parent_id
+                    WHERE {" AND ".join(term_clauses)}
+                    """,
+                    tuple(formosan_term_parameters),
+                )
             token_clause, token_parameters = _predicate(
                 "tok.normalized", normalized, match, "formosan"
             )
@@ -270,6 +453,57 @@ class CorpusStore:
                 *token_parameters,
                 *scope_parameters,
                 *form_parameters,
+            )
+        if self._has_translation_sentence_terms and translation_language:
+            term_clauses = ["term.language_id = ?", "term.xml_lang = ?"]
+            term_parameters: list[object] = [language_id, translation_language]
+            if corpus_id:
+                term_clauses.append("t.corpus_id = ?")
+                term_parameters.append(corpus_id)
+            if dialect:
+                term_clauses.append("t.dialect = ?")
+                term_parameters.append(dialect)
+            if match == "contains" and len(normalized) < 3:
+                term_clause = "term.normalized LIKE ? ESCAPE '\\'"
+                term_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
+            else:
+                term_clause, term_match_parameters = _predicate(
+                    "term.normalized", normalized, match, "translation"
+                )
+            term_clauses.append(term_clause)
+            term_parameters.extend(term_match_parameters)
+            return (
+                f"""
+                SELECT DISTINCT term.sentence_id
+                FROM translation_sentence_terms term
+                JOIN sentences s ON s.id = term.sentence_id
+                JOIN texts t ON t.id = s.parent_id
+                WHERE {" AND ".join(term_clauses)}
+                """,
+                tuple(term_parameters),
+            )
+        if match == "contains" and len(normalized) < 3:
+            language_clause = " AND tr.xml_lang = ?" if translation_language else ""
+            fallback_language_parameters: tuple[object, ...] = (
+                (translation_language,) if translation_language else ()
+            )
+            return (
+                f"""
+                SELECT DISTINCT ts.sentence_id
+                FROM texts t INDEXED BY texts_scope
+                CROSS JOIN sentences s INDEXED BY sentences_parent
+                CROSS JOIN tier_scope ts INDEXED BY tier_scope_sentence
+                CROSS JOIN translations tr INDEXED BY translations_owner
+                WHERE {" AND ".join(scope)} AND s.parent_id = t.id
+                  AND ts.sentence_id = s.id
+                  AND tr.owner_type = ts.owner_type AND tr.owner_id = ts.owner_id
+                  AND tr.normalized LIKE ? ESCAPE '\\'{language_clause}
+                """,
+                (
+                    *scope_parameters,
+                    f"%{_like(normalized)}%",
+                    *fallback_language_parameters,
+                ),
             )
         translation_clause, translation_parameters = _predicate(
             "tr.normalized", normalized, match, "translation"
@@ -702,59 +936,95 @@ class CorpusStore:
                 ORDER BY d.headword LIMIT ?
             """
         else:
-            translation_clause, translation_parameters = _predicate(
-                "tr.normalized", normalized, match, "translation"
-            )
-            language_clause = "AND tr.xml_lang = ?" if translation_language else ""
-            language_parameters: tuple[object, ...] = (
-                (translation_language,) if translation_language else ()
-            )
-            candidates = f"""
-                SELECT f.normalized AS headword, f.text AS display_form
-                FROM translations tr
-                JOIN tier_scope_view ts
-                  ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
-                JOIN sentences s ON s.id = ts.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                JOIN forms f ON f.owner_type = tr.owner_type AND f.owner_id = tr.owner_id
-                WHERE {" AND ".join(scope)} AND tr.owner_type <> 'sentence'
-                  AND {translation_clause} {language_clause}
-                UNION ALL
-                SELECT tok.normalized AS headword, tok.surface AS display_form
-                FROM translations tr
-                JOIN words w ON tr.owner_type = 'word' AND w.id = tr.owner_id
-                JOIN tokens tok ON tok.word_id = w.id
-                JOIN sentences s ON s.id = tok.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(scope)} AND {translation_clause} {language_clause}
-                UNION ALL
-                SELECT tok.normalized AS headword, tok.surface AS display_form
-                FROM translations tr
-                JOIN sentences s ON tr.owner_type = 'sentence' AND s.id = tr.owner_id
-                JOIN tokens tok ON tok.sentence_id = s.id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(scope)} AND s.token_count = 1
-                  AND {translation_clause} {language_clause}
-            """
-            branch_parameters = (
-                *scope_parameters,
-                *translation_parameters,
-                *language_parameters,
-            )
-            parameters = (*branch_parameters, *branch_parameters, *branch_parameters)
-            cursor_clause = "WHERE headword > ?" if position else ""
-            cursor_parameters: tuple[object, ...] = (str(position[0]),) if position else ()
-            parameters += cursor_parameters
-            sql = f"""
-                WITH candidates AS ({candidates}), grouped AS (
-                  SELECT headword, MIN(display_form) AS display_form,
-                         COUNT(*) AS occurrences,
-                         COUNT(DISTINCT display_form) AS variant_count
-                  FROM candidates WHERE headword <> '' GROUP BY headword
+            if self._has_reverse_dictionary_terms:
+                reverse_clauses = ["d.language_id = ?"]
+                reverse_parameters: tuple[object, ...] = (language_id,)
+                if translation_language:
+                    reverse_clauses.append("d.xml_lang = ?")
+                    reverse_parameters += (translation_language,)
+                if corpus_id:
+                    reverse_clauses.append("d.corpus_id = ?")
+                    reverse_parameters += (corpus_id,)
+                if dialect:
+                    reverse_clauses.append("d.dialect = ?")
+                    reverse_parameters += (dialect,)
+                if match == "contains" and len(normalized) < 3:
+                    reverse_match_clause = "d.normalized LIKE ? ESCAPE '\\'"
+                    reverse_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
+                else:
+                    reverse_match_clause, reverse_match_parameters = _predicate(
+                        "d.normalized", normalized, match, "translation"
+                    )
+                reverse_clauses.append(reverse_match_clause)
+                reverse_parameters += reverse_match_parameters
+                if position:
+                    reverse_clauses.append("d.headword > ?")
+                    reverse_parameters += (str(position[0]),)
+                parameters = reverse_parameters
+                sql = f"""
+                    SELECT d.headword, MIN(d.display_form) AS display_form,
+                           SUM(d.occurrences) AS occurrences,
+                           COUNT(DISTINCT d.display_form) AS variant_count
+                    FROM reverse_dictionary_terms d
+                    WHERE {" AND ".join(reverse_clauses)}
+                    GROUP BY d.headword
+                    ORDER BY d.headword LIMIT ?
+                """
+            else:
+                translation_clause, translation_parameters = _predicate(
+                    "tr.normalized", normalized, match, "translation"
                 )
-                SELECT * FROM grouped {cursor_clause}
-                ORDER BY headword LIMIT ?
-            """
+                language_clause = "AND tr.xml_lang = ?" if translation_language else ""
+                language_parameters: tuple[object, ...] = (
+                    (translation_language,) if translation_language else ()
+                )
+                matching_translations = f"""
+                    SELECT tr.owner_type, tr.owner_id, ts.sentence_id
+                    FROM translations tr INDEXED BY translations_normalized
+                    JOIN tier_scope_view ts
+                      ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+                    JOIN sentences s ON s.id = ts.sentence_id
+                    JOIN texts t ON t.id = s.parent_id
+                    WHERE {" AND ".join(scope)} AND {translation_clause} {language_clause}
+                """
+                candidates = """
+                    SELECT f.normalized AS headword, f.text AS display_form
+                    FROM matching_translations matched
+                    JOIN forms f
+                      ON f.owner_type = matched.owner_type AND f.owner_id = matched.owner_id
+                    WHERE matched.owner_type <> 'sentence'
+                    UNION ALL
+                    SELECT tok.normalized AS headword, tok.surface AS display_form
+                    FROM matching_translations matched
+                    JOIN tokens tok
+                      ON matched.owner_type = 'word' AND tok.word_id = matched.owner_id
+                    UNION ALL
+                    SELECT tok.normalized AS headword, tok.surface AS display_form
+                    FROM matching_translations matched
+                    JOIN sentences s
+                      ON matched.owner_type = 'sentence' AND s.id = matched.owner_id
+                    JOIN tokens tok ON tok.sentence_id = s.id
+                    WHERE s.token_count = 1
+                """
+                parameters = (
+                    *scope_parameters,
+                    *translation_parameters,
+                    *language_parameters,
+                )
+                cursor_clause = "WHERE headword > ?" if position else ""
+                cursor_parameters: tuple[object, ...] = (str(position[0]),) if position else ()
+                parameters += cursor_parameters
+                sql = f"""
+                    WITH matching_translations AS MATERIALIZED ({matching_translations}),
+                    candidates AS ({candidates}), grouped AS (
+                      SELECT headword, MIN(display_form) AS display_form,
+                             COUNT(*) AS occurrences,
+                             COUNT(DISTINCT display_form) AS variant_count
+                      FROM candidates WHERE headword <> '' GROUP BY headword
+                    )
+                    SELECT * FROM grouped {cursor_clause}
+                    ORDER BY headword LIMIT ?
+                """
         with self.connect() as connection:
             rows = [
                 dict(row)
@@ -1240,6 +1510,7 @@ class CorpusStore:
         complete_fields: bool = False,
         max_rows: int,
     ) -> DatasetStream:
+        budget = _ACTIVE_QUERY_BUDGET.get()
         query = self._dataset_query(
             language_id=language_id,
             corpus_id=corpus_id,
@@ -1253,7 +1524,7 @@ class CorpusStore:
             record_level=record_level,
             complete_fields=complete_fields,
         )
-        with self.connect() as connection:
+        with self.connect(budget) as connection:
             estimated_rows = int(
                 connection.execute(
                     f"{query.prefix} SELECT COUNT(*) FROM {query.source} WHERE {query.where}",
@@ -1264,7 +1535,7 @@ class CorpusStore:
         returned_rows = min(estimated_rows, max_rows)
 
         def rows() -> Iterator[dict[str, Any]]:
-            with self.connect() as connection:
+            with self.connect(budget) as connection:
                 cursor = connection.execute(
                     f"{query.prefix} SELECT {query.projection} FROM {query.source} "
                     f"WHERE {query.where} ORDER BY {query.order} LIMIT ?",

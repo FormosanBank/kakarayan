@@ -122,6 +122,13 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     assert dictionary.json()["items"][0]["headword"] == "lima"
     assert dictionary.json()["items"][0]["summary_truncated"] is False
 
+    formosan_sentence = client.get(
+        release_path(client, "concordance"),
+        params={"q": "ima", "language_id": "lang_amis", "match": "contains"},
+    )
+    assert formosan_sentence.status_code == 200
+    assert formosan_sentence.json()["items"]
+
     reverse = client.get(
         url,
         params={
@@ -134,6 +141,20 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     )
     assert reverse.status_code == 200
     assert reverse.json()["items"][0]["headword"] == "lima"
+
+    for query, match in (("fi", "prefix"), ("ive", "contains")):
+        flexible_reverse = client.get(
+            url,
+            params={
+                "q": query,
+                "language_id": "lang_amis",
+                "direction": "translation",
+                "translation_language": "eng",
+                "match": match,
+            },
+        )
+        assert flexible_reverse.status_code == 200
+        assert flexible_reverse.json()["items"][0]["headword"] == "lima"
 
     translated = client.get(
         release_path(client, "concordance"),
@@ -152,6 +173,89 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
         params={"language_id": "lang_amis"},
     ).json()
     assert {item["xml_lang"] for item in languages} == {"eng", "zho"}
+
+
+def test_short_reverse_search_supports_a_prior_release_database(settings, tmp_path) -> None:
+    database_path = tmp_path / "prior-release.sqlite"
+    database_path.write_bytes(settings.database_path.read_bytes())
+    with closing(sqlite3.connect(database_path)) as database:
+        database.execute("DROP TABLE translation_sentence_terms")
+        database.commit()
+    configured = Settings(
+        manifest_path=settings.manifest_path,
+        database_path=database_path,
+        expected_sha256=None,
+        cors_origins=settings.cors_origins,
+    )
+    with TestClient(create_app(configured)) as client:
+        response = client.get(
+            release_path(client, "concordance"),
+            params={
+                "q": "測",
+                "language_id": "lang_amis",
+                "direction": "translation",
+                "translation_language": "zho",
+                "match": "contains",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["items"]
+
+
+def test_formosan_search_supports_a_prior_release_database(settings, tmp_path) -> None:
+    database_path = tmp_path / "prior-release.sqlite"
+    database_path.write_bytes(settings.database_path.read_bytes())
+    with closing(sqlite3.connect(database_path)) as database:
+        database.execute("DROP TABLE formosan_sentence_terms")
+        database.commit()
+    configured = Settings(
+        manifest_path=settings.manifest_path,
+        database_path=database_path,
+        expected_sha256=None,
+        cors_origins=settings.cors_origins,
+    )
+    with TestClient(create_app(configured)) as client:
+        response = client.get(
+            release_path(client, "concordance"),
+            params={
+                "q": "ima",
+                "language_id": "lang_amis",
+                "direction": "formosan",
+                "match": "contains",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["items"]
+
+
+def test_reverse_dictionary_supports_a_prior_release_database(settings, tmp_path) -> None:
+    database_path = tmp_path / "prior-release.sqlite"
+    database_path.write_bytes(settings.database_path.read_bytes())
+    with closing(sqlite3.connect(database_path)) as database:
+        database.execute("DROP TABLE reverse_dictionary_terms")
+        database.commit()
+    configured = Settings(
+        manifest_path=settings.manifest_path,
+        database_path=database_path,
+        expected_sha256=None,
+        cors_origins=settings.cors_origins,
+    )
+    with TestClient(create_app(configured)) as client:
+        response = client.get(
+            release_path(client, "dictionary"),
+            params={
+                "q": "five",
+                "language_id": "lang_amis",
+                "direction": "translation",
+                "translation_language": "eng",
+                "match": "exact",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["items"][0]["headword"] == "lima"
 
 
 def test_keyset_pages_and_query_identity(client: TestClient) -> None:
@@ -474,9 +578,9 @@ def test_spreadsheet_export_cells_are_formula_safe() -> None:
 def test_request_records_use_route_templates_without_raw_queries(
     client: TestClient, caplog
 ) -> None:
-    caplog.set_level(logging.INFO, logger="kakarayan.api")
+    caplog.set_level(logging.INFO, logger="uvicorn.error")
     secret_query = "fictional private phrase"
-    client.get(
+    response = client.get(
         release_path(client, "concordance"),
         params={
             "q": secret_query,
@@ -485,10 +589,11 @@ def test_request_records_use_route_templates_without_raw_queries(
             "match": "contains",
         },
     )
+    assert response.headers["server-timing"].startswith("app;dur=")
     records = [
         json.loads(record.message)
         for record in caplog.records
-        if record.name == "kakarayan.api" and record.message.startswith("{")
+        if record.name == "uvicorn.error" and record.message.startswith("{")
     ]
     request = next(
         item
@@ -509,7 +614,7 @@ def test_request_records_use_route_templates_without_raw_queries(
         for item in (
             json.loads(record.message)
             for record in caplog.records
-            if record.name == "kakarayan.api" and record.message.startswith("{")
+            if record.name == "uvicorn.error" and record.message.startswith("{")
         )
         if item.get("event") == "request" and item.get("failure_code") == "invalid_parameter"
     )

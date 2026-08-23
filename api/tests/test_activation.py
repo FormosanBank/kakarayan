@@ -57,16 +57,15 @@ def test_previous_immutable_release_can_be_reactivated(
             cors_origins=(),
         )
     )
-    running_store = CorpusStore(second_state, query_step_limit=200_000)
-
-    prepare_release(str(release.output / "release-manifest.json"), database, active)
-    configured = type(settings)(
-        manifest_path=active,
-        database_path=database,
-        expected_sha256=None,
-        cors_origins=(),
-    )
-    with pytest.raises(ApiError, match="active query database changed") as mismatch:
-        running_store.check_ready()
-    assert mismatch.value.code == "release_mismatch"
-    assert load_release(configured).manifest["release_id"] == release.release_id
+    with CorpusStore(second_state, query_step_limit=200_000) as running_store:
+        prepare_release(str(release.output / "release-manifest.json"), database, active)
+        configured = type(settings)(
+            manifest_path=active,
+            database_path=database,
+            expected_sha256=None,
+            cors_origins=(),
+        )
+        with pytest.raises(ApiError, match="active query database changed") as mismatch:
+            running_store.check_ready()
+        assert mismatch.value.code == "release_mismatch"
+        assert load_release(configured).manifest["release_id"] == release.release_id
