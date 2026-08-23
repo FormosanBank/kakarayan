@@ -27,7 +27,7 @@ services:
       - /tmp:size=64m,mode=1777
     security_opt:
       - no-new-privileges:true
-    mem_limit: 448m
+    mem_limit: ${KAKARAYAN_API_MEMORY_LIMIT:-3g}
 
   caddy:
     image: caddy:2.11.4-alpine
@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
-    mem_limit: 64m
+    mem_limit: ${KAKARAYAN_CADDY_MEMORY_LIMIT:-128m}
 
 volumes:
   caddy_data:
