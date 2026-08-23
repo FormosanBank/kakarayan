@@ -257,6 +257,24 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
         CREATE INDEX tier_scope_sentence
         ON tier_scope(sentence_id, owner_type, owner_id);
 
+        CREATE TABLE translation_sentence_terms (
+          language_id TEXT NOT NULL,
+          xml_lang TEXT NOT NULL,
+          normalized TEXT NOT NULL,
+          sentence_id TEXT NOT NULL,
+          PRIMARY KEY (language_id, xml_lang, normalized, sentence_id)
+        ) WITHOUT ROWID;
+
+        INSERT INTO translation_sentence_terms
+        SELECT t.language_id, tr.xml_lang, tr.normalized, ts.sentence_id
+        FROM translations tr
+        JOIN tier_scope ts
+          ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+        JOIN sentences s ON s.id = ts.sentence_id
+        JOIN texts t ON t.id = s.parent_id
+        WHERE tr.normalized <> ''
+        GROUP BY t.language_id, tr.xml_lang, tr.normalized, ts.sentence_id;
+
         CREATE VIEW sentence_view AS
         SELECT
           s.id AS sentence_id,

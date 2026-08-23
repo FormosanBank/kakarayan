@@ -203,6 +203,17 @@ class CorpusStore:
         except sqlite3.Error:
             self.close()
             raise
+        probe = self._connections.get_nowait()
+        try:
+            self._has_translation_sentence_terms = (
+                probe.execute(
+                    "SELECT 1 FROM sqlite_schema "
+                    "WHERE type = 'table' AND name = 'translation_sentence_terms'"
+                ).fetchone()
+                is not None
+            )
+        finally:
+            self._connections.put(probe)
 
     def close(self) -> None:
         while True:
@@ -372,9 +383,8 @@ class CorpusStore:
             parameters.append(dialect)
         return clauses, parameters
 
-    @classmethod
     def _candidate_sentences(
-        cls,
+        self,
         *,
         normalized: str,
         language_id: str,
@@ -384,7 +394,7 @@ class CorpusStore:
         translation_language: str | None,
         match: MatchMode,
     ) -> tuple[str, tuple[object, ...]]:
-        scope, scope_parameters = cls._scope(language_id, corpus_id, dialect)
+        scope, scope_parameters = self._scope(language_id, corpus_id, dialect)
         where = " AND ".join(scope)
         if direction == "formosan":
             token_clause, token_parameters = _predicate(
@@ -411,6 +421,57 @@ class CorpusStore:
                 *token_parameters,
                 *scope_parameters,
                 *form_parameters,
+            )
+        if self._has_translation_sentence_terms and translation_language:
+            term_clauses = ["term.language_id = ?", "term.xml_lang = ?"]
+            term_parameters: list[object] = [language_id, translation_language]
+            if corpus_id:
+                term_clauses.append("t.corpus_id = ?")
+                term_parameters.append(corpus_id)
+            if dialect:
+                term_clauses.append("t.dialect = ?")
+                term_parameters.append(dialect)
+            if match == "contains" and len(normalized) < 3:
+                term_clause = "term.normalized LIKE ? ESCAPE '\\'"
+                term_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
+            else:
+                term_clause, term_match_parameters = _predicate(
+                    "term.normalized", normalized, match, "translation"
+                )
+            term_clauses.append(term_clause)
+            term_parameters.extend(term_match_parameters)
+            return (
+                f"""
+                SELECT DISTINCT term.sentence_id
+                FROM translation_sentence_terms term
+                JOIN sentences s ON s.id = term.sentence_id
+                JOIN texts t ON t.id = s.parent_id
+                WHERE {" AND ".join(term_clauses)}
+                """,
+                tuple(term_parameters),
+            )
+        if match == "contains" and len(normalized) < 3:
+            language_clause = " AND tr.xml_lang = ?" if translation_language else ""
+            fallback_language_parameters: tuple[object, ...] = (
+                (translation_language,) if translation_language else ()
+            )
+            return (
+                f"""
+                SELECT DISTINCT ts.sentence_id
+                FROM texts t INDEXED BY texts_scope
+                CROSS JOIN sentences s INDEXED BY sentences_parent
+                CROSS JOIN tier_scope ts INDEXED BY tier_scope_sentence
+                CROSS JOIN translations tr INDEXED BY translations_owner
+                WHERE {" AND ".join(scope)} AND s.parent_id = t.id
+                  AND ts.sentence_id = s.id
+                  AND tr.owner_type = ts.owner_type AND tr.owner_id = ts.owner_id
+                  AND tr.normalized LIKE ? ESCAPE '\\'{language_clause}
+                """,
+                (
+                    *scope_parameters,
+                    f"%{_like(normalized)}%",
+                    *fallback_language_parameters,
+                ),
             )
         translation_clause, translation_parameters = _predicate(
             "tr.normalized", normalized, match, "translation"

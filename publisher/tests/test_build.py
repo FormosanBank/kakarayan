@@ -167,6 +167,9 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     with closing(sqlite3.connect(first.output / "formosanbank.sqlite")) as database:
         assert database.execute("PRAGMA integrity_check").fetchone() == ("ok",)
         assert database.execute("SELECT COUNT(*) FROM translations").fetchone() == (4,)
+        assert database.execute("SELECT COUNT(*) FROM translation_sentence_terms").fetchone() == (
+            4,
+        )
         embedded_meta = json.loads(
             database.execute(
                 "SELECT value_json FROM publication_metadata WHERE key = 'meta'"

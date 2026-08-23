@@ -42,7 +42,7 @@ from api.store import (
     use_query_budget,
 )
 
-LOGGER = logging.getLogger("kakarayan.api")
+LOGGER = logging.getLogger("uvicorn.error")
 LOGGER.setLevel(logging.INFO)
 _FAILURE_HEADER = "X-Kakarayan-Internal-Failure"
 PageSize = Annotated[int, Query(ge=1, le=SEARCH_PAGE_MAX_ROWS)]

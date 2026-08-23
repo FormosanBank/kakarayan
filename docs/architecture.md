@@ -119,6 +119,8 @@ does not build a browser search engine or a second source projection.
 - GitHub Pages serves the application and static metadata.
 - GitHub Releases serves immutable prepared downloads and the compressed query read model.
 - The Tokyo Lightsail Docker deployment serves the query API.
+- Its immutable SQLite read model includes language-scoped translation sentence terms so
+  reverse lookup does not scan the complete multilingual translation inventory.
 - Hugging Face model services provide optional MT and ASR.
 - The FormosanBank GitBook remains the maintained long-form documentation source embedded
   by the Docs route.
