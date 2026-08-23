@@ -87,8 +87,10 @@ sentence, and record-detail requests.
 
 Current releases also include compact, language-scoped `formosan_sentence_terms` and
 `translation_sentence_terms` search projections. They resolve matching sentences before
-loading complete records, avoiding scattered joins across millions of tier rows. The API
-retains compatible paths for already published releases that predate these projections.
+loading complete records, avoiding scattered joins across millions of tier rows.
+`reverse_dictionary_terms` similarly resolves translation-to-Formosan headwords without
+rejoining the tier hierarchy for each query. The API retains compatible paths for already
+published releases that predate these projections.
 
 `api/Dockerfile` builds the service deployed on the Tokyo Lightsail host. Any future host
 must preserve the same activation, immutable-release, health-check, CORS, and rollback

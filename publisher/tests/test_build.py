@@ -171,6 +171,7 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
         assert database.execute("SELECT COUNT(*) FROM translation_sentence_terms").fetchone() == (
             4,
         )
+        assert database.execute("SELECT COUNT(*) FROM reverse_dictionary_terms").fetchone() == (2,)
         embedded_meta = json.loads(
             database.execute(
                 "SELECT value_json FROM publication_metadata WHERE key = 'meta'"
