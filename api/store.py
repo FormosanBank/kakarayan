@@ -850,44 +850,45 @@ class CorpusStore:
             language_parameters: tuple[object, ...] = (
                 (translation_language,) if translation_language else ()
             )
-            candidates = f"""
-                SELECT f.normalized AS headword, f.text AS display_form
-                FROM translations tr
+            matching_translations = f"""
+                SELECT tr.owner_type, tr.owner_id, ts.sentence_id
+                FROM translations tr INDEXED BY translations_normalized
                 JOIN tier_scope_view ts
                   ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
                 JOIN sentences s ON s.id = ts.sentence_id
                 JOIN texts t ON t.id = s.parent_id
-                JOIN forms f ON f.owner_type = tr.owner_type AND f.owner_id = tr.owner_id
-                WHERE {" AND ".join(scope)} AND tr.owner_type <> 'sentence'
-                  AND {translation_clause} {language_clause}
-                UNION ALL
-                SELECT tok.normalized AS headword, tok.surface AS display_form
-                FROM translations tr
-                JOIN words w ON tr.owner_type = 'word' AND w.id = tr.owner_id
-                JOIN tokens tok ON tok.word_id = w.id
-                JOIN sentences s ON s.id = tok.sentence_id
-                JOIN texts t ON t.id = s.parent_id
                 WHERE {" AND ".join(scope)} AND {translation_clause} {language_clause}
+            """
+            candidates = """
+                SELECT f.normalized AS headword, f.text AS display_form
+                FROM matching_translations matched
+                JOIN forms f
+                  ON f.owner_type = matched.owner_type AND f.owner_id = matched.owner_id
+                WHERE matched.owner_type <> 'sentence'
                 UNION ALL
                 SELECT tok.normalized AS headword, tok.surface AS display_form
-                FROM translations tr
-                JOIN sentences s ON tr.owner_type = 'sentence' AND s.id = tr.owner_id
+                FROM matching_translations matched
+                JOIN tokens tok
+                  ON matched.owner_type = 'word' AND tok.word_id = matched.owner_id
+                UNION ALL
+                SELECT tok.normalized AS headword, tok.surface AS display_form
+                FROM matching_translations matched
+                JOIN sentences s
+                  ON matched.owner_type = 'sentence' AND s.id = matched.owner_id
                 JOIN tokens tok ON tok.sentence_id = s.id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(scope)} AND s.token_count = 1
-                  AND {translation_clause} {language_clause}
+                WHERE s.token_count = 1
             """
-            branch_parameters = (
+            parameters = (
                 *scope_parameters,
                 *translation_parameters,
                 *language_parameters,
             )
-            parameters = (*branch_parameters, *branch_parameters, *branch_parameters)
             cursor_clause = "WHERE headword > ?" if position else ""
             cursor_parameters: tuple[object, ...] = (str(position[0]),) if position else ()
             parameters += cursor_parameters
             sql = f"""
-                WITH candidates AS ({candidates}), grouped AS (
+                WITH matching_translations AS MATERIALIZED ({matching_translations}),
+                candidates AS ({candidates}), grouped AS (
                   SELECT headword, MIN(display_form) AS display_form,
                          COUNT(*) AS occurrences,
                          COUNT(DISTINCT display_form) AS variant_count

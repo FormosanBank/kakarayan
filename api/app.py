@@ -43,6 +43,7 @@ from api.store import (
 )
 
 LOGGER = logging.getLogger("kakarayan.api")
+LOGGER.setLevel(logging.INFO)
 _FAILURE_HEADER = "X-Kakarayan-Internal-Failure"
 PageSize = Annotated[int, Query(ge=1, le=SEARCH_PAGE_MAX_ROWS)]
 QueryText = Annotated[str, Query(min_length=1, max_length=QUERY_MAX_CHARS)]
@@ -115,6 +116,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "startup",
                 status="ready",
                 release_id=state.manifest["release_id"],
+                query_concurrency=configured.query_concurrency,
+                analytical_query_concurrency=configured.analytical_query_concurrency,
+                sqlite_cache_mib=configured.sqlite_cache_mib,
+                sqlite_mmap_mib=configured.sqlite_mmap_mib,
                 duration_ms=round((time.perf_counter() - started) * 1000),
             )
         except (OSError, ValueError, ReleaseError, sqlite3.Error) as error:

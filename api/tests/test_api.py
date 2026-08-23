@@ -135,6 +135,20 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     assert reverse.status_code == 200
     assert reverse.json()["items"][0]["headword"] == "lima"
 
+    for query, match in (("fi", "prefix"), ("ive", "contains")):
+        flexible_reverse = client.get(
+            url,
+            params={
+                "q": query,
+                "language_id": "lang_amis",
+                "direction": "translation",
+                "translation_language": "eng",
+                "match": match,
+            },
+        )
+        assert flexible_reverse.status_code == 200
+        assert flexible_reverse.json()["items"][0]["headword"] == "lima"
+
     translated = client.get(
         release_path(client, "concordance"),
         params={
