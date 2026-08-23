@@ -53,11 +53,15 @@ def _release_store(release: Path) -> Iterator[CorpusStore]:
             expected_sha256=None,
             cors_origins=(),
         )
-        yield CorpusStore(
+        store = CorpusStore(
             load_release(settings),
             settings.query_step_limit,
             query_concurrency=1,
         )
+        try:
+            yield store
+        finally:
+            store.close()
 
 
 def _recipe_streams(store: CorpusStore, recipe: dict[str, Any]) -> list[DatasetStream]:

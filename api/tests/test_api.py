@@ -476,7 +476,7 @@ def test_request_records_use_route_templates_without_raw_queries(
 ) -> None:
     caplog.set_level(logging.INFO, logger="kakarayan.api")
     secret_query = "fictional private phrase"
-    client.get(
+    response = client.get(
         release_path(client, "concordance"),
         params={
             "q": secret_query,
@@ -485,6 +485,7 @@ def test_request_records_use_route_templates_without_raw_queries(
             "match": "contains",
         },
     )
+    assert response.headers["server-timing"].startswith("app;dur=")
     records = [
         json.loads(record.message)
         for record in caplog.records

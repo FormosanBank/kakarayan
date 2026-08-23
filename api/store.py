@@ -11,6 +11,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from queue import Empty, LifoQueue
 from typing import Any, Literal
 
 from api.cursors import CursorValue, decode_cursor, encode_cursor, query_fingerprint
@@ -28,6 +29,7 @@ from api.search import MatchMode, normalize_surface, normalize_text
 SearchDirection = Literal["formosan", "translation"]
 FrequencySort = Literal["count", "form"]
 TierRequirement = Literal["translation", "audio", "phonology", "interlinear", "unclear"]
+QueryWorkload = Literal["interactive", "analytical"]
 SUMMARY_FORM_MAX_CHARS = 480
 SUMMARY_TRANSLATION_MAX_CHARS = 320
 SUMMARY_TRANSLATION_LIMIT = 3
@@ -41,10 +43,20 @@ DICTIONARY_VALUE_MAX_CHARS = 320
 class QueryBudget:
     deadline: float
     cancelled: threading.Event
+    workload: QueryWorkload = "interactive"
 
     @classmethod
-    def for_timeout(cls, seconds: float) -> QueryBudget:
-        return cls(deadline=time.monotonic() + seconds, cancelled=threading.Event())
+    def for_timeout(
+        cls,
+        seconds: float,
+        *,
+        workload: QueryWorkload = "interactive",
+    ) -> QueryBudget:
+        return cls(
+            deadline=time.monotonic() + seconds,
+            cancelled=threading.Event(),
+            workload=workload,
+        )
 
     def cancel(self) -> None:
         self.cancelled.set()
@@ -165,20 +177,74 @@ class CorpusStore:
         query_concurrency: int = 4,
         query_queue_wait_seconds: float = 1.0,
         query_timeout_seconds: float = 10.0,
+        *,
+        analytical_query_concurrency: int = 1,
+        sqlite_cache_mib: int = 128,
+        sqlite_mmap_mib: int = 2048,
     ) -> None:
+        if analytical_query_concurrency > query_concurrency:
+            raise ValueError("Analytical query concurrency cannot exceed total concurrency")
         self.state = state
         self.query_step_limit = query_step_limit
         self._query_slots = threading.BoundedSemaphore(query_concurrency)
+        self._analytical_slots = threading.BoundedSemaphore(analytical_query_concurrency)
         self.query_queue_wait_seconds = query_queue_wait_seconds
         self.query_timeout_seconds = query_timeout_seconds
+        self._connections: LifoQueue[sqlite3.Connection] = LifoQueue(query_concurrency)
+        try:
+            for _ in range(query_concurrency):
+                self._connections.put(
+                    readonly_connection(
+                        self.state.database_path,
+                        cache_mib=sqlite_cache_mib,
+                        mmap_mib=sqlite_mmap_mib,
+                    )
+                )
+        except sqlite3.Error:
+            self.close()
+            raise
+
+    def close(self) -> None:
+        while True:
+            try:
+                connection = self._connections.get_nowait()
+            except Empty:
+                return
+            connection.close()
+
+    def __enter__(self) -> CorpusStore:
+        return self
+
+    def __exit__(self, *_error: object) -> None:
+        self.close()
 
     @contextmanager
     def connect(self, budget: QueryBudget | None = None) -> Iterator[sqlite3.Connection]:
         active_budget = budget or _ACTIVE_QUERY_BUDGET.get()
         if active_budget is None:
             active_budget = QueryBudget.for_timeout(self.query_timeout_seconds)
-        acquired = self._query_slots.acquire(timeout=self.query_queue_wait_seconds)
-        if not acquired:
+        self.check_ready()
+        analytical_acquired = False
+        queue_started = time.monotonic()
+        if active_budget.workload == "analytical":
+            analytical_acquired = self._analytical_slots.acquire(
+                timeout=self.query_queue_wait_seconds
+            )
+            if not analytical_acquired:
+                raise ApiError(
+                    503,
+                    "server_busy",
+                    "The analytical query service is busy. Try again shortly.",
+                    headers={"Cache-Control": "no-store", "Retry-After": "1"},
+                )
+        remaining_wait = max(
+            0.0,
+            self.query_queue_wait_seconds - (time.monotonic() - queue_started),
+        )
+        query_acquired = self._query_slots.acquire(timeout=remaining_wait)
+        if not query_acquired:
+            if analytical_acquired:
+                self._analytical_slots.release()
             raise ApiError(
                 503,
                 "server_busy",
@@ -188,7 +254,10 @@ class CorpusStore:
         connection: sqlite3.Connection | None = None
         interruption_reason: str | None = None
         try:
-            connection = readonly_connection(self.state.database_path)
+            try:
+                connection = self._connections.get_nowait()
+            except Empty as error:
+                raise RuntimeError("SQLite connection pool is out of sync") from error
             callbacks = 0
 
             def progress() -> int:
@@ -203,19 +272,6 @@ class CorpusStore:
                 return 0
 
             connection.set_progress_handler(progress, 1000)
-            row = connection.execute(
-                "SELECT value_json FROM publication_metadata WHERE key = 'meta'"
-            ).fetchone()
-            try:
-                active_release = json.loads(str(row[0]))["release_id"] if row else None
-            except (json.JSONDecodeError, KeyError, TypeError):
-                active_release = None
-            if active_release != self.release_id:
-                raise ApiError(
-                    503,
-                    "release_mismatch",
-                    "The active query database changed. Restart with its matching manifest.",
-                )
             yield connection
         except sqlite3.OperationalError as error:
             if "interrupted" in str(error).lower():
@@ -241,8 +297,11 @@ class CorpusStore:
             raise
         finally:
             if connection is not None:
-                connection.close()
+                connection.set_progress_handler(None, 0)
+                self._connections.put(connection)
             self._query_slots.release()
+            if analytical_acquired:
+                self._analytical_slots.release()
 
     @property
     def release_id(self) -> str:

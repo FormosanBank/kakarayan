@@ -36,6 +36,7 @@ from api.store import (
     CorpusStore,
     FrequencySort,
     QueryBudget,
+    QueryWorkload,
     SearchDirection,
     TierRequirement,
     use_query_budget,
@@ -106,6 +107,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 configured.query_concurrency,
                 configured.query_queue_wait_seconds,
                 configured.query_timeout_seconds,
+                analytical_query_concurrency=configured.analytical_query_concurrency,
+                sqlite_cache_mib=configured.sqlite_cache_mib,
+                sqlite_mmap_mib=configured.sqlite_mmap_mib,
             )
             _record(
                 "startup",
@@ -121,7 +125,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 failure_code=type(error).__name__,
                 duration_ms=round((time.perf_counter() - started) * 1000),
             )
-        yield
+        try:
+            yield
+        finally:
+            current = getattr(app.state, "store", None)
+            if isinstance(current, CorpusStore):
+                await asyncio.to_thread(current.close)
+            app.state.store = None
 
     app = FastAPI(
         title="Kakarayan FormosanBank API",
@@ -145,6 +155,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "X-RateLimit-Limit",
             "X-RateLimit-Remaining",
             "X-RateLimit-Scope",
+            "Server-Timing",
         ],
         max_age=86400,
     )
@@ -201,7 +212,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 response.headers["Access-Control-Allow-Origin"] = origin
                 response.headers["Access-Control-Expose-Headers"] = (
                     "Retry-After, X-Kakarayan-Release, X-RateLimit-Limit, "
-                    "X-RateLimit-Remaining, X-RateLimit-Scope"
+                    "X-RateLimit-Remaining, X-RateLimit-Scope, Server-Timing"
                 )
                 response.headers.add_vary_header("Origin")
         else:
@@ -228,6 +239,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         route = request.scope.get("route")
         route_path = getattr(route, "path", request.url.path)
         duration_ms = round((time.perf_counter() - started) * 1000)
+        response.headers["Server-Timing"] = f"app;dur={duration_ms}"
         _record(
             "request",
             method=request.method,
@@ -264,9 +276,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         *,
         timeout_seconds: float | None = None,
         budget: QueryBudget | None = None,
+        workload: QueryWorkload = "interactive",
     ) -> ResultT:
         active_budget = budget or QueryBudget.for_timeout(
-            timeout_seconds or configured.query_timeout_seconds
+            timeout_seconds or configured.query_timeout_seconds,
+            workload=workload,
         )
         task = asyncio.create_task(asyncio.to_thread(_invoke_with_budget, active_budget, operation))
         try:
@@ -469,6 +483,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 limit=limit,
                 cursor=cursor,
             ),
+            workload="analytical",
         )
 
     @app.get("/v1/releases/{release_id}/summaries", tags=["query"])
@@ -488,6 +503,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             lambda: current.summaries(
                 language_id=language_id, corpus_id=corpus_id, dialect=dialect, limit=limit
             ),
+            workload="analytical",
         )
 
     def dataset_result(
@@ -559,6 +575,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 max_rows,
             ),
             timeout_seconds=configured.dataset_preview_timeout_seconds,
+            workload="analytical",
         )
 
     @app.get(
@@ -585,7 +602,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> Response:
         current = release_store(request, release_id)
         current.assert_export_allowed(language_id, corpus_id)
-        budget = QueryBudget.for_timeout(configured.dataset_export_timeout_seconds)
+        budget = QueryBudget.for_timeout(
+            configured.dataset_export_timeout_seconds,
+            workload="analytical",
+        )
         result = await run_query(
             request,
             lambda: current.stream_dataset(
@@ -654,7 +674,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "word": word_field,
             "morpheme": morpheme_field,
         }
-        budget = QueryBudget.for_timeout(configured.dataset_export_timeout_seconds)
+        budget = QueryBudget.for_timeout(
+            configured.dataset_export_timeout_seconds,
+            workload="analytical",
+        )
         results = await run_query(
             request,
             lambda: [

@@ -28,7 +28,12 @@ class ReleaseState:
     metadata: dict[str, Any]
 
 
-def readonly_connection(path: Path) -> sqlite3.Connection:
+def readonly_connection(
+    path: Path,
+    *,
+    cache_mib: int | None = None,
+    mmap_mib: int | None = None,
+) -> sqlite3.Connection:
     uri_path = urllib.parse.quote(str(path), safe="/")
     connection = sqlite3.connect(
         f"file:{uri_path}?mode=ro&immutable=1",
@@ -37,6 +42,12 @@ def readonly_connection(path: Path) -> sqlite3.Connection:
     )
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA query_only=ON")
+    if cache_mib is not None:
+        connection.execute(f"PRAGMA cache_size=-{cache_mib * 1024}")
+    if mmap_mib is not None:
+        connection.execute(f"PRAGMA mmap_size={mmap_mib * 1024 * 1024}")
+    if cache_mib is not None or mmap_mib is not None:
+        connection.execute("PRAGMA temp_store=MEMORY")
     return connection
 
 

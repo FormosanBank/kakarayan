@@ -167,11 +167,14 @@ file contains no password and is ignored by Git, but it remains host-specific.
 Keep the 4 GiB host defaults of `3g` for the API and `128m` for Caddy. The default
 `KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantial analytical queries. Keep
 the initial request controls at 60 requests per minute, 5 exports per minute, and
-2 concurrent SQLite queries. The larger instance still has two vCPUs, so extra RAM
-should improve cache and headroom without adding more query workers. A request waits
-at most one second for a slot. Normal queries, previews, and exports have separate
-10, 15, and 120 second deadlines. These values can be tuned in `.env` without
-changing code.
+2 concurrent SQLite queries. Only one dataset or aggregate query may run at once,
+which leaves one lane available for dictionary, sentence, and record-detail requests.
+The API reuses both read-only connections with a 128 MiB SQLite cache per connection
+and a 2 GiB immutable-file mapping ceiling. The larger instance still has two vCPUs,
+so extra RAM improves cache and headroom without adding more query workers. A request
+waits at most one second for a slot. Normal queries, previews, and exports have
+separate 10, 15, and 120 second deadlines. These values can be tuned in `.env`
+without changing code.
 
 The application keys its limits from Uvicorn's resolved client address. Caddy supplies the
 client address through proxy headers, and Uvicorn trusts those headers because the API port
@@ -391,11 +394,11 @@ added charge while attached, and Caddy certificates are free. Optional Lightsail
 snapshots are billed separately per stored GB.
 
 The API permits 100,000 export rows per selected XML level. Its 3 GiB container
-budget gives SQLite and the operating-system page cache room to reuse the indexed
-database without allowing one process to consume the whole host. Caddy has a
-128 MiB ceiling. Keep query concurrency at two because this plan still has two
-vCPUs. Watch memory, swap, disk, latency, queue rejections, and request deadlines
-before changing that value.
+budget gives the persistent SQLite caches and mapped database pages room to reuse
+the indexed data without allowing one process to consume the whole host. Caddy has
+a 128 MiB ceiling. Keep total query concurrency at two and analytical concurrency at
+one because this plan still has two vCPUs. Watch memory, swap, disk, latency, queue
+rejections, and request deadlines before changing those values.
 
 This host does not run MT or ASR models. Those remain independent Hugging Face calls,
 so deploying the lookup API improves corpus tools but does not remove model warm-up

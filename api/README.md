@@ -34,10 +34,16 @@ The serving process then needs only:
 - `KAKARAYAN_EXPORT_BURST`: immediately available export tokens; defaults to `5`.
 - `KAKARAYAN_QUERY_CONCURRENCY`: SQLite connections allowed to execute together; defaults
   to `2`.
+- `KAKARAYAN_ANALYTICAL_QUERY_CONCURRENCY`: dataset, frequency, and summary queries allowed
+  to execute together; defaults to `1` so lookup retains one query lane.
 - `KAKARAYAN_QUERY_QUEUE_WAIT_SECONDS`: maximum wait for a query slot; defaults to `1`.
 - `KAKARAYAN_QUERY_TIMEOUT_SECONDS`: normal query deadline; defaults to `10`.
 - `KAKARAYAN_DATASET_PREVIEW_TIMEOUT_SECONDS`: preview deadline; defaults to `15`.
 - `KAKARAYAN_DATASET_EXPORT_TIMEOUT_SECONDS`: streamed export deadline; defaults to `120`.
+- `KAKARAYAN_SQLITE_CACHE_MIB`: persistent page cache per pooled SQLite connection;
+  defaults to `128`.
+- `KAKARAYAN_SQLITE_MMAP_MIB`: maximum shared immutable database mapping per connection;
+  defaults to `2048`.
 
 Startup performs no network request, decompression, or full integrity scan. It checks the
 schema and release identities, opens SQLite immutable and read-only, and exposes `/readyz`
@@ -72,6 +78,12 @@ and CORS preflights are exempt. Readiness uses the validated active manifest and
 a query slot. Database work above the global concurrency setting waits briefly, then returns
 `503 server_busy` with `Retry-After`. Deadlines and client cancellation interrupt SQLite
 through its progress handler.
+
+The service keeps two read-only SQLite connections open instead of rebuilding a tiny cache
+for every request. On the production 4 GiB host, each connection has a 128 MiB SQLite page
+cache and may memory-map up to 2 GiB of the shared immutable file. Analytical work uses at
+most one of the two global query slots, leaving the other available for dictionary,
+sentence, and record-detail requests.
 
 `api/Dockerfile` builds the service deployed on the Tokyo Lightsail host. Any future host
 must preserve the same activation, immutable-release, health-check, CORS, and rollback
