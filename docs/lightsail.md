@@ -163,10 +163,11 @@ nano .env
 Set `KAKARAYAN_HOSTNAME` to the hostname made from the attached static IP. Leave
 the production and local frontend origins in `KAKARAYAN_CORS_ORIGINS`. The `.env`
 file contains no password and is ignored by Git, but it remains host-specific. The default
-`KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantially longer analytical queries than
-the original deployment. Keep the initial request controls at 60 requests per minute,
-5 exports per minute, and 4 concurrent SQLite queries. They can be tuned in `.env` without
-changing code.
+`KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantial analytical queries. Keep the
+initial request controls at 60 requests per minute, 5 exports per minute, and 2 concurrent
+SQLite queries. A request waits at most one second for a slot. Normal queries, previews,
+and exports have separate 10, 15, and 120 second deadlines. These values can be tuned in
+`.env` without changing code.
 
 The application keys its limits from Uvicorn's resolved client address. Caddy supplies the
 client address through proxy headers, and Uvicorn trusts those headers because the API port

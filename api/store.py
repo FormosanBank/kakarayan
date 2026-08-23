@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+import time
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -33,6 +35,40 @@ DICTIONARY_EXAMPLE_LIMIT = 2
 DICTIONARY_MEANING_LIMIT = 12
 DICTIONARY_PRONUNCIATION_LIMIT = 8
 DICTIONARY_VALUE_MAX_CHARS = 320
+
+
+@dataclass
+class QueryBudget:
+    deadline: float
+    cancelled: threading.Event
+
+    @classmethod
+    def for_timeout(cls, seconds: float) -> QueryBudget:
+        return cls(deadline=time.monotonic() + seconds, cancelled=threading.Event())
+
+    def cancel(self) -> None:
+        self.cancelled.set()
+
+    def interruption_reason(self) -> str | None:
+        if self.cancelled.is_set():
+            return "cancelled"
+        if time.monotonic() >= self.deadline:
+            return "timeout"
+        return None
+
+
+_ACTIVE_QUERY_BUDGET: ContextVar[QueryBudget | None] = ContextVar(
+    "kakarayan_query_budget", default=None
+)
+
+
+@contextmanager
+def use_query_budget(budget: QueryBudget) -> Iterator[None]:
+    token = _ACTIVE_QUERY_BUDGET.set(budget)
+    try:
+        yield
+    finally:
+        _ACTIVE_QUERY_BUDGET.reset(token)
 
 
 @dataclass(frozen=True)
@@ -127,23 +163,44 @@ class CorpusStore:
         state: ReleaseState,
         query_step_limit: int,
         query_concurrency: int = 4,
+        query_queue_wait_seconds: float = 1.0,
+        query_timeout_seconds: float = 10.0,
     ) -> None:
         self.state = state
         self.query_step_limit = query_step_limit
         self._query_slots = threading.BoundedSemaphore(query_concurrency)
+        self.query_queue_wait_seconds = query_queue_wait_seconds
+        self.query_timeout_seconds = query_timeout_seconds
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
-        self._query_slots.acquire()
+    def connect(self, budget: QueryBudget | None = None) -> Iterator[sqlite3.Connection]:
+        active_budget = budget or _ACTIVE_QUERY_BUDGET.get()
+        if active_budget is None:
+            active_budget = QueryBudget.for_timeout(self.query_timeout_seconds)
+        acquired = self._query_slots.acquire(timeout=self.query_queue_wait_seconds)
+        if not acquired:
+            raise ApiError(
+                503,
+                "server_busy",
+                "The query service is busy. Try again shortly.",
+                headers={"Cache-Control": "no-store", "Retry-After": "1"},
+            )
         connection: sqlite3.Connection | None = None
+        interruption_reason: str | None = None
         try:
             connection = readonly_connection(self.state.database_path)
             callbacks = 0
 
             def progress() -> int:
-                nonlocal callbacks
+                nonlocal callbacks, interruption_reason
                 callbacks += 1
-                return int(callbacks > self.query_step_limit)
+                interruption_reason = active_budget.interruption_reason()
+                if interruption_reason is not None:
+                    return 1
+                if callbacks > self.query_step_limit:
+                    interruption_reason = "work_limit"
+                    return 1
+                return 0
 
             connection.set_progress_handler(progress, 1000)
             row = connection.execute(
@@ -162,6 +219,20 @@ class CorpusStore:
             yield connection
         except sqlite3.OperationalError as error:
             if "interrupted" in str(error).lower():
+                if interruption_reason == "cancelled":
+                    raise ApiError(
+                        408,
+                        "query_cancelled",
+                        "The query was cancelled.",
+                        headers={"Cache-Control": "no-store"},
+                    ) from None
+                if interruption_reason == "timeout":
+                    raise ApiError(
+                        504,
+                        "query_timed_out",
+                        "The query took too long. Narrow the scope and try again.",
+                        headers={"Cache-Control": "no-store", "Retry-After": "1"},
+                    ) from None
                 raise ApiError(
                     422,
                     "query_too_expensive",
@@ -182,8 +253,19 @@ class CorpusStore:
             raise ApiError(404, "release_not_found", "The requested release is not active")
 
     def check_ready(self) -> None:
-        with self.connect():
-            return
+        # Startup validates SQLite. Runtime readiness only checks the small active
+        # manifest so it never competes with user queries for a database slot.
+        try:
+            active = json.loads(self.state.manifest_path.read_bytes())
+            active_release = active.get("release_id") if isinstance(active, dict) else None
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            active_release = None
+        if active_release != self.release_id:
+            raise ApiError(
+                503,
+                "release_mismatch",
+                "The active query database changed. Restart with its matching manifest.",
+            )
 
     def metadata(self, key: str) -> Any:
         return self.state.metadata[key]
@@ -1240,6 +1322,7 @@ class CorpusStore:
         complete_fields: bool = False,
         max_rows: int,
     ) -> DatasetStream:
+        budget = _ACTIVE_QUERY_BUDGET.get()
         query = self._dataset_query(
             language_id=language_id,
             corpus_id=corpus_id,
@@ -1253,7 +1336,7 @@ class CorpusStore:
             record_level=record_level,
             complete_fields=complete_fields,
         )
-        with self.connect() as connection:
+        with self.connect(budget) as connection:
             estimated_rows = int(
                 connection.execute(
                     f"{query.prefix} SELECT COUNT(*) FROM {query.source} WHERE {query.where}",
@@ -1264,7 +1347,7 @@ class CorpusStore:
         returned_rows = min(estimated_rows, max_rows)
 
         def rows() -> Iterator[dict[str, Any]]:
-            with self.connect() as connection:
+            with self.connect(budget) as connection:
                 cursor = connection.execute(
                     f"{query.prefix} SELECT {query.projection} FROM {query.source} "
                     f"WHERE {query.where} ORDER BY {query.order} LIMIT ?",

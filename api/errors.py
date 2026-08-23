@@ -17,11 +17,13 @@ class ApiError(Exception):
         message: str,
         *,
         field: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.status = status
         self.code = code
         self.message = message
         self.field = field
+        self.headers = headers or {}
         super().__init__(message)
 
     def body(self) -> dict[str, dict[str, Any]]:
@@ -36,7 +38,7 @@ class ApiError(Exception):
 
 
 async def api_error_handler(_request: Request, error: ApiError) -> JSONResponse:
-    return JSONResponse(status_code=error.status, content=error.body())
+    return JSONResponse(status_code=error.status, content=error.body(), headers=error.headers)
 
 
 async def validation_error_handler(

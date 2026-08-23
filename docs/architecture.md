@@ -43,9 +43,10 @@ logic changes without a new corpus commit. Its manifest records:
 - compressed and expanded identity for the query database.
 
 The site requires all static envelopes to agree on release ID, source commit, and Kakarayan
-commit. It then checks `/readyz` and enables interactive queries only when the API serves the
-same release. Static documentation, catalogues, downloads, and local cards remain usable if
-the query service is unavailable. A static or API release mismatch fails closed.
+commit. It then checks `/readyz` with a short timeout and enables interactive queries only
+when the API serves the same release. Static documentation, catalogues, downloads, and local
+cards remain usable if the query service is unavailable or busy. A static or API release
+mismatch fails closed.
 
 ## React boundary
 
@@ -78,6 +79,7 @@ The API owns:
 - previews and finite streamed CSV, TSV, or JSON Lines exports;
 - per-IP general and export rate limits;
 - one global SQLite query-concurrency boundary;
+- bounded queue waits and route-specific query deadlines;
 - health, readiness, release identity, and privacy-preserving operational records.
 
 Successful release-scoped GET responses are public and immutable. Validation and readiness

@@ -23,6 +23,7 @@ class ReleaseError(RuntimeError):
 @dataclass(frozen=True)
 class ReleaseState:
     database_path: Path
+    manifest_path: Path
     manifest: dict[str, Any]
     metadata: dict[str, Any]
 
@@ -128,4 +129,4 @@ def load_release(settings: Settings) -> ReleaseState:
     )
     if configured_checksum and manifest_checksum != configured_checksum:
         raise ReleaseError("Configured checksum does not match the active release")
-    return ReleaseState(settings.database_path, manifest, metadata)
+    return ReleaseState(settings.database_path, settings.manifest_path, manifest, metadata)

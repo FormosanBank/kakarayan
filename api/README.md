@@ -33,7 +33,11 @@ The serving process then needs only:
 - `KAKARAYAN_EXPORTS_PER_MINUTE`: sustained export rate per client IP; defaults to `5`.
 - `KAKARAYAN_EXPORT_BURST`: immediately available export tokens; defaults to `5`.
 - `KAKARAYAN_QUERY_CONCURRENCY`: SQLite connections allowed to execute together; defaults
-  to `4`.
+  to `2`.
+- `KAKARAYAN_QUERY_QUEUE_WAIT_SECONDS`: maximum wait for a query slot; defaults to `1`.
+- `KAKARAYAN_QUERY_TIMEOUT_SECONDS`: normal query deadline; defaults to `10`.
+- `KAKARAYAN_DATASET_PREVIEW_TIMEOUT_SECONDS`: preview deadline; defaults to `15`.
+- `KAKARAYAN_DATASET_EXPORT_TIMEOUT_SECONDS`: streamed export deadline; defaults to `120`.
 
 Startup performs no network request, decompression, or full integrity scan. It checks the
 schema and release identities, opens SQLite immutable and read-only, and exposes `/readyz`
@@ -64,8 +68,10 @@ JSON Lines, or ZIP output, without collecting the complete file in API memory.
 Rate limits use in-process token buckets keyed by the client address supplied by Uvicorn's
 trusted proxy handling. Export requests consume both a general token and an export token.
 When a bucket is empty the API returns `429` with `Retry-After`. Health and readiness checks
-and CORS preflights are exempt. The SQLite semaphore queues database work above the global
-concurrency setting instead of starting more simultaneous queries.
+and CORS preflights are exempt. Readiness uses the validated active manifest and never takes
+a query slot. Database work above the global concurrency setting waits briefly, then returns
+`503 server_busy` with `Retry-After`. Deadlines and client cancellation interrupt SQLite
+through its progress handler.
 
 `api/Dockerfile` builds the service deployed on the Tokyo Lightsail host. Any future host
 must preserve the same activation, immutable-release, health-check, CORS, and rollback
