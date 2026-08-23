@@ -38,7 +38,10 @@ async function apiEnvelope<T>(url: string, signal?: AbortSignal): Promise<ApiEnv
   return envelope;
 }
 
-export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
+export async function loadAppData(
+  signal?: AbortSignal,
+  readinessTimeoutMs?: number,
+): Promise<AppData> {
   const [meta, languages, corpora, rights, models, orthography, content] = await Promise.all([
     json<Meta>(`${base}api/v1/meta.json`, signal),
     apiEnvelope<Language[]>(`${base}api/v1/languages.json`, signal),
@@ -62,9 +65,10 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
   }
   let query: AppData["query"];
   try {
-    await checkApiRelease(meta.release_id, signal);
+    await checkApiRelease(meta.release_id, signal, readinessTimeoutMs);
     query = {baseUrl: apiBaseUrl, available: true, error: ""};
   } catch (cause) {
+    if (signal?.aborted) throw cause;
     const message = cause instanceof Error ? cause.message : String(cause);
     if (message.startsWith("Release mismatch:")) throw cause;
     query = {baseUrl: apiBaseUrl, available: false, error: message};
@@ -110,6 +114,36 @@ export function useAppData(): DataState {
     );
     return () => controller.abort();
   }, [attempt]);
+  const releaseId = state.data?.meta.release_id;
+  const queryAvailable = state.data?.query.available;
+  useEffect(() => {
+    if (!releaseId || queryAvailable) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const retry = async () => {
+      try {
+        await checkApiRelease(releaseId, controller.signal);
+        if (controller.signal.aborted) return;
+        setState((current) => {
+          if (!current.data || current.data.meta.release_id !== releaseId) return current;
+          return {
+            ...current,
+            data: {
+              ...current.data,
+              query: {baseUrl: apiBaseUrl, available: true, error: ""},
+            },
+          };
+        });
+      } catch {
+        if (!controller.signal.aborted) timer = setTimeout(retry, 15_000);
+      }
+    };
+    timer = setTimeout(retry, 15_000);
+    return () => {
+      controller.abort();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [queryAvailable, releaseId]);
   const reload = useCallback(() => {
     setState({data: null, error: null, loading: true});
     setAttempt((value) => value + 1);

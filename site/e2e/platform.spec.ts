@@ -306,9 +306,20 @@ test("lookup and record requests never leave stale results on screen", async ({p
 test("research preview, finite recipe, export, and summaries share the API", async ({page}) => {
   await disableServiceWorkerForRouting(page);
   let delayPreview = false;
+  let trackPreviewConcurrency = false;
+  let activePreviews = 0;
+  let maximumActivePreviews = 0;
   await page.route(/\/datasets\/preview\?/u, async (route) => {
-    if (delayPreview) await new Promise((resolve) => setTimeout(resolve, 700));
-    await route.continue();
+    if (trackPreviewConcurrency) {
+      activePreviews += 1;
+      maximumActivePreviews = Math.max(maximumActivePreviews, activePreviews);
+    }
+    try {
+      if (delayPreview) await new Promise((resolve) => setTimeout(resolve, 700));
+      await route.continue();
+    } finally {
+      if (trackPreviewConcurrency) activePreviews -= 1;
+    }
   });
   await page.goto("research");
   const language = page.getByRole("combobox", {name: "Language", exact: true}).first();
@@ -335,10 +346,17 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await page.getByRole("combobox", {name: "Match"}).selectOption("contains");
   await expect(page.locator(".builder__summary dd").first()).toHaveText(/^[1-9][\d,]*$/u);
 
+  delayPreview = true;
+  trackPreviewConcurrency = true;
   await page.locator(".builder__level-options").getByText("Word", {exact: true}).click();
   await page.locator(".builder__level-options").getByText("Morpheme", {exact: true}).click();
+  await expect(page.getByRole("button", {name: "Calculating…"})).toBeDisabled();
   await expect(page.locator(".builder__column-tabs").getByRole("tab")).toHaveCount(3);
   await expect(page.locator(".builder__preview-tabs").getByRole("tab")).toHaveCount(3);
+  await expect(page.getByRole("button", {name: "Download dataset"})).toBeEnabled();
+  expect(maximumActivePreviews).toBe(1);
+  delayPreview = false;
+  trackPreviewConcurrency = false;
 
   const recipeDownload = page.waitForEvent("download");
   await page.getByRole("button", {name: "Download recipe"}).click();

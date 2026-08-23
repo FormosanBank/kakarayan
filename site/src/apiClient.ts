@@ -10,6 +10,7 @@ import type {
 
 const configured = import.meta.env.VITE_KAKARAYAN_API_URL?.trim();
 export const apiBaseUrl = (configured || "http://127.0.0.1:8000").replace(/\/$/u, "");
+export const API_READINESS_TIMEOUT_MS = 4_000;
 
 interface ApiErrorBody {
   error?: {code?: string; message?: string};
@@ -32,10 +33,33 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function checkApiRelease(releaseId: string, signal?: AbortSignal): Promise<void> {
-  const ready = await request<{status: string; release_id: string}>("/readyz", signal);
-  if (ready.release_id !== releaseId) {
-    throw new Error(`Release mismatch: site ${releaseId}, query service ${ready.release_id}`);
+export async function checkApiRelease(
+  releaseId: string,
+  signal?: AbortSignal,
+  timeoutMs = API_READINESS_TIMEOUT_MS,
+): Promise<void> {
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, {once: true});
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Query service did not respond within ${timeoutMs / 1_000} seconds`));
+      controller.abort();
+    }, timeoutMs);
+  });
+  try {
+    const ready = await Promise.race([
+      request<{status: string; release_id: string}>("/readyz", controller.signal),
+      timeout,
+    ]);
+    if (ready.release_id !== releaseId) {
+      throw new Error(`Release mismatch: site ${releaseId}, query service ${ready.release_id}`);
+    }
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+    signal?.removeEventListener("abort", abort);
   }
 }
 

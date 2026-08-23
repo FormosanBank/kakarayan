@@ -42,6 +42,21 @@ it("keeps static tools available when the query service is unavailable", async (
   expect(data.query.available).toBe(false);
 });
 
+it("finishes loading static tools when readiness never responds", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/readyz")) return await new Promise<Response>(() => undefined);
+    const endpoint = /\/([^/]+)\.json$/u.exec(url)?.[1] ?? "";
+    return Response.json(envelope(endpoint, endpointData[endpoint]));
+  }));
+
+  const data = await loadAppData(undefined, 1);
+
+  expect(data.meta.release_id).toBe(releaseId);
+  expect(data.query.available).toBe(false);
+  expect(data.query.error).toContain("did not respond");
+});
+
 it("rejects a mixed static release before querying the backend", async () => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);

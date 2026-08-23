@@ -187,13 +187,14 @@ export function DatasetBuilder({data}: {data: AppData}) {
     const timer = window.setTimeout(() => {
       setError("");
       setPreviewState({signature: previewSignature, values: {}, pending: [...levels]});
-      for (const level of levels) {
-        datasetPreview(
-          data.meta.release_id,
-          parameters(level, fields[level], 12),
-          next.signal,
-        ).then(
-          (result) => {
+      const loadPreviews = async () => {
+        for (const level of levels) {
+          try {
+            const result = await datasetPreview(
+              data.meta.release_id,
+              parameters(level, fields[level], 12),
+              next.signal,
+            );
             if (next.signal.aborted) return;
             setPreviewState((current) => current.signature === previewSignature
               ? {
@@ -202,16 +203,17 @@ export function DatasetBuilder({data}: {data: AppData}) {
                   pending: current.pending.filter((item) => item !== level),
                 }
               : current);
-          },
-          (cause: unknown) => {
+          } catch (cause) {
             if (next.signal.aborted) return;
             setError(cause instanceof Error ? cause.message : String(cause));
             setPreviewState((current) => current.signature === previewSignature
-              ? {...current, pending: current.pending.filter((item) => item !== level)}
+              ? {...current, pending: []}
               : current);
-          },
-        );
-      }
+            return;
+          }
+        }
+      };
+      void loadPreviews();
     }, 250);
     return () => {
       window.clearTimeout(timer);
@@ -389,7 +391,14 @@ export function DatasetBuilder({data}: {data: AppData}) {
           <label className="field">{tx("Maximum per level", "每層級上限")}<select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))}>{[1000, 10_000, 25_000, 50_000, 100_000].map((value) => <option key={value} value={value}>{number(value)}</option>)}</select></label>
           <label className="field">{tx("File type", "檔案類型")}<select value={format} onChange={(event) => setFormat(event.target.value as DatasetFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option><option value="jsonl">JSON Lines</option></select></label>
           {levels.length > 1 && <p className="builder__package-note">{tx(`${levels.length} tables in one ZIP`, `${levels.length} 個資料表合併為一個 ZIP`)}</p>}
-          <button className="button button--primary" disabled={!languageId || !selectionReady || exportBlocked || !data.query.available} onClick={exportDataset}>{tx("Download dataset", "下載資料集")}</button>
+          <button
+            aria-busy={previewBusy}
+            className="button button--primary"
+            disabled={!languageId || !selectionReady || exportBlocked || !data.query.available || previewBusy || !previewComplete}
+            onClick={exportDataset}
+          >
+            {previewBusy ? tx("Calculating…", "計算中…") : tx("Download dataset", "下載資料集")}
+          </button>
           <button className="button button--quiet" disabled={!languageId || !selectionReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
           {exportBlocked && <p className="callout callout--warning">{tx("This scope includes data without reviewed redistribution permission.", "此範圍包含尚未審查再散布權限的資料。")}</p>}
           <Link to="/downloads">{tx("Prepared full datasets", "預備完整資料集")}</Link>
