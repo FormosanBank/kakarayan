@@ -6,6 +6,7 @@ import {CodeLines, RequestExamples} from "./DeveloperCode";
 import {LoadingState} from "./LoadingState";
 
 type QueryRoute = "dictionary" | "concordance";
+const PLAYGROUND_TIMEOUT_MS = 12_000;
 
 export function ApiExplorer({
   available,
@@ -65,6 +66,11 @@ export function ApiExplorer({
     setStatus("");
     setResponse("");
     setHttpStatus(0);
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      next.abort();
+    }, PLAYGROUND_TIMEOUT_MS);
     try {
       const result = await fetch(request.url, {
         headers: {Accept: "application/json", "X-Kakarayan-Client": "developer-playground-v1"},
@@ -88,10 +94,13 @@ export function ApiExplorer({
         setStatus(tx("Request complete.", "請求完成。"));
       }
     } catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === "AbortError")) {
+      if (timedOut) {
+        setStatus(tx("Request timed out after 12 seconds. Narrow the query or try again.", "請求在 12 秒後逾時。請縮小查詢範圍或重試。"));
+      } else if (!(cause instanceof DOMException && cause.name === "AbortError")) {
         setStatus(cause instanceof Error ? cause.message : String(cause));
       }
     } finally {
+      window.clearTimeout(timeout);
       if (controller.current === next) setBusy(false);
     }
   }

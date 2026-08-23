@@ -1,11 +1,14 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 
 import {
+  API_ANALYTICAL_TIMEOUT_MS,
+  ApiRequestError,
   datasetPreview,
   datasetUrl,
   translationLanguages,
   type DatasetPreviewResult,
 } from "../apiClient";
+import {apiErrorMessage} from "../apiErrors";
 import {
   DATASET_FIELD_INFO,
   DATASET_FIELDS_BY_LEVEL,
@@ -81,6 +84,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
     pending: [],
   });
   const [error, setError] = useState("");
+  const [previewError, setPreviewError] = useState({signature: "", message: ""});
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const previewController = useRef<AbortController | null>(null);
 
   const corpora = useMemo(
@@ -130,6 +135,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
     ? (previewIsCurrent ? previewState.pending : levels)
     : [];
   const previewBusy = previewLoadingLevels.length > 0;
+  const currentPreviewError = previewError.signature === previewSignature
+    ? previewError.message
+    : "";
 
   const parameters = useCallback((
     level: DatasetLevel,
@@ -185,17 +193,27 @@ export function DatasetBuilder({data}: {data: AppData}) {
     const next = new AbortController();
     previewController.current = next;
     const timer = window.setTimeout(() => {
-      setError("");
+      setPreviewError({signature: "", message: ""});
       setPreviewState({signature: previewSignature, values: {}, pending: [...levels]});
       const loadPreviews = async () => {
-        for (const level of levels) {
-          try {
+        let batchTimedOut = false;
+        const batchTimeout = window.setTimeout(() => {
+          batchTimedOut = true;
+          next.abort();
+        }, API_ANALYTICAL_TIMEOUT_MS);
+        try {
+          for (const level of levels) {
             const result = await datasetPreview(
               data.meta.release_id,
               parameters(level, fields[level], 12),
               next.signal,
             );
-            if (next.signal.aborted) return;
+            if (next.signal.aborted) {
+              if (batchTimedOut) {
+                throw new ApiRequestError("Dataset preview took too long", "client_timeout", 0);
+              }
+              return;
+            }
             setPreviewState((current) => current.signature === previewSignature
               ? {
                   ...current,
@@ -203,14 +221,21 @@ export function DatasetBuilder({data}: {data: AppData}) {
                   pending: current.pending.filter((item) => item !== level),
                 }
               : current);
-          } catch (cause) {
-            if (next.signal.aborted) return;
-            setError(cause instanceof Error ? cause.message : String(cause));
-            setPreviewState((current) => current.signature === previewSignature
-              ? {...current, pending: []}
-              : current);
-            return;
           }
+        } catch (cause) {
+          if (next.signal.aborted && !batchTimedOut) return;
+          const reported = batchTimedOut
+            ? new ApiRequestError("Dataset preview took too long", "client_timeout", 0)
+            : cause;
+          setPreviewError({
+            signature: previewSignature,
+            message: apiErrorMessage(reported, tx),
+          });
+          setPreviewState((current) => current.signature === previewSignature
+            ? {...current, values: {}, pending: []}
+            : current);
+        } finally {
+          window.clearTimeout(batchTimeout);
         }
       };
       void loadPreviews();
@@ -219,7 +244,29 @@ export function DatasetBuilder({data}: {data: AppData}) {
       window.clearTimeout(timer);
       next.abort();
     };
-  }, [canPreview, data.meta.release_id, fields, levels, parameters, previewSignature]);
+  }, [
+    canPreview,
+    data.meta.release_id,
+    fields,
+    levels,
+    parameters,
+    previewAttempt,
+    previewSignature,
+    tx,
+  ]);
+
+  function cancelPreview() {
+    previewController.current?.abort();
+    setPreviewError({signature: "", message: ""});
+    setPreviewState((current) => current.signature === previewSignature
+      ? {...current, values: {}, pending: []}
+      : current);
+  }
+
+  function retryPreview() {
+    setPreviewError({signature: "", message: ""});
+    setPreviewAttempt((value) => value + 1);
+  }
 
   function toggleLevel(level: DatasetLevel) {
     if (!levels.includes(level)) setActiveColumnLevel(level);
@@ -399,12 +446,30 @@ export function DatasetBuilder({data}: {data: AppData}) {
           >
             {previewBusy ? tx("Calculating…", "計算中…") : tx("Download dataset", "下載資料集")}
           </button>
+          {previewBusy && (
+            <button className="text-button" type="button" onClick={cancelPreview}>
+              {tx("Cancel preview", "取消預覽")}
+            </button>
+          )}
+          {canPreview && !previewBusy && !previewComplete && !currentPreviewError && (
+            <button className="text-button" type="button" onClick={retryPreview}>
+              {tx("Retry preview", "重試預覽")}
+            </button>
+          )}
           <button className="button button--quiet" disabled={!languageId || !selectionReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
           {exportBlocked && <p className="callout callout--warning">{tx("This scope includes data without reviewed redistribution permission.", "此範圍包含尚未審查再散布權限的資料。")}</p>}
           <Link to="/downloads">{tx("Prepared full datasets", "預備完整資料集")}</Link>
         </aside>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
+      {currentPreviewError && (
+        <div className="callout callout--error callout--action">
+          <span>{currentPreviewError}</span>
+          <button className="text-button" type="button" onClick={retryPreview}>
+            {tx("Retry preview", "重試預覽")}
+          </button>
+        </div>
+      )}
       <DatasetPreview
         fields={fields}
         languageSelected={Boolean(languageId)}

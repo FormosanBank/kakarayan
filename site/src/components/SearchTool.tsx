@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState, type FormEvent} from "react";
 
 import {concordance, dictionary, translationLanguages} from "../apiClient";
+import {apiErrorMessage, isAbortError} from "../apiErrors";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
 import {cardFromDictionaryEntry, cardFromRecord, saveCard} from "../study";
@@ -158,8 +159,8 @@ export function SearchTool({
           });
         }
       } catch (cause) {
-        if (!(cause instanceof DOMException && cause.name === "AbortError")) {
-          setError(cause instanceof Error ? cause.message : String(cause));
+        if (!isAbortError(cause)) {
+          setError(apiErrorMessage(cause, tx));
         }
       } finally {
         if (controller.current === next) {
@@ -170,7 +171,7 @@ export function SearchTool({
     },
     [
       corpusId, cursor, data.meta.release_id, data.query.available, dialect, direction,
-      kind, languageId, match, query, requirements, setParams, targetLanguage,
+      kind, languageId, match, query, requirements, setParams, targetLanguage, tx,
     ],
   );
 
@@ -310,7 +311,23 @@ export function SearchTool({
       </form>
 
       <div className="search-feedback" aria-live="polite">
-        {error && <p className="callout callout--error">{error}</p>}
+        {error && (
+          <div className="callout callout--error callout--action">
+            <span>{error}</span>
+            <button className="text-button" type="button" onClick={() => void run(false)}>
+              {tx("Try again", "重試")}
+            </button>
+          </div>
+        )}
+        {busy && (
+          <button
+            className="text-button search-feedback__cancel"
+            type="button"
+            onClick={() => controller.current?.abort()}
+          >
+            {tx("Cancel", "取消")}
+          </button>
+        )}
         {searched && !error && !replacingResults && <p className="result-count">{number(resultCount)} {tx("shown", "筆顯示")}</p>}
       </div>
       {notice && <p className="search-notice" role="status">{notice}</p>}

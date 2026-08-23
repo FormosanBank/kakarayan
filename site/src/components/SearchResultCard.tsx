@@ -1,6 +1,7 @@
 import {useEffect, useState, type ReactNode} from "react";
 
 import {sentenceDetail} from "../apiClient";
+import {apiErrorMessage} from "../apiErrors";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import {translationLanguageName} from "../translationLanguages";
@@ -349,13 +350,13 @@ export function SearchResultCard({
       setRecord,
       (cause: unknown) => {
         if (!controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message : String(cause));
+          setError(apiErrorMessage(cause, tx));
           setOpen(false);
         }
       },
     );
     return () => controller.abort();
-  }, [data.meta.release_id, open, record, summary.id]);
+  }, [data.meta.release_id, open, record, summary.id, tx]);
 
   if (record) {
     return (

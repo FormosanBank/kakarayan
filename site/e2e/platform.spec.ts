@@ -221,6 +221,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 });
 
 test("search controls stay fixed when the action label changes", async ({page}) => {
+  await disableServiceWorkerForRouting(page);
   await page.goto("lookup?type=dictionary");
   await page.getByLabel("Word or meaning").fill("lima");
   const button = page.locator(".search-form__actions .button");
@@ -235,13 +236,45 @@ test("search controls stay fixed when the action label changes", async ({page}) 
   });
   await button.click();
   await expect(button).toHaveText("Searching…");
+  await expect(page.getByRole("button", {name: "Cancel", exact: true})).toBeVisible();
   const pending = await controlGeometry(page);
   expectStableGeometry(before, pending);
 
   releaseRequest();
   await expect(page.locator(".dictionary-entry").first()).toBeVisible();
+  await expect(page.getByRole("button", {name: "Cancel", exact: true})).toBeHidden();
   expectStableGeometry(before, await controlGeometry(page));
   await page.unroute(/\/dictionary\?/u);
+});
+
+test("a busy lookup fails fast and remains retryable", async ({page}) => {
+  await disableServiceWorkerForRouting(page);
+  let attempts = 0;
+  await page.route(/\/dictionary\?/u, async (route) => {
+    attempts += 1;
+    if (attempts <= 2) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        headers: {"Retry-After": "0"},
+        body: JSON.stringify({error: {code: "server_busy", message: "busy"}}),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("lookup?type=dictionary");
+  await page.getByLabel("Word or meaning").fill("lima");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+
+  const error = page.locator(".search-feedback .callout--error");
+  await expect(error).toContainText("The service is busy");
+  await expect(error.getByRole("button", {name: "Try again"})).toBeVisible();
+  expect(attempts).toBe(2);
+
+  await error.getByRole("button", {name: "Try again"}).click();
+  await expect(page.locator(".dictionary-entry").first()).toBeVisible();
+  expect(attempts).toBe(3);
 });
 
 test("dictionary examples stay in the learning workspace", async ({page}) => {
@@ -351,6 +384,7 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await page.locator(".builder__level-options").getByText("Word", {exact: true}).click();
   await page.locator(".builder__level-options").getByText("Morpheme", {exact: true}).click();
   await expect(page.getByRole("button", {name: "Calculating…"})).toBeDisabled();
+  await expect(page.getByRole("button", {name: "Cancel preview"})).toBeVisible();
   await expect(page.locator(".builder__column-tabs").getByRole("tab")).toHaveCount(3);
   await expect(page.locator(".builder__preview-tabs").getByRole("tab")).toHaveCount(3);
   await expect(page.getByRole("button", {name: "Download dataset"})).toBeEnabled();

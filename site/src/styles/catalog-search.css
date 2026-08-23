@@ -620,6 +620,10 @@
   margin: 0;
 }
 
+.search-feedback__cancel {
+  margin: 0;
+}
+
 .result-count {
   color: var(--body);
   font-size: 13px;
