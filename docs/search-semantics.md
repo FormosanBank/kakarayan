@@ -13,6 +13,13 @@ exports.
   characters.
 - Empty normalized queries are invalid.
 
+Displayed tier values are never replaced by these keys. Original, standardized, and
+alternate `FORM` text is copied from the pinned XML, including punctuation. Token and
+frequency views keep both the selected surface spelling and its normalized key. The selected
+surface uses standard `FORM`, then original, then alternate as fallbacks. As a result,
+`word` and `word,` remain visibly distinct source strings but share one normalized frequency
+key.
+
 The executable golden cases are in `tests/fixtures/search-semantics.json`.
 
 ## Match modes
@@ -21,9 +28,17 @@ The executable golden cases are in `tests/fixtures/search-semantics.json`.
 - `prefix`: the complete normalized value starts with the normalized query.
 - `contains`: the normalized value contains the normalized query.
 
-These definitions apply in both directions. A Formosan-direction query searches forms. A
-translation-direction query searches translations or glosses in the requested translation
-language.
+These definitions apply in both directions. A Formosan-direction sentence query searches
+original, standardized, and alternate `FORM` values at S, W, and M levels, plus the selected
+token projection. Dictionary lookup searches the token projection and owner-level W and M
+`FORM` values. A translation-direction query searches S, W, and M `TRANSL` values tagged
+with the requested XML language.
+
+The Lookup page and landing-page lookup use the same dictionary and concordance routes. The
+Dataset Builder uses the same sentence candidate matcher; W and M datasets apply the same
+normalization directly to `FORM` or `TRANSL` values owned by the selected XML level. The
+interface presents the Formosan language plus every available translation language in one
+search-language selector while retaining the Formosan language as the result scope.
 
 Regex and fuzzy matching are not part of the v1 contract. They can only be added after
 representative relevance and performance testing.

@@ -29,7 +29,13 @@ export function CandidateGroups({
   return (
     <div className="candidate-groups">
       {entries.map((entry) => {
-        const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(entry.headword)}&language=${encodeURIComponent(entry.language_id)}&target=${encodeURIComponent(targetLanguage)}&direction=formosan&mode=exact${corpusId ? `&corpus=${encodeURIComponent(corpusId)}` : ""}`;
+        const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(entry.headword)}&language=${encodeURIComponent(entry.language_id)}&direction=formosan&mode=exact${targetLanguage ? `&target=${encodeURIComponent(targetLanguage)}` : ""}${corpusId ? `&corpus=${encodeURIComponent(corpusId)}` : ""}`;
+        const meanings = entry.meaning_entries?.length
+          ? entry.meaning_entries
+          : entry.meanings.map((text) => ({text, xml_lang: targetLanguage}));
+        const showMeaningLanguages = !targetLanguage || new Set(
+          meanings.map((meaning) => meaning.xml_lang),
+        ).size > 1;
         return (
           <article key={entry.id} className="dictionary-entry">
             <header>
@@ -46,13 +52,20 @@ export function CandidateGroups({
               </span>
             </header>
             <div className="dictionary-entry__meaning">
-              <span>{translationLanguageName(targetLanguage, locale)}</span>
-              {entry.meanings.length ? (
+              <span>
+                {targetLanguage
+                  ? translationLanguageName(targetLanguage, locale)
+                  : tx("Meanings", "釋義")}
+              </span>
+              {meanings.length ? (
                 <ol>
-                  {entry.meanings.map((meaning) => (
-                    <li key={meaning}>
+                  {meanings.map((meaning) => (
+                    <li key={`${meaning.xml_lang}:${meaning.text}`}>
+                      {showMeaningLanguages && (
+                        <small>{translationLanguageName(meaning.xml_lang, locale)}</small>
+                      )}
                       <QueryHighlight
-                        text={meaning}
+                        text={meaning.text}
                         query={query}
                         mode={mode}
                         active={direction === "translation"}

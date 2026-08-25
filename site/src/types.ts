@@ -253,6 +253,7 @@ export interface DictionaryEntry {
   occurrences: number;
   variant_count: number;
   meanings: string[];
+  meaning_entries?: Array<{text: string; xml_lang: string}>;
   pronunciations: string[];
   variants: string[];
   corpus_ids: string[];

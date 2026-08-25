@@ -121,6 +121,19 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     assert dictionary.status_code == 200
     assert dictionary.json()["items"][0]["headword"] == "lima"
     assert dictionary.json()["items"][0]["summary_truncated"] is False
+    assert dictionary.json()["items"][0]["meaning_entries"] == [
+        {"text": "FIVE", "xml_lang": "eng"},
+        {"text": "five.word", "xml_lang": "eng"},
+    ]
+
+    chinese_meaning = client.get(
+        url,
+        params={"q": "rima", "language_id": "lang_amis", "match": "exact"},
+    )
+    assert chinese_meaning.status_code == 200
+    assert chinese_meaning.json()["items"][0]["meaning_entries"] == [
+        {"text": "虛構測試句", "xml_lang": "zho"}
+    ]
 
     formosan_sentence = client.get(
         release_path(client, "concordance"),

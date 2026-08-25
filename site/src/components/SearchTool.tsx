@@ -83,6 +83,8 @@ export function SearchTool({
 
   const selectedLanguage = data.languages.find((language) => language.id === languageId);
   const selectedTranslationLanguage = translationLanguageName(targetLanguage, locale);
+  const searchLanguage = direction === "formosan" ? "formosan" : `translation:${targetLanguage}`;
+  const resultTranslationLanguage = direction === "translation" ? targetLanguage : "";
   const relevantCorpora = useMemo(
     () => data.corpora.filter((corpus) => corpus.languages.includes(languageId)),
     [data.corpora, languageId],
@@ -130,7 +132,7 @@ export function SearchTool({
           corpusId,
           dialect: kind === "sentences" ? dialect : "",
           direction,
-          translationLanguage: targetLanguage,
+          translationLanguage: direction === "translation" ? targetLanguage : "",
           match,
           requirements: kind === "sentences" ? requirements : [],
           limit: 25,
@@ -153,7 +155,7 @@ export function SearchTool({
             language: languageId,
             direction,
             mode: match,
-            ...(targetLanguage && {target: targetLanguage}),
+            ...(direction === "translation" && targetLanguage && {target: targetLanguage}),
             ...(corpusId && {corpus: corpusId}),
             ...(dialect && {dialect}),
           });
@@ -188,7 +190,9 @@ export function SearchTool({
 
   async function saveDictionary(entry: DictionaryEntry) {
     try {
-      await saveCard(cardFromDictionaryEntry(entry, data.meta.release_id, targetLanguage));
+      await saveCard(
+        cardFromDictionaryEntry(entry, data.meta.release_id, resultTranslationLanguage),
+      );
       setNotice(tx(`${entry.display_form} saved.`, `已儲存「${entry.display_form}」。`));
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : String(cause));
@@ -197,7 +201,7 @@ export function SearchTool({
 
   async function saveSentence(record: SearchRecord) {
     try {
-      await saveCard(cardFromRecord(record, data.meta.release_id, targetLanguage));
+      await saveCard(cardFromRecord(record, data.meta.release_id, resultTranslationLanguage));
       setNotice(tx("Sentence saved.", "已儲存句子。"));
     } catch (cause) {
       setNotice(cause instanceof Error ? cause.message : String(cause));
@@ -215,28 +219,12 @@ export function SearchTool({
         </div>
       )}
       <form className="search-form" onSubmit={submit}>
-        <fieldset className="lookup-direction">
-          <legend>{tx("Search text language", "搜尋文字的語言")}</legend>
-          <div className="lookup-direction__options">
-            <label>
-              <input type="radio" checked={direction === "formosan"} onChange={() => setDirection("formosan")} />
-              <span>
-                <strong>
-                  {tx("Search in", "搜尋")}{" "}
-                  {selectedLanguage ? languageName(selectedLanguage) : "Formosan"}
-                </strong>
-              </span>
-            </label>
-            <label>
-              <input type="radio" checked={direction === "translation"} onChange={() => setDirection("translation")} />
-              <span>
-                <strong>{tx("Search in", "搜尋")} {selectedTranslationLanguage}</strong>
-              </span>
-            </label>
-          </div>
-        </fieldset>
         <div className="field field--query">
-          <label htmlFor={`query-${kind}`}>{kind === "dictionary" ? tx("Word or meaning", "單詞或釋義") : tx("Word or phrase", "單詞或片語")}</label>
+          <label htmlFor={`query-${kind}`}>
+            {kind === "dictionary"
+              ? tx("Word or meaning", "單詞或釋義")
+              : tx("Word or phrase", "單詞或片語")}
+          </label>
           <input id={`query-${kind}`} value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
         </div>
         <label className="field">
@@ -249,10 +237,36 @@ export function SearchTool({
             {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
           </select>
         </label>
-        <label className="field">
-          {tx("Translation", "翻譯語言")}
-          <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}>
-            {targets.map((target) => <option key={target.xml_lang} value={target.xml_lang}>{translationLanguageName(target.xml_lang, locale)} ({number(target.records)})</option>)}
+        <label className="field field--search-language">
+          {tx("Search text language", "搜尋文字的語言")}
+          <select
+            value={searchLanguage}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "formosan") {
+                setDirection("formosan");
+                return;
+              }
+              setDirection("translation");
+              setTargetLanguage(value.replace(/^translation:/u, ""));
+            }}
+          >
+            <option value="formosan">
+              {selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語")}
+              {tx(" · all FORM tiers", " · 所有 FORM 層")}
+            </option>
+            {direction === "translation" && targetLanguage && !targets.some(
+              (target) => target.xml_lang === targetLanguage,
+            ) && (
+              <option value={`translation:${targetLanguage}`}>
+                {selectedTranslationLanguage} · TRANSL
+              </option>
+            )}
+            {targets.map((target) => (
+              <option key={target.xml_lang} value={`translation:${target.xml_lang}`}>
+                {translationLanguageName(target.xml_lang, locale)} · TRANSL ({number(target.records)})
+              </option>
+            ))}
           </select>
         </label>
         <div className="search-form__actions">
@@ -263,6 +277,20 @@ export function SearchTool({
         <details className="lookup-options">
           <summary>{tx("Search options", "搜尋選項")}</summary>
           <div className="lookup-options__grid">
+            <div className="search-scope-note">
+              <strong>{tx("Fields searched", "搜尋欄位")}</strong>
+              <span>
+                {direction === "formosan"
+                  ? tx(
+                      "Original, standardized, and alternate FORM values at S, W, and M levels.",
+                      "S、W、M 層級的原始、標準化及替代 FORM 值。",
+                    )
+                  : tx(
+                      `${selectedTranslationLanguage} TRANSL values at S, W, and M levels.`,
+                      `S、W、M 層級的${selectedTranslationLanguage} TRANSL 值。`,
+                    )}
+              </span>
+            </div>
             <label className="field">
               {tx("Corpus", "語料庫")}
               <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
@@ -342,7 +370,7 @@ export function SearchTool({
         <CandidateGroups
           data={data}
           entries={dictionaryEntries}
-          targetLanguage={targetLanguage}
+          targetLanguage={resultTranslationLanguage}
           corpusId={corpusId}
           query={query}
           mode={match}
@@ -360,11 +388,16 @@ export function SearchTool({
               query={query}
               mode={match}
               direction={direction}
-              targetLanguage={targetLanguage}
+              targetLanguage={resultTranslationLanguage}
               learner={learner}
               onSave={(record) => void saveSentence(record)}
               onNotice={setNotice}
-              {...(onPractice ? {onPractice: (record: SearchRecord) => onPractice(record, targetLanguage)} : {})}
+              {...(onPractice
+                ? {
+                    onPractice: (record: SearchRecord) =>
+                      onPractice(record, resultTranslationLanguage),
+                  }
+                : {})}
             />
           ))}
         </div>

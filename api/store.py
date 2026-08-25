@@ -819,7 +819,7 @@ class CorpusStore:
                     tuple(owner_ids),
                 )
             )
-        meanings: list[str] = []
+        meaning_rows: list[dict[str, Any]] = []
         pronunciations: list[str] = []
         if owner_ids:
             placeholders = ",".join("?" for _ in owner_ids)
@@ -827,12 +827,12 @@ class CorpusStore:
             language_parameters: tuple[object, ...] = (
                 (translation_language,) if translation_language else ()
             )
-            meanings = [
-                str(row[0])
+            meaning_rows = [
+                dict(row)
                 for row in connection.execute(
-                    f"SELECT DISTINCT text FROM translations "
+                    f"SELECT text, xml_lang, MIN(position) AS first_position FROM translations "
                     f"WHERE owner_id IN ({placeholders}){language_clause} AND text <> '' "
-                    "ORDER BY position LIMIT 13",
+                    "GROUP BY text, xml_lang ORDER BY xml_lang, first_position, text LIMIT 13",
                     (*owner_ids, *language_parameters),
                 )
             ]
@@ -844,16 +844,17 @@ class CorpusStore:
                     tuple(owner_ids),
                 )
             ]
-        if not meanings and sentence_ids:
+        if not meaning_rows and sentence_ids:
             placeholders = ",".join("?" for _ in sentence_ids)
             language_clause = " AND xml_lang = ?" if translation_language else ""
             language_parameters = (translation_language,) if translation_language else ()
-            meanings = [
-                str(row[0])
+            meaning_rows = [
+                dict(row)
                 for row in connection.execute(
-                    f"SELECT DISTINCT text FROM translations WHERE owner_type = 'sentence' "
+                    f"SELECT text, xml_lang, MIN(position) AS first_position FROM translations "
+                    "WHERE owner_type = 'sentence' "
                     f"AND owner_id IN ({placeholders}){language_clause} AND text <> '' "
-                    "ORDER BY position LIMIT 13",
+                    "GROUP BY text, xml_lang ORDER BY xml_lang, first_position, text LIMIT 13",
                     (*sentence_ids, *language_parameters),
                 )
             ]
@@ -875,12 +876,14 @@ class CorpusStore:
                 )
             ]
             examples = self._sentence_summaries(connection, example_rows)
-        meanings, shortened = _bounded_values(
-            meanings,
-            maximum_items=DICTIONARY_MEANING_LIMIT,
-            maximum_chars=DICTIONARY_VALUE_MAX_CHARS,
-        )
-        evidence_truncated = evidence_truncated or shortened
+        meaning_entries: list[dict[str, str]] = []
+        meanings_truncated = len(meaning_rows) > DICTIONARY_MEANING_LIMIT
+        for row in meaning_rows[:DICTIONARY_MEANING_LIMIT]:
+            text, shortened = _bounded_text(row["text"], DICTIONARY_VALUE_MAX_CHARS)
+            meaning_entries.append({"text": text, "xml_lang": str(row["xml_lang"])})
+            meanings_truncated = meanings_truncated or shortened
+        meanings = [item["text"] for item in meaning_entries]
+        evidence_truncated = evidence_truncated or meanings_truncated
         pronunciations, shortened = _bounded_values(
             pronunciations,
             maximum_items=DICTIONARY_PRONUNCIATION_LIMIT,
@@ -899,6 +902,7 @@ class CorpusStore:
         corpus_ids = list(dict.fromkeys(str(row["corpus_id"]) for row in rows))
         return {
             "meanings": meanings,
+            "meaning_entries": meaning_entries,
             "pronunciations": pronunciations,
             "variants": variants,
             "corpus_ids": corpus_ids,

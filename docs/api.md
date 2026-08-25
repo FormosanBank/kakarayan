@@ -89,8 +89,9 @@ GET /v1/releases/fb-20260811-abcdef12/dictionary?q=good&language_id=lang_amis&di
 Search meaning is defined in [search-semantics.md](search-semantics.md). The server queries
 publisher-produced canonical columns; clients must not invent another normalization pass.
 
-Initial dictionary results contain a headword, meanings, scope, counts, citations, and a
-small example set. Concordance results contain sentence summaries and a detail identifier.
+Initial dictionary results contain a headword, meanings, language-tagged `meaning_entries`,
+scope, counts, citations, and a small example set. `meanings` remains the text-only
+compatibility projection. Concordance results contain sentence summaries and a detail identifier.
 Full words, morphemes, forms, phonology, translations, and audio are returned only by the
 sentence detail route.
 
