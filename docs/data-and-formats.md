@@ -70,23 +70,34 @@ Identity and ancestry columns include `id`, `xml_id`, `parent_id`, `text_id`,
 level are offered.
 
 Tier columns include `form`, `standard`, `original`, `alternate_forms`, `translations`,
-`phonology`, `audio`, and `unclear`. Values come only from the row owner. A word translation
-is never placed in an S row, and a morpheme gloss is never placed in a W row. `form` uses
-standard, original, then alternate FORM as a display fallback while the three source fields
-remain separately selectable.
+`phonology`, `audio`, and `unclear`. Values come only from the row
+owner. A word translation is never placed in an S row, and a morpheme gloss is never placed
+in a W row. `form` uses standard, original, then alternate FORM as a display fallback while
+the three source fields remain separately selectable.
+
+Selecting `translations` expands the TRANSL elements found in the exact returned row window
+into deterministic columns such as `translation_eng_1`, `translation_eng_2`, and
+`translation_zho_1`. XML language tags determine the middle component. Repeated TRANSL
+elements in one language retain XML order through the numeric suffix. Every output row has
+the same headers and an empty cell when that owner lacks a particular language or
+occurrence. `complete_fields=true` requires at least one owner-level TRANSL element, not a
+value in every generated language column. A selection that would produce more than 256
+TRANSL columns is rejected as too wide.
 
 Sentence-only columns are `tokens`, `token_count`, and `source`. W and M rows may include
 `class` and `sclass`. Provenance columns are repeated on every level: `language_id`,
 `corpus_id`, `dialect`, and `source_path`.
 
-The same serializer supplies preview rows, API exports, and recipe execution. CSV and TSV
+The same wide-column serializer supplies preview rows, API exports, and recipe execution.
+CSV and TSV
 exports escape cells that spreadsheet software could interpret as formulas.
 
 ## Export recipes
 
 A downloaded recipe records the exact release, selected XML levels, columns for each level,
 complete-row behavior, output format, and spreadsheet-safety policy. It validates against
-`schemas/export-recipe.schema.json`.
+`schemas/export-recipe.schema.json`. Recipe schema 2.0.0 defines `translations` as the
+language-specific wide-column selector.
 
 Execute a recipe against the matching full release directory. Recipe execution verifies and
 activates that release's SQLite database in a temporary directory, then uses the same query

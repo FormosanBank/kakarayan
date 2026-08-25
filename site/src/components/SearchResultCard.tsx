@@ -334,7 +334,7 @@ export function SearchResultCard({
   onNotice: (notice: string) => void;
   onPractice?: (record: SearchRecord) => void;
 }) {
-  const {tx} = useI18n();
+  const {locale, tx} = useI18n();
   const [open, setOpen] = useState(false);
   const [record, setRecord] = useState<SearchRecord | null>(null);
   const [error, setError] = useState("");
@@ -404,6 +404,9 @@ export function SearchResultCard({
               queryMatchesText(item.text, query, mode);
             return (
               <p key={`${item.xml_lang}-${index}`} className={isMatch ? "translation-match" : undefined}>
+                <span className="translation-meta">
+                  {translationLanguageName(item.xml_lang, locale)}
+                </span>
                 <span className="translation-text">
                   <QueryHighlight text={item.text} query={query} mode={mode} active={isMatch} />
                 </span>

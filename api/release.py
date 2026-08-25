@@ -14,6 +14,31 @@ from api.config import Settings
 
 _MANIFEST_LIMIT = 10_000_000
 _SUPPORTED_SCHEMA_VERSION = "1.0.0"
+REQUIRED_DATABASE_TABLES = frozenset(
+    {
+        "texts",
+        "sentences",
+        "words",
+        "morphemes",
+        "forms",
+        "phonology",
+        "translations",
+        "audio",
+        "tokens",
+        "publication_metadata",
+        "tier_scope",
+        "dictionary_terms",
+        "formosan_sentence_terms",
+        "translation_sentence_terms",
+        "reverse_dictionary_terms",
+        "formosan_vocabulary",
+        "formosan_vocabulary_fts",
+        "translation_vocabulary",
+        "translation_vocabulary_fts",
+        "summary_cache",
+        "translation_language_cache",
+    }
+)
 
 
 class ReleaseError(RuntimeError):
@@ -81,27 +106,7 @@ def _fast_database_check(path: Path) -> dict[str, Any]:
                 row[0]
                 for row in connection.execute("SELECT name FROM sqlite_schema WHERE type = 'table'")
             }
-            required = {
-                "texts",
-                "sentences",
-                "words",
-                "morphemes",
-                "forms",
-                "phonology",
-                "translations",
-                "audio",
-                "tokens",
-                "publication_metadata",
-                "tier_scope",
-                "dictionary_terms",
-                "formosan_vocabulary",
-                "formosan_vocabulary_fts",
-                "translation_vocabulary",
-                "translation_vocabulary_fts",
-                "summary_cache",
-                "translation_language_cache",
-            }
-            if not required.issubset(table_names):
+            if not REQUIRED_DATABASE_TABLES.issubset(table_names):
                 raise ReleaseError("SQLite release is missing required tables")
             metadata = {
                 row["key"]: json.loads(row["value_json"])

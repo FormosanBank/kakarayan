@@ -20,7 +20,10 @@ export const DATASET_FIELD_INFO = {
   standard: ["FormosanBank standardized FORM", "FormosanBank 標準化 FORM"],
   original: ["Source-faithful original FORM", "忠於來源的原始 FORM"],
   alternate_forms: ["Alternate FORM values", "替代 FORM 值"],
-  translations: ["Owner-level TRANSL values with language tags", "元素所屬的 TRANSL 值與語言標籤"],
+  translations: [
+    "Separate TRANSL columns by XML language and occurrence",
+    "依 XML 語言及出現順序分開的 TRANSL 欄位",
+  ],
   tokens: ["Ordered sentence token sequence", "句子的依序詞元"],
   token_count: ["Sentence token count", "句子詞元數"],
   phonology: ["Owner-level PHON values", "元素所屬的 PHON 值"],

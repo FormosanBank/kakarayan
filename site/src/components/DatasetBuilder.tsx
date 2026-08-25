@@ -21,6 +21,7 @@ import {
 import {createDatasetRecipe, type DatasetFormat} from "../datasetRecipe";
 import {useI18n} from "../i18n";
 import {Link, useSearchParams} from "../routing";
+import {translationLanguageName} from "../translationLanguages";
 import type {AppData, MatchMode, SearchDirection} from "../types";
 import {DatasetPreview} from "./DatasetPreview";
 
@@ -58,7 +59,7 @@ function initialFields(): DatasetFieldsByLevel {
 }
 
 export function DatasetBuilder({data}: {data: AppData}) {
-  const {languageName, number, tx} = useI18n();
+  const {languageName, locale, number, tx} = useI18n();
   const [urlParams] = useSearchParams();
   const requestedLanguage = urlParams.get("language") ?? "";
   const [languageId, setLanguageId] = useState(
@@ -93,6 +94,13 @@ export function DatasetBuilder({data}: {data: AppData}) {
     [data.corpora, languageId],
   );
   const selectedLanguage = data.languages.find((item) => item.id === languageId);
+  const selectedTranslationLanguage = translationLanguageName(translationLanguage, locale);
+  const searchLanguage = direction === "formosan"
+    ? "formosan"
+    : `translation:${translationLanguage}`;
+  const translationSearchReady = direction === "formosan" || translationOptions.some(
+    (option) => option.xml_lang === translationLanguage,
+  );
   const rights = new Map(data.rights.entries.map((entry) => [entry.id, entry]));
   const selectedCorpora = corpusId
     ? corpora.filter((corpus) => corpus.id === corpusId)
@@ -128,7 +136,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
     query,
     translationLanguage,
   ]);
-  const canPreview = Boolean(languageId && selectionReady && data.query.available);
+  const canPreview = Boolean(
+    languageId && selectionReady && translationSearchReady && data.query.available,
+  );
   const previewIsCurrent = previewState.signature === previewSignature;
   const previews = previewIsCurrent ? previewState.values : {};
   const previewLoadingLevels = canPreview
@@ -165,25 +175,33 @@ export function DatasetBuilder({data}: {data: AppData}) {
   }, [corpusId, dialect, direction, format, languageId, match, query, translationLanguage]);
 
   useEffect(() => {
-    if (direction !== "translation" || !languageId || !data.query.available) return;
+    if (!languageId || !data.query.available) return;
     const controller = new AbortController();
     translationLanguages(data.meta.release_id, languageId, corpusId, controller.signal).then(
       (options) => {
+        setError("");
         setTranslationOptions(options);
-        setTranslationLanguage((current) =>
-          options.some((option) => option.xml_lang === current)
-            ? current
-            : (options[0]?.xml_lang ?? ""),
-        );
+        setTranslationLanguage((current) => {
+          if (options.some((option) => option.xml_lang === current)) return current;
+          const preferred = locale === "zh-Hant" ? "zho" : "eng";
+          return options.some((option) => option.xml_lang === preferred)
+            ? preferred
+            : (options[0]?.xml_lang ?? "");
+        });
+        if (options.length === 0) {
+          setDirection((current) => current === "translation" ? "formosan" : current);
+        }
       },
       (cause: unknown) => {
         if (!controller.signal.aborted) {
           setError(cause instanceof Error ? cause.message : String(cause));
+          setTranslationOptions([]);
+          setDirection("formosan");
         }
       },
     );
     return () => controller.abort();
-  }, [corpusId, data.meta.release_id, data.query.available, direction, languageId]);
+  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale]);
 
   useEffect(() => {
     if (!canPreview) {
@@ -295,7 +313,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
   }
 
   function exportDataset() {
-    if (!languageId || !selectionReady || exportBlocked) return;
+    if (!languageId || !selectionReady || !translationSearchReady || exportBlocked) return;
     setError("");
     let route: "export" | "export-package" = "export";
     let values: URLSearchParams;
@@ -358,12 +376,54 @@ export function DatasetBuilder({data}: {data: AppData}) {
         <div className="builder__controls">
           <h2>{tx("Build a dataset", "建立資料集")}</h2>
           <div className="form-grid">
-            <label className="field">{tx("Language", "語言")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); setTranslationLanguage(""); setTranslationOptions([]); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
-            <label className="field">{tx("Corpus", "語料庫")}<select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setTranslationLanguage(""); setTranslationOptions([]); }}><option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>{corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}</select></label>
+            <label className="field">{tx("Formosan language", "臺灣南島語")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); setTranslationOptions([]); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
+            <label className="field">{tx("Corpus", "語料庫")}<select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setTranslationOptions([]); }}><option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>{corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}</select></label>
             <label className="field">{tx("Dialect", "方言")}<select value={dialect} disabled={!languageId} onChange={(event) => setDialect(event.target.value)}><option value="">{tx("All dialects", "所有方言")}</option>{selectedLanguage?.dialects.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label className="field">{tx("Word or phrase", "單詞或片語")}<input value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} /></label>
-            <label className="field">{tx("Search in", "搜尋範圍")}<select value={direction} onChange={(event) => { const next = event.target.value as SearchDirection; setDirection(next); if (next === "formosan") { setTranslationLanguage(""); setTranslationOptions([]); } }}><option value="formosan">{tx("Formosan forms", "臺灣南島語形式")}</option><option value="translation">{tx("Translations", "翻譯")}</option></select></label>
-            {direction === "translation" && <label className="field">{tx("Translation language", "翻譯語言")}<select value={translationLanguage} disabled={!translationOptions.length} onChange={(event) => setTranslationLanguage(event.target.value)}><option value="">{tx("Any language", "任何語言")}</option>{translationOptions.map((option) => <option key={option.xml_lang} value={option.xml_lang}>{option.xml_lang} · {number(option.records)}</option>)}</select></label>}
+            <label className="field">
+              {tx("Search text language", "搜尋文字的語言")}
+              <select
+                value={searchLanguage}
+                disabled={!languageId}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === "formosan") {
+                    setDirection("formosan");
+                    return;
+                  }
+                  setDirection("translation");
+                  setTranslationLanguage(value.slice("translation:".length));
+                }}
+              >
+                <option value="formosan">
+                  {selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語")}
+                  {tx(" · all FORM tiers", " · 所有 FORM 層")}
+                </option>
+                {direction === "translation" && translationLanguage && !translationOptions.some(
+                  (option) => option.xml_lang === translationLanguage,
+                ) && (
+                  <option value={`translation:${translationLanguage}`}>
+                    {selectedTranslationLanguage} · TRANSL
+                  </option>
+                )}
+                {translationOptions.map((option) => (
+                  <option key={option.xml_lang} value={`translation:${option.xml_lang}`}>
+                    {translationLanguageName(option.xml_lang, locale)} · TRANSL ({number(option.records)})
+                  </option>
+                ))}
+              </select>
+              <small>
+                {direction === "formosan"
+                  ? tx(
+                      "Original, standardized, and alternate FORM values at S, W, and M levels.",
+                      "S、W、M 層級的原始、標準化及替代 FORM 值。",
+                    )
+                  : tx(
+                      `${selectedTranslationLanguage} TRANSL values at S, W, and M levels.`,
+                      `S、W、M 層級的${selectedTranslationLanguage} TRANSL 值。`,
+                    )}
+              </small>
+            </label>
             <label className="field">{tx("Match", "比對方式")}<select value={match} onChange={(event) => setMatch(event.target.value as MatchMode)}><option value="exact">{tx("Exact", "完全相符")}</option><option value="prefix">{tx("Prefix", "前綴")}</option><option value="contains">{tx("Contains", "包含")}</option></select></label>
           </div>
 
@@ -382,7 +442,10 @@ export function DatasetBuilder({data}: {data: AppData}) {
 
           <div className="builder__column-heading">
             <h2>{tx("Columns", "欄位")}</h2>
-            <p>{tx("A selected column must have a value in every exported row.", "每一筆匯出資料都必須包含所選欄位的值。")}</p>
+            <p>{tx(
+              "Rows include every selected field. TRANSL values expand into language-specific columns.",
+              "每列包含所有選定欄位；TRANSL 值會展開為各語言專屬欄位。",
+            )}</p>
           </div>
           {levels.length > 0 && (
             <>
@@ -456,7 +519,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               {tx("Retry preview", "重試預覽")}
             </button>
           )}
-          <button className="button button--quiet" disabled={!languageId || !selectionReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
+          <button className="button button--quiet" disabled={!languageId || !selectionReady || !translationSearchReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
           {exportBlocked && <p className="callout callout--warning">{tx("This scope includes data without reviewed redistribution permission.", "此範圍包含尚未審查再散布權限的資料。")}</p>}
           <Link to="/downloads">{tx("Prepared full datasets", "預備完整資料集")}</Link>
         </aside>

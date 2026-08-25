@@ -195,87 +195,6 @@
   min-height: 42px;
 }
 
-.lookup-direction {
-  display: grid;
-  grid-column: 1 / -1;
-  gap: 7px;
-  padding: 0;
-  margin: 0 0 4px;
-  border: 0;
-}
-
-.lookup-direction legend {
-  padding: 0;
-  color: var(--body);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.lookup-direction__options {
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(150px, 1fr));
-  width: min(100%, 560px);
-  overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: white;
-}
-
-.lookup-direction__options label {
-  cursor: pointer;
-}
-
-.lookup-direction__options label + label {
-  border-left: 1px solid var(--line-strong);
-}
-
-.lookup-direction__options input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.lookup-direction__options span {
-  display: grid;
-  gap: 3px;
-  min-height: 52px;
-  align-content: center;
-  padding: 8px 14px;
-  color: var(--body);
-  background: white;
-}
-
-.lookup-direction__options strong {
-  color: inherit;
-  font-size: 14px;
-}
-
-.lookup-direction__options small {
-  color: var(--muted);
-  font: 500 10px/1.2 var(--font-mono);
-}
-
-.lookup-direction__options input:checked + span {
-  color: white;
-  background: var(--ink);
-}
-
-.lookup-direction__options input:checked + span small {
-  color: rgb(255 255 255 / 70%);
-}
-
-.lookup-direction__options input:focus-visible + span {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: -3px;
-}
-
-.lookup-direction__options input:disabled + span {
-  color: var(--muted);
-  background: var(--surface);
-  cursor: not-allowed;
-}
-
 .lookup-options {
   grid-column: 1 / -1;
   margin-top: 4px;
@@ -306,6 +225,22 @@
 
 .lookup-options__grid > .field {
   align-self: start;
+}
+
+.search-scope-note {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 8px;
+  align-items: baseline;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.search-scope-note strong {
+  flex: none;
+  color: var(--body);
 }
 
 .lookup-options__grid > .field select {
@@ -534,6 +469,22 @@
   margin: 0;
 }
 
+.dictionary-entry__meaning li {
+  padding-left: 4px;
+}
+
+.dictionary-entry__meaning li + li {
+  margin-top: 5px;
+}
+
+.dictionary-entry__meaning li small {
+  display: inline-block;
+  min-width: 64px;
+  margin-right: 8px;
+  color: var(--muted);
+  font: 600 10px/1.4 var(--font-mono);
+}
+
 .dictionary-entry__details {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -606,10 +557,6 @@
   margin: 0;
   border-top: 1px solid var(--line);
   line-height: 1.55;
-}
-
-.result-card--summary .translations p {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .search-feedback {

@@ -17,6 +17,16 @@ function displayValue(value: string | number | null | undefined): string {
   return String(value);
 }
 
+function columnDefinition(field: string): readonly [string, string] {
+  if (/^translation_[a-z0-9_]+_\d+$/u.test(field)) {
+    return [
+      "One owner-level TRANSL element; the suffix is its XML language and occurrence",
+      "一個元素所屬的 TRANSL；後綴為 XML 語言及出現順序",
+    ];
+  }
+  return DATASET_FIELD_INFO[field as keyof typeof DATASET_FIELD_INFO];
+}
+
 export function DatasetPreview({
   fields,
   languageSelected,
@@ -36,6 +46,7 @@ export function DatasetPreview({
   const displayLevel = levels.includes(activeLevel) ? activeLevel : (levels[0] ?? "sentence");
   const active = previews[displayLevel];
   const activeFields = fields[displayLevel];
+  const previewFields = active?.fields ?? activeFields;
   const info = levelInfo.get(displayLevel) ?? DATASET_LEVEL_INFO[0];
   const activeLoading = loadingLevels.includes(displayLevel);
   const previewBusy = loadingLevels.length > 0;
@@ -49,8 +60,8 @@ export function DatasetPreview({
             <p>
               {languageSelected
                 ? tx(
-                    "Selected columns are required on every row.",
-                    "每一列都必須包含所選欄位。",
+                    "TRANSL elements are separated by XML language and occurrence.",
+                    "TRANSL 元素會依 XML 語言及出現順序分開。",
                   )
                 : tx("Choose a language to inspect the dataset.", "選擇語言以檢視資料集。")}
             </p>
@@ -103,12 +114,12 @@ export function DatasetPreview({
           <div className="table-scroll" tabIndex={0} role="region" aria-label={`${info[1]} preview`}>
             <table>
               <thead>
-                <tr>{activeFields.map((field) => <th key={field}>{field}</th>)}</tr>
+                <tr>{previewFields.map((field) => <th key={field}>{field}</th>)}</tr>
               </thead>
               <tbody>
                 {active.items.map((record, index) => (
                   <tr key={String(record.id ?? index)}>
-                    {activeFields.map((field) => (
+                    {previewFields.map((field) => (
                       <td key={field}>{displayValue(record[field])}</td>
                     ))}
                   </tr>
@@ -122,12 +133,15 @@ export function DatasetPreview({
         <details className="builder__schema">
           <summary>{tx(`${info[1]} column definitions`, `${info[1]} 欄位定義`)}</summary>
           <dl>
-            {activeFields.map((field) => (
-              <div key={field}>
-                <dt><code>{field}</code></dt>
-                <dd>{tx(DATASET_FIELD_INFO[field][0], DATASET_FIELD_INFO[field][1])}</dd>
-              </div>
-            ))}
+            {previewFields.map((field) => {
+              const definition = columnDefinition(field);
+              return (
+                <div key={field}>
+                  <dt><code>{field}</code></dt>
+                  <dd>{tx(definition[0], definition[1])}</dd>
+                </div>
+              );
+            })}
           </dl>
         </details>
       )}

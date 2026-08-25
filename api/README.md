@@ -71,6 +71,10 @@ Search pages allow up to 1,000 records, previews up to 250 rows, and exports up 
 rows per selected XML level. Exports stream directly from immutable SQLite into CSV, TSV,
 JSON Lines, or ZIP output, without collecting the complete file in API memory.
 
+Selecting `translations` produces flat TRANSL output. The API discovers the XML languages
+and repeated TRANSL occurrences in the exact returned row window, then emits deterministic
+columns such as `translation_eng_1` and `translation_zho_1`.
+
 Rate limits use in-process token buckets keyed by the client address supplied by Uvicorn's
 trusted proxy handling. Export requests consume both a general token and an export token.
 When a bucket is empty the API returns `429` with `Retry-After`. Health and readiness checks
@@ -89,8 +93,9 @@ Current releases also include compact, language-scoped `formosan_sentence_terms`
 `translation_sentence_terms` search projections. They resolve matching sentences before
 loading complete records, avoiding scattered joins across millions of tier rows.
 `reverse_dictionary_terms` similarly resolves translation-to-Formosan headwords without
-rejoining the tier hierarchy for each query. The API retains compatible paths for already
-published releases that predate these projections.
+rejoining the tier hierarchy for each query. These three projections are required release
+data. The API remains unready if any are missing instead of falling back to slow join-heavy
+queries.
 
 `api/Dockerfile` builds the service deployed on the Tokyo Lightsail host. Any future host
 must preserve the same activation, immutable-release, health-check, CORS, and rollback

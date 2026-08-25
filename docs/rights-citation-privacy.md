@@ -101,6 +101,11 @@ Optional MT and ASR actions send only the chosen text or audio directly to the n
 Hugging Face service after consent. The interface identifies the provider, the transferred
 data, possible provider logging, and the risk of incorrect output.
 
+Consent controls start unchecked. Recording or choosing an audio file does not submit it.
+The user must check the ASR consent control and press Transcribe. MT likewise requires its
+own unchecked consent control and an explicit Translate action. Leaving either control
+unchecked is the opt-out and does not disable corpus, study, or local recording tools.
+
 Kakarayan does not proxy or store model input. Cancellation stops the browser request but
 cannot promise deletion of bytes already received by the provider.
 

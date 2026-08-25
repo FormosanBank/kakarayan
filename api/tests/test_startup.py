@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from contextlib import closing
 from dataclasses import replace
 
 import pytest
@@ -9,6 +11,26 @@ from fastapi.testclient import TestClient
 from api.app import create_app
 from api.config import Settings
 from api.limits import DEFAULT_SQLITE_PROGRESS_CALLBACKS
+
+
+@pytest.mark.parametrize(
+    "table",
+    ["formosan_sentence_terms", "translation_sentence_terms", "reverse_dictionary_terms"],
+)
+def test_missing_required_search_table_stays_unready(settings, tmp_path, table: str) -> None:
+    database_path = tmp_path / "incomplete-release.sqlite"
+    database_path.write_bytes(settings.database_path.read_bytes())
+    with closing(sqlite3.connect(database_path)) as database:
+        database.execute(f"DROP TABLE {table}")
+        database.commit()
+
+    configured = replace(settings, database_path=database_path, expected_sha256=None)
+    with TestClient(create_app(configured)) as client:
+        assert client.get("/healthz").status_code == 200
+        response = client.get("/readyz")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "service_not_ready"
 
 
 def test_release_mismatch_stays_unready(settings, tmp_path) -> None:

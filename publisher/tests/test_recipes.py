@@ -25,7 +25,7 @@ def _schema() -> Path:
 
 def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "release_id": release_id,
         "selection": {
             "query": "lima",
@@ -178,7 +178,29 @@ def test_recipe_activates_a_compressed_release(public_repo: Path, tmp_path: Path
     assert execute_recipe(release.output, recipe, output) == 1
     row = json.loads(output.read_text())
     assert row["standard"] == "lima waco"
-    assert row["translations"] == "eng:A fictional translated line."
+    assert row["translation_eng_1"] == "A fictional translated line."
+
+
+def test_recipe_emits_language_specific_translations(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    release = build_release(public_repo, tmp_path / "release")
+    document = _recipe(release.release_id, "jsonl")
+    selection = cast(dict[str, object], document["selection"])
+    selection["query"] = ""
+    fields = cast(dict[str, list[str]], document["fields"])
+    fields["sentence"] = ["id", "translations"]
+    output = tmp_path / "translations.jsonl"
+
+    validate_document(document, _schema())
+    assert execute_recipe(release.output, document, output) == 2
+    rows = [json.loads(line) for line in output.read_text().splitlines()]
+    assert list(rows[0]) == ["id", "translation_eng_1", "translation_zho_1"]
+    assert rows[0]["translation_eng_1"] == "A fictional translated line."
+    assert rows[0]["translation_zho_1"] == ""
+    assert rows[1]["translation_eng_1"] == ""
+    assert rows[1]["translation_zho_1"] == "虛構測試句"
 
 
 def test_recipe_matches_from_translation_back_to_formosan(
@@ -205,16 +227,32 @@ def test_recipe_matches_from_translation_back_to_formosan(
     assert output.read_text() == ""
 
 
-def test_recipe_schema_rejects_unknown_and_legacy_fields(tmp_path: Path) -> None:
+@pytest.mark.parametrize("field", ["glosses", "translation_columns"])
+def test_recipe_schema_rejects_unknown_fields(tmp_path: Path, field: str) -> None:
+    document = _recipe("fb-20240102-deadbeef")
+    cast(dict[str, list[str]], document["fields"])["sentence"].append(field)
+    path = tmp_path / "recipe.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        load_recipe(path, _schema())
+
+
+def test_recipe_schema_rejects_executable_code(tmp_path: Path) -> None:
     document = _recipe("fb-20240102-deadbeef")
     document["executable"] = "print('no')"
     path = tmp_path / "recipe.json"
     path.write_text(json.dumps(document), encoding="utf-8")
+
     with pytest.raises(ValidationError):
         load_recipe(path, _schema())
 
-    document.pop("executable")
-    cast(dict[str, list[str]], document["fields"])["sentence"].append("glosses")
+
+def test_recipe_schema_rejects_version_one(tmp_path: Path) -> None:
+    document = _recipe("fb-20240102-deadbeef")
+    document["schema_version"] = "1.0.0"
+    path = tmp_path / "recipe.json"
     path.write_text(json.dumps(document), encoding="utf-8")
+
     with pytest.raises(ValidationError):
         load_recipe(path, _schema())

@@ -55,3 +55,31 @@ def test_truku_resolution_matches_canonical_rule(public_repo: Path) -> None:
     )
     projection = project_xml(path, public_repo)
     assert projection.rows["texts"][0]["language"] == "Truku"
+
+
+def test_projection_preserves_display_punctuation_but_normalizes_frequency_tokens(
+    public_repo: Path,
+) -> None:
+    [path] = list(discover_xml(public_repo))
+    text = path.read_text(encoding="utf-8")
+    path.write_text(
+        text.replace(
+            '<W id="w-one" class="noun">\n      <FORM kindOf="standard">lima</FORM>',
+            '<W id="w-one" class="noun">\n      <FORM kindOf="standard">lima,</FORM>',
+        ),
+        encoding="utf-8",
+    )
+
+    projection = project_xml(path, public_repo)
+    word = projection.rows["words"][0]
+    form = next(
+        row
+        for row in projection.rows["forms"]
+        if row["owner_id"] == word["id"] and row["kind"] == "standard"
+    )
+    token = next(row for row in projection.rows["tokens"] if row["word_id"] == word["id"])
+
+    assert form["text"] == "lima,"
+    assert form["normalized"] == "lima"
+    assert token["surface"] == "lima,"
+    assert token["normalized"] == "lima"

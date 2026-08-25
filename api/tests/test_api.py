@@ -111,8 +111,8 @@ def test_summary_is_bounded_without_truncating_record_detail(settings: Settings)
             params={"q": "lima", "language_id": "lang_amis", "match": "exact"},
         ).json()["items"][0]
         assert dictionary["summary_truncated"] is True
-        assert len(dictionary["meanings"][0]) == 320
-        assert dictionary["meanings"][0].endswith("…")
+        assert len(dictionary["meanings"][0]["text"]) == 320
+        assert dictionary["meanings"][0]["text"].endswith("…")
 
 
 def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
@@ -121,6 +121,19 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     assert dictionary.status_code == 200
     assert dictionary.json()["items"][0]["headword"] == "lima"
     assert dictionary.json()["items"][0]["summary_truncated"] is False
+    assert dictionary.json()["items"][0]["meanings"] == [
+        {"text": "FIVE", "xml_lang": "eng"},
+        {"text": "five.word", "xml_lang": "eng"},
+    ]
+
+    chinese_meaning = client.get(
+        url,
+        params={"q": "rima", "language_id": "lang_amis", "match": "exact"},
+    )
+    assert chinese_meaning.status_code == 200
+    assert chinese_meaning.json()["items"][0]["meanings"] == [
+        {"text": "虛構測試句", "xml_lang": "zho"}
+    ]
 
     formosan_sentence = client.get(
         release_path(client, "concordance"),
@@ -173,89 +186,6 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
         params={"language_id": "lang_amis"},
     ).json()
     assert {item["xml_lang"] for item in languages} == {"eng", "zho"}
-
-
-def test_short_reverse_search_supports_a_prior_release_database(settings, tmp_path) -> None:
-    database_path = tmp_path / "prior-release.sqlite"
-    database_path.write_bytes(settings.database_path.read_bytes())
-    with closing(sqlite3.connect(database_path)) as database:
-        database.execute("DROP TABLE translation_sentence_terms")
-        database.commit()
-    configured = Settings(
-        manifest_path=settings.manifest_path,
-        database_path=database_path,
-        expected_sha256=None,
-        cors_origins=settings.cors_origins,
-    )
-    with TestClient(create_app(configured)) as client:
-        response = client.get(
-            release_path(client, "concordance"),
-            params={
-                "q": "測",
-                "language_id": "lang_amis",
-                "direction": "translation",
-                "translation_language": "zho",
-                "match": "contains",
-            },
-        )
-
-    assert response.status_code == 200
-    assert response.json()["items"]
-
-
-def test_formosan_search_supports_a_prior_release_database(settings, tmp_path) -> None:
-    database_path = tmp_path / "prior-release.sqlite"
-    database_path.write_bytes(settings.database_path.read_bytes())
-    with closing(sqlite3.connect(database_path)) as database:
-        database.execute("DROP TABLE formosan_sentence_terms")
-        database.commit()
-    configured = Settings(
-        manifest_path=settings.manifest_path,
-        database_path=database_path,
-        expected_sha256=None,
-        cors_origins=settings.cors_origins,
-    )
-    with TestClient(create_app(configured)) as client:
-        response = client.get(
-            release_path(client, "concordance"),
-            params={
-                "q": "ima",
-                "language_id": "lang_amis",
-                "direction": "formosan",
-                "match": "contains",
-            },
-        )
-
-    assert response.status_code == 200
-    assert response.json()["items"]
-
-
-def test_reverse_dictionary_supports_a_prior_release_database(settings, tmp_path) -> None:
-    database_path = tmp_path / "prior-release.sqlite"
-    database_path.write_bytes(settings.database_path.read_bytes())
-    with closing(sqlite3.connect(database_path)) as database:
-        database.execute("DROP TABLE reverse_dictionary_terms")
-        database.commit()
-    configured = Settings(
-        manifest_path=settings.manifest_path,
-        database_path=database_path,
-        expected_sha256=None,
-        cors_origins=settings.cors_origins,
-    )
-    with TestClient(create_app(configured)) as client:
-        response = client.get(
-            release_path(client, "dictionary"),
-            params={
-                "q": "five",
-                "language_id": "lang_amis",
-                "direction": "translation",
-                "translation_language": "eng",
-                "match": "exact",
-            },
-        )
-
-    assert response.status_code == 200
-    assert response.json()["items"][0]["headword"] == "lima"
 
 
 def test_keyset_pages_and_query_identity(client: TestClient) -> None:
@@ -358,15 +288,15 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert preview.json()["returned_rows"] == 1
     assert preview.json()["truncated"] is True
     item = preview.json()["items"][0]
-    assert list(item) == ["id", "standard", "translations"]
-    assert "FIVE" not in item["translations"]
+    assert list(item) == ["id", "standard", "translation_eng_1"]
+    assert item["translation_eng_1"] == "A fictional translated line."
 
     exported = client.get(
         release_path(client, "datasets/export"), params=[*params, ("format", "tsv")]
     )
     assert exported.status_code == 200
     assert exported.headers["x-kakarayan-row-count"] == "1"
-    assert exported.text.startswith("id\tstandard\ttranslations\n")
+    assert exported.text.startswith("id\tstandard\ttranslation_eng_1\n")
 
     larger_export = client.get(
         release_path(client, "datasets/export"),
@@ -379,6 +309,125 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         params={"language_id": "lang_amis", "max_rows": DATASET_EXPORT_MAX_ROWS + 1},
     )
     assert unbounded.status_code == 422
+
+
+def test_dataset_translations_expand_by_language_and_xml_order(
+    settings: Settings,
+) -> None:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute(
+            """
+            INSERT INTO translations
+            SELECT id || '-alternative', owner_type, owner_id, position + 100,
+                   'A second English rendering.', unclear, xml_lang, kind, version,
+                   notes, 'a second english rendering.', attributes_json, inline_markup_json
+            FROM translations
+            WHERE owner_type = 'sentence' AND xml_lang = 'eng'
+            ORDER BY position
+            LIMIT 1
+            """
+        )
+
+    with TestClient(create_app(settings)) as client:
+        params = [
+            ("language_id", "lang_amis"),
+            ("field", "id"),
+            ("field", "translations"),
+            ("max_rows", "2"),
+        ]
+        preview = client.get(release_path(client, "datasets/preview"), params=params)
+        exported = client.get(
+            release_path(client, "datasets/export"),
+            params=[*params, ("format", "csv")],
+        )
+
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["fields"] == [
+        "id",
+        "translation_eng_1",
+        "translation_eng_2",
+        "translation_zho_1",
+    ]
+    first, second = body["items"]
+    assert first["translation_eng_1"] == "A fictional translated line."
+    assert first["translation_eng_2"] == "A second English rendering."
+    assert first["translation_zho_1"] == ""
+    assert second["translation_eng_1"] == ""
+    assert second["translation_eng_2"] == ""
+    assert second["translation_zho_1"] == "虛構測試句"
+    assert exported.status_code == 200
+    assert exported.text.splitlines()[0] == (
+        "id,translation_eng_1,translation_eng_2,translation_zho_1"
+    )
+
+
+def test_complete_translations_require_owner_level_translation(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "word"),
+            ("complete_fields", "true"),
+            ("field", "id"),
+            ("field", "translations"),
+            ("max_rows", "10"),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["estimated_rows"] == 1
+    assert response.json()["fields"] == ["id", "translation_eng_1"]
+    assert response.json()["items"][0]["translation_eng_1"] == "five.word"
+
+
+def test_dataset_rejects_pathologically_wide_translation_output(settings: Settings) -> None:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute(
+            """
+            WITH RECURSIVE numbers(value) AS (
+              SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 256
+            )
+            INSERT INTO translations
+            SELECT tr.id || '-wide-' || numbers.value, tr.owner_type, tr.owner_id,
+                   tr.position + numbers.value, 'alternative ' || numbers.value,
+                   tr.unclear, tr.xml_lang, tr.kind, tr.version, tr.notes,
+                   'alternative ' || numbers.value, tr.attributes_json, tr.inline_markup_json
+            FROM translations tr CROSS JOIN numbers
+            WHERE tr.owner_type = 'sentence' AND tr.xml_lang = 'eng'
+            ORDER BY tr.position
+            LIMIT 256
+            """
+        )
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get(
+            release_path(client, "datasets/preview"),
+            params=[
+                ("language_id", "lang_amis"),
+                ("field", "translations"),
+                ("max_rows", "1"),
+            ],
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "dataset_too_wide"
+
+
+def test_dataset_rejects_removed_and_duplicate_fields(client: TestClient) -> None:
+    removed = client.get(
+        release_path(client, "datasets/preview"),
+        params={"language_id": "lang_amis", "field": "translation_columns"},
+    )
+    duplicate = client.get(
+        release_path(client, "datasets/preview"),
+        params=[("language_id", "lang_amis"), ("field", "id"), ("field", "id")],
+    )
+
+    assert removed.status_code == 422
+    assert duplicate.status_code == 422
 
 
 def test_streaming_export_is_not_limited_to_five_mebibytes(settings: Settings) -> None:
@@ -480,7 +529,7 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     word_item = word.json()["items"][0]
     assert word.json()["estimated_rows"] == 1
     assert word_item["form"] == "lima"
-    assert word_item["translations"] == "eng:five.word"
+    assert word_item["translation_eng_1"] == "five.word"
     assert word_item["sentence_id"]
 
     morpheme = client.get(
@@ -501,7 +550,7 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     assert morpheme.status_code == 200
     morpheme_item = morpheme.json()["items"][0]
     assert morpheme_item["form"] == "lima"
-    assert morpheme_item["translations"] == "eng:FIVE"
+    assert morpheme_item["translation_eng_1"] == "FIVE"
     assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
 
 

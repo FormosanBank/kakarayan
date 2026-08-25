@@ -15,6 +15,8 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
+from api.release import REQUIRED_DATABASE_TABLES
+
 
 class VerificationError(RuntimeError):
     """Raised when a release fails an integrity or publication check."""
@@ -66,6 +68,15 @@ def _verify_database(path: Path) -> None:
         with closing(sqlite3.connect(uri, uri=True)) as database:
             if database.execute("PRAGMA integrity_check").fetchone() != ("ok",):
                 raise VerificationError("SQLite integrity check failed")
+            tables = {
+                str(row[0])
+                for row in database.execute("SELECT name FROM sqlite_schema WHERE type = 'table'")
+            }
+            missing = REQUIRED_DATABASE_TABLES - tables
+            if missing:
+                raise VerificationError(
+                    f"SQLite release is missing required tables: {', '.join(sorted(missing))}"
+                )
     except sqlite3.Error as error:
         raise VerificationError(f"Cannot verify SQLite release: {error}") from error
 
