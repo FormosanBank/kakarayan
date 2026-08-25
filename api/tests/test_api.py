@@ -111,8 +111,8 @@ def test_summary_is_bounded_without_truncating_record_detail(settings: Settings)
             params={"q": "lima", "language_id": "lang_amis", "match": "exact"},
         ).json()["items"][0]
         assert dictionary["summary_truncated"] is True
-        assert len(dictionary["meanings"][0]) == 320
-        assert dictionary["meanings"][0].endswith("…")
+        assert len(dictionary["meanings"][0]["text"]) == 320
+        assert dictionary["meanings"][0]["text"].endswith("…")
 
 
 def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
@@ -121,7 +121,7 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     assert dictionary.status_code == 200
     assert dictionary.json()["items"][0]["headword"] == "lima"
     assert dictionary.json()["items"][0]["summary_truncated"] is False
-    assert dictionary.json()["items"][0]["meaning_entries"] == [
+    assert dictionary.json()["items"][0]["meanings"] == [
         {"text": "FIVE", "xml_lang": "eng"},
         {"text": "five.word", "xml_lang": "eng"},
     ]
@@ -131,7 +131,7 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
         params={"q": "rima", "language_id": "lang_amis", "match": "exact"},
     )
     assert chinese_meaning.status_code == 200
-    assert chinese_meaning.json()["items"][0]["meaning_entries"] == [
+    assert chinese_meaning.json()["items"][0]["meanings"] == [
         {"text": "虛構測試句", "xml_lang": "zho"}
     ]
 
@@ -371,15 +371,15 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert preview.json()["returned_rows"] == 1
     assert preview.json()["truncated"] is True
     item = preview.json()["items"][0]
-    assert list(item) == ["id", "standard", "translations"]
-    assert "FIVE" not in item["translations"]
+    assert list(item) == ["id", "standard", "translation_eng_1"]
+    assert item["translation_eng_1"] == "A fictional translated line."
 
     exported = client.get(
         release_path(client, "datasets/export"), params=[*params, ("format", "tsv")]
     )
     assert exported.status_code == 200
     assert exported.headers["x-kakarayan-row-count"] == "1"
-    assert exported.text.startswith("id\tstandard\ttranslations\n")
+    assert exported.text.startswith("id\tstandard\ttranslation_eng_1\n")
 
     larger_export = client.get(
         release_path(client, "datasets/export"),
@@ -394,7 +394,7 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert unbounded.status_code == 422
 
 
-def test_dataset_translation_columns_preserve_language_and_xml_order(
+def test_dataset_translations_expand_by_language_and_xml_order(
     settings: Settings,
 ) -> None:
     with closing(sqlite3.connect(settings.database_path)) as connection, connection:
@@ -415,7 +415,7 @@ def test_dataset_translation_columns_preserve_language_and_xml_order(
         params = [
             ("language_id", "lang_amis"),
             ("field", "id"),
-            ("field", "translation_columns"),
+            ("field", "translations"),
             ("max_rows", "2"),
         ]
         preview = client.get(release_path(client, "datasets/preview"), params=params)
@@ -445,7 +445,7 @@ def test_dataset_translation_columns_preserve_language_and_xml_order(
     )
 
 
-def test_complete_translation_columns_require_owner_level_translation(
+def test_complete_translations_require_owner_level_translation(
     client: TestClient,
 ) -> None:
     response = client.get(
@@ -455,7 +455,7 @@ def test_complete_translation_columns_require_owner_level_translation(
             ("record_level", "word"),
             ("complete_fields", "true"),
             ("field", "id"),
-            ("field", "translation_columns"),
+            ("field", "translations"),
             ("max_rows", "10"),
         ],
     )
@@ -490,13 +490,27 @@ def test_dataset_rejects_pathologically_wide_translation_output(settings: Settin
             release_path(client, "datasets/preview"),
             params=[
                 ("language_id", "lang_amis"),
-                ("field", "translation_columns"),
+                ("field", "translations"),
                 ("max_rows", "1"),
             ],
         )
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "dataset_too_wide"
+
+
+def test_dataset_rejects_removed_and_duplicate_fields(client: TestClient) -> None:
+    removed = client.get(
+        release_path(client, "datasets/preview"),
+        params={"language_id": "lang_amis", "field": "translation_columns"},
+    )
+    duplicate = client.get(
+        release_path(client, "datasets/preview"),
+        params=[("language_id", "lang_amis"), ("field", "id"), ("field", "id")],
+    )
+
+    assert removed.status_code == 422
+    assert duplicate.status_code == 422
 
 
 def test_streaming_export_is_not_limited_to_five_mebibytes(settings: Settings) -> None:
@@ -598,7 +612,7 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     word_item = word.json()["items"][0]
     assert word.json()["estimated_rows"] == 1
     assert word_item["form"] == "lima"
-    assert word_item["translations"] == "eng:five.word"
+    assert word_item["translation_eng_1"] == "five.word"
     assert word_item["sentence_id"]
 
     morpheme = client.get(
@@ -619,7 +633,7 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     assert morpheme.status_code == 200
     morpheme_item = morpheme.json()["items"][0]
     assert morpheme_item["form"] == "lima"
-    assert morpheme_item["translations"] == "eng:FIVE"
+    assert morpheme_item["translation_eng_1"] == "FIVE"
     assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
 
 

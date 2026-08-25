@@ -98,8 +98,8 @@ export function Developers({data}: {data: AppData}) {
           <li>{tx("Pin release ", "固定版本 ")}<code>{data.meta.release_id}</code>{tx(" and the source commit in published work.", " 與來源提交於出版成果中。")}</li>
           <li>{tx("Keep original and FormosanBank standard forms separate.", "將原始形式與 FormosanBank 標準形式分開。")}</li>
           <li>{tx(
-            "Use translation_columns for separate TRANSL fields such as translation_eng_1 and translation_zho_1.",
-            "使用 translation_columns 取得分開的 TRANSL 欄位，例如 translation_eng_1 與 translation_zho_1。",
+            "Selecting translations creates separate fields such as translation_eng_1 and translation_zho_1.",
+            "選擇 translations 會建立分開的欄位，例如 translation_eng_1 與 translation_zho_1。",
           )}</li>
           <li>{tx("Follow every rights ID referenced by a downloaded artifact.", "遵守下載成品引用的每一項權利識別碼。")}</li>
         </ul>

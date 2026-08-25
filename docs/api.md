@@ -89,11 +89,10 @@ GET /v1/releases/fb-20260811-abcdef12/dictionary?q=good&language_id=lang_amis&di
 Search meaning is defined in [search-semantics.md](search-semantics.md). The server queries
 publisher-produced canonical columns; clients must not invent another normalization pass.
 
-Initial dictionary results contain a headword, meanings, language-tagged `meaning_entries`,
-scope, counts, citations, and a small example set. `meanings` remains the text-only
-compatibility projection. Concordance results contain sentence summaries and a detail identifier.
-Full words, morphemes, forms, phonology, translations, and audio are returned only by the
-sentence detail route.
+Initial dictionary results contain a headword, language-tagged `meanings`, scope, counts,
+citations, and a small example set. Each meaning has `text` and `xml_lang`. Concordance
+results contain sentence summaries and a detail identifier. Full words, morphemes, forms,
+phonology, translations, and audio are returned only by the sentence detail route.
 
 ## Pagination
 
@@ -112,24 +111,22 @@ parameters select columns valid for that level. Shared columns include:
 
 ```text
 id xml_id parent_id text_id sentence_id word_id position form standard original
-alternate_forms translation_columns translations phonology audio unclear language_id corpus_id dialect source_path
+alternate_forms translations phonology audio unclear language_id corpus_id dialect source_path
 ```
 
 Sentence rows also support `tokens`, `token_count`, and `source`. W and M rows support
 `class` and `sclass`. Invalid level and field combinations return 422. Tier values belong
 only to the selected owner. Parent identifiers support lossless joins across S, W, and M.
 
-Use `field=translation_columns` for analysis-ready output. It expands owner-level TRANSL
-elements into headers such as `translation_eng_1` and `translation_zho_1`; repeated values
-in one language receive increasing suffixes in XML order. Preview and export report the
-expanded names in their `fields` value. Empty cells mean that owner has no matching TRANSL
-element. The older `field=translations` packed string remains available for API v1
-compatibility but is not the Dataset Builder default. Selections wider than 256 generated
-TRANSL columns return `422 dataset_too_wide`.
+Selecting `field=translations` expands owner-level TRANSL elements into headers such as
+`translation_eng_1` and `translation_zho_1`; repeated values in one language receive
+increasing suffixes in XML order. Preview and export report the expanded names in their
+`fields` value. Empty cells mean that owner has no matching TRANSL element. Selections wider
+than 256 generated TRANSL columns return `422 dataset_too_wide`.
 
 Set `complete_fields=true` to exclude rows missing any selected optional tier or attribute.
-The Research builder always uses this mode. The default remains `false` for compatibility
-with earlier sentence API clients.
+The Research builder always uses this mode. The API default is `false`, so records with a
+missing optional tier remain in the result with empty cells.
 
 Preview returns at most 250 rows and reports `record_level`, `estimated_rows`,
 `returned_rows`, and `truncated`. Export requires `max_rows` from 1 through 100,000 per

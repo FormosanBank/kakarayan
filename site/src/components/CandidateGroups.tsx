@@ -30,9 +30,7 @@ export function CandidateGroups({
     <div className="candidate-groups">
       {entries.map((entry) => {
         const sentenceLink = `/lookup?type=sentences&q=${encodeURIComponent(entry.headword)}&language=${encodeURIComponent(entry.language_id)}&direction=formosan&mode=exact${targetLanguage ? `&target=${encodeURIComponent(targetLanguage)}` : ""}${corpusId ? `&corpus=${encodeURIComponent(corpusId)}` : ""}`;
-        const meanings = entry.meaning_entries?.length
-          ? entry.meaning_entries
-          : entry.meanings.map((text) => ({text, xml_lang: targetLanguage}));
+        const meanings = entry.meanings;
         const showMeaningLanguages = !targetLanguage || new Set(
           meanings.map((meaning) => meaning.xml_lang),
         ).size > 1;

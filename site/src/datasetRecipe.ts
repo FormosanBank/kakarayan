@@ -20,7 +20,7 @@ export interface DatasetRecipeInput {
 
 export function createDatasetRecipe(input: DatasetRecipeInput) {
   return {
-    schema_version: "1.0.0" as const,
+    schema_version: "2.0.0" as const,
     release_id: input.releaseId,
     selection: {
       query: input.query.trim(),

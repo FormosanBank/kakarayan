@@ -13,7 +13,7 @@ it("renders the expanded translation columns returned by the API", async () => {
     <I18nProvider>
       <DatasetPreview
         fields={{
-          sentence: ["id", "translation_columns"],
+          sentence: ["id", "translations"],
           word: [],
           morpheme: [],
         }}

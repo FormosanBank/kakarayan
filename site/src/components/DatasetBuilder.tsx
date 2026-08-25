@@ -11,7 +11,7 @@ import {
 import {apiErrorMessage} from "../apiErrors";
 import {
   DATASET_FIELD_INFO,
-  DATASET_BUILDER_FIELDS_BY_LEVEL,
+  DATASET_FIELDS_BY_LEVEL,
   DATASET_LEVEL_INFO,
   DEFAULT_DATASET_FIELDS,
   type DatasetField,
@@ -98,6 +98,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const searchLanguage = direction === "formosan"
     ? "formosan"
     : `translation:${translationLanguage}`;
+  const translationSearchReady = direction === "formosan" || translationOptions.some(
+    (option) => option.xml_lang === translationLanguage,
+  );
   const rights = new Map(data.rights.entries.map((entry) => [entry.id, entry]));
   const selectedCorpora = corpusId
     ? corpora.filter((corpus) => corpus.id === corpusId)
@@ -133,7 +136,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
     query,
     translationLanguage,
   ]);
-  const canPreview = Boolean(languageId && selectionReady && data.query.available);
+  const canPreview = Boolean(
+    languageId && selectionReady && translationSearchReady && data.query.available,
+  );
   const previewIsCurrent = previewState.signature === previewSignature;
   const previews = previewIsCurrent ? previewState.values : {};
   const previewLoadingLevels = canPreview
@@ -174,6 +179,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     const controller = new AbortController();
     translationLanguages(data.meta.release_id, languageId, corpusId, controller.signal).then(
       (options) => {
+        setError("");
         setTranslationOptions(options);
         setTranslationLanguage((current) => {
           if (options.some((option) => option.xml_lang === current)) return current;
@@ -189,6 +195,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
       (cause: unknown) => {
         if (!controller.signal.aborted) {
           setError(cause instanceof Error ? cause.message : String(cause));
+          setTranslationOptions([]);
+          setDirection("formosan");
         }
       },
     );
@@ -298,14 +306,14 @@ export function DatasetBuilder({data}: {data: AppData}) {
       level,
       fields[level].includes(field)
         ? fields[level].filter((item) => item !== field)
-        : DATASET_BUILDER_FIELDS_BY_LEVEL[level].filter(
+        : DATASET_FIELDS_BY_LEVEL[level].filter(
             (item) => item === field || fields[level].includes(item),
           ),
     );
   }
 
   function exportDataset() {
-    if (!languageId || !selectionReady || exportBlocked) return;
+    if (!languageId || !selectionReady || !translationSearchReady || exportBlocked) return;
     setError("");
     let route: "export" | "export-package" = "export";
     let values: URLSearchParams;
@@ -368,8 +376,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
         <div className="builder__controls">
           <h2>{tx("Build a dataset", "建立資料集")}</h2>
           <div className="form-grid">
-            <label className="field">{tx("Formosan language", "臺灣南島語")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
-            <label className="field">{tx("Corpus", "語料庫")}<select value={corpusId} disabled={!languageId} onChange={(event) => setCorpusId(event.target.value)}><option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>{corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}</select></label>
+            <label className="field">{tx("Formosan language", "臺灣南島語")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); setTranslationOptions([]); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
+            <label className="field">{tx("Corpus", "語料庫")}<select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setTranslationOptions([]); }}><option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>{corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}</select></label>
             <label className="field">{tx("Dialect", "方言")}<select value={dialect} disabled={!languageId} onChange={(event) => setDialect(event.target.value)}><option value="">{tx("All dialects", "所有方言")}</option>{selectedLanguage?.dialects.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <label className="field">{tx("Word or phrase", "單詞或片語")}<input value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} /></label>
             <label className="field">
@@ -384,7 +392,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
                     return;
                   }
                   setDirection("translation");
-                  setTranslationLanguage(value.replace(/^translation:/u, ""));
+                  setTranslationLanguage(value.slice("translation:".length));
                 }}
               >
                 <option value="formosan">
@@ -463,12 +471,12 @@ export function DatasetBuilder({data}: {data: AppData}) {
                   <h3><code>{columnInfo[1]}</code> {tx(columnInfo[2], columnInfo[3])}</h3>
                   <div className="field-actions">
                     <button type="button" onClick={() => setLevelFields(columnLevel, [...DEFAULT_DATASET_FIELDS[columnLevel]])}>{tx("Defaults", "預設")}</button>
-                    <button type="button" onClick={() => setLevelFields(columnLevel, [...DATASET_BUILDER_FIELDS_BY_LEVEL[columnLevel]])}>{tx("All", "全選")}</button>
+                    <button type="button" onClick={() => setLevelFields(columnLevel, [...DATASET_FIELDS_BY_LEVEL[columnLevel]])}>{tx("All", "全選")}</button>
                     <button type="button" onClick={() => setLevelFields(columnLevel, [])}>{tx("Clear", "清除")}</button>
                   </div>
                 </header>
                 <div className="dataset-fields" role="group" aria-label={tx(`${columnInfo[1]} columns`, `${columnInfo[1]} 欄位`)}>
-                  {DATASET_BUILDER_FIELDS_BY_LEVEL[columnLevel].map((field) => (
+                  {DATASET_FIELDS_BY_LEVEL[columnLevel].map((field) => (
                     <label key={field}>
                       <input type="checkbox" checked={fields[columnLevel].includes(field)} onChange={() => toggleField(columnLevel, field)} />
                       <span><code>{field}</code><small>{tx(DATASET_FIELD_INFO[field][0], DATASET_FIELD_INFO[field][1])}</small></span>
@@ -511,7 +519,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               {tx("Retry preview", "重試預覽")}
             </button>
           )}
-          <button className="button button--quiet" disabled={!languageId || !selectionReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
+          <button className="button button--quiet" disabled={!languageId || !selectionReady || !translationSearchReady} onClick={downloadRecipe}>{tx("Download recipe", "下載操作配方")}</button>
           {exportBlocked && <p className="callout callout--warning">{tx("This scope includes data without reviewed redistribution permission.", "此範圍包含尚未審查再散布權限的資料。")}</p>}
           <Link to="/downloads">{tx("Prepared full datasets", "預備完整資料集")}</Link>
         </aside>

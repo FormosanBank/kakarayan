@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
 import sqlite3
 import threading
 import time
@@ -19,11 +17,12 @@ from typing import Any, Literal
 from api.cursors import CursorValue, decode_cursor, encode_cursor, query_fingerprint
 from api.dataset_fields import (
     DatasetField,
+    DatasetQuery,
     RecordLevel,
     allowed_dataset_fields,
+    build_dataset_projection,
     dataset_completeness_clauses,
-    dataset_expression,
-    translation_column_expression,
+    discover_translation_columns,
 )
 from api.errors import ApiError
 from api.release import ReleaseState, readonly_connection
@@ -40,7 +39,6 @@ DICTIONARY_EXAMPLE_LIMIT = 2
 DICTIONARY_MEANING_LIMIT = 12
 DICTIONARY_PRONUNCIATION_LIMIT = 8
 DICTIONARY_VALUE_MAX_CHARS = 320
-DATASET_TRANSLATION_COLUMN_LIMIT = 256
 
 
 @dataclass
@@ -88,17 +86,6 @@ def use_query_budget(budget: QueryBudget) -> Iterator[None]:
 
 
 @dataclass(frozen=True)
-class DatasetQuery:
-    prefix: str
-    source: str
-    where: str
-    order: str
-    parameters: tuple[object, ...]
-    fields: tuple[DatasetField, ...]
-    record_level: RecordLevel
-
-
-@dataclass(frozen=True)
 class DatasetStream:
     release_id: str
     record_level: RecordLevel
@@ -108,13 +95,6 @@ class DatasetStream:
     truncated: bool
     fields: tuple[str, ...]
     rows: Iterator[dict[str, Any]]
-
-
-@dataclass(frozen=True)
-class TranslationColumn:
-    xml_lang: str
-    occurrence: int
-    name: str
 
 
 def _bounded_text(value: object, maximum: int) -> tuple[str, bool]:
@@ -134,20 +114,6 @@ def _bounded_values(
         result.append(bounded)
         truncated = truncated or shortened
     return result, truncated
-
-
-def _translation_column_base(xml_lang: str, used: dict[str, str]) -> str:
-    """Return a stable, collision-safe column stem for one XML language tag."""
-    language = xml_lang or "und"
-    slug = re.sub(r"[^a-z0-9]+", "_", language.casefold()).strip("_") or "und"
-    existing = used.get(slug)
-    if existing is None or existing == language:
-        used[slug] = language
-        return f"translation_{slug}"
-    suffix = hashlib.sha256(language.encode("utf-8")).hexdigest()[:6]
-    unique = f"{slug}_{suffix}"
-    used[unique] = language
-    return f"translation_{unique}"
 
 
 def _like(value: str) -> str:
@@ -876,13 +842,12 @@ class CorpusStore:
                 )
             ]
             examples = self._sentence_summaries(connection, example_rows)
-        meaning_entries: list[dict[str, str]] = []
+        meanings: list[dict[str, str]] = []
         meanings_truncated = len(meaning_rows) > DICTIONARY_MEANING_LIMIT
         for row in meaning_rows[:DICTIONARY_MEANING_LIMIT]:
             text, shortened = _bounded_text(row["text"], DICTIONARY_VALUE_MAX_CHARS)
-            meaning_entries.append({"text": text, "xml_lang": str(row["xml_lang"])})
+            meanings.append({"text": text, "xml_lang": str(row["xml_lang"])})
             meanings_truncated = meanings_truncated or shortened
-        meanings = [item["text"] for item in meaning_entries]
         evidence_truncated = evidence_truncated or meanings_truncated
         pronunciations, shortened = _bounded_values(
             pronunciations,
@@ -902,7 +867,6 @@ class CorpusStore:
         corpus_ids = list(dict.fromkeys(str(row["corpus_id"]) for row in rows))
         return {
             "meanings": meanings,
-            "meaning_entries": meaning_entries,
             "pronunciations": pronunciations,
             "variants": variants,
             "corpus_ids": corpus_ids,
@@ -1475,6 +1439,8 @@ class CorpusStore:
                 "invalid_parameter",
                 f"Choose supported {record_level} dataset fields",
             )
+        if len(fields) != len(set(fields)):
+            raise ApiError(422, "invalid_parameter", "Choose each dataset field once")
         candidates, clauses, parameters = self._dataset_clauses(
             language_id=language_id,
             corpus_id=corpus_id,
@@ -1522,98 +1488,6 @@ class CorpusStore:
             record_level=record_level,
         )
 
-    @staticmethod
-    def _translation_columns(
-        connection: sqlite3.Connection,
-        query: DatasetQuery,
-        max_rows: int,
-    ) -> tuple[TranslationColumn, ...]:
-        """Discover the TRANSL columns present in the exact returned row window."""
-        owner_type, owner_alias = {
-            "sentence": ("sentence", "s"),
-            "word": ("word", "w"),
-            "morpheme": ("morpheme", "m"),
-        }[query.record_level]
-        with_clause = f"{query.prefix}," if query.prefix else "WITH"
-        rows = connection.execute(
-            f"""
-            {with_clause} selected_owners AS MATERIALIZED (
-              SELECT {owner_alias}.id AS owner_id
-              FROM {query.source}
-              WHERE {query.where}
-              ORDER BY {query.order}
-              LIMIT ?
-            ), ranked AS (
-              SELECT COALESCE(NULLIF(tr.xml_lang, ''), 'und') AS xml_lang,
-                     ROW_NUMBER() OVER (
-                       PARTITION BY tr.owner_id, COALESCE(NULLIF(tr.xml_lang, ''), 'und')
-                       ORDER BY tr.position, tr.id
-                     ) AS occurrence
-              FROM translations tr
-              JOIN selected_owners selected ON selected.owner_id = tr.owner_id
-              WHERE tr.owner_type = ?
-            )
-            SELECT xml_lang, MAX(occurrence) AS occurrences
-            FROM ranked
-            GROUP BY xml_lang
-            ORDER BY xml_lang
-            """,
-            (*query.parameters, max_rows, owner_type),
-        ).fetchall()
-        used: dict[str, str] = {}
-        columns: list[TranslationColumn] = []
-        for row in rows:
-            xml_lang = str(row["xml_lang"])
-            base = _translation_column_base(xml_lang, used)
-            occurrences = int(row["occurrences"])
-            if len(columns) + occurrences > DATASET_TRANSLATION_COLUMN_LIMIT:
-                raise ApiError(
-                    422,
-                    "dataset_too_wide",
-                    "The selected rows contain more than 256 TRANSL columns",
-                )
-            for occurrence in range(1, occurrences + 1):
-                columns.append(
-                    TranslationColumn(
-                        xml_lang=xml_lang,
-                        occurrence=occurrence,
-                        name=f"{base}_{occurrence}",
-                    )
-                )
-        if not columns:
-            columns.append(
-                TranslationColumn(
-                    xml_lang="und",
-                    occurrence=1,
-                    name="translation_und_1",
-                )
-            )
-        return tuple(columns)
-
-    @staticmethod
-    def _dataset_projection(
-        query: DatasetQuery,
-        translation_columns: Sequence[TranslationColumn],
-    ) -> tuple[str, tuple[str, ...]]:
-        expressions: list[str] = []
-        fields: list[str] = []
-        for field in query.fields:
-            if field == "translation_columns":
-                for column in translation_columns:
-                    expressions.append(
-                        translation_column_expression(
-                            query.record_level,
-                            xml_lang=column.xml_lang,
-                            occurrence=column.occurrence,
-                            column=column.name,
-                        )
-                    )
-                    fields.append(column.name)
-            else:
-                expressions.append(dataset_expression(query.record_level, field))
-                fields.append(field)
-        return ",\n".join(expressions), tuple(fields)
-
     def stream_dataset(
         self,
         *,
@@ -1652,23 +1526,23 @@ class CorpusStore:
                 ).fetchone()[0]
             )
             translation_columns = (
-                self._translation_columns(connection, query, max_rows)
-                if "translation_columns" in query.fields
+                discover_translation_columns(connection, query, max_rows)
+                if "translations" in query.fields
                 else ()
             )
-        projection, output_fields = self._dataset_projection(query, translation_columns)
+        projection = build_dataset_projection(query, translation_columns)
 
         returned_rows = min(estimated_rows, max_rows)
 
         def rows() -> Iterator[dict[str, Any]]:
             with self.connect(budget) as connection:
                 cursor = connection.execute(
-                    f"{query.prefix} SELECT {projection} FROM {query.source} "
+                    f"{query.prefix} SELECT {projection.sql} FROM {query.source} "
                     f"WHERE {query.where} ORDER BY {query.order} LIMIT ?",
                     (*query.parameters, max_rows),
                 )
                 for row in cursor:
-                    yield dict(row)
+                    yield projection.expand(row)
 
         return DatasetStream(
             release_id=self.release_id,
@@ -1677,7 +1551,7 @@ class CorpusStore:
             estimated_rows=estimated_rows,
             returned_rows=returned_rows,
             truncated=estimated_rows > returned_rows,
-            fields=output_fields,
+            fields=projection.fields,
             rows=rows(),
         )
 

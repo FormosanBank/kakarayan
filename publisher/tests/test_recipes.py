@@ -25,7 +25,7 @@ def _schema() -> Path:
 
 def _recipe(release_id: str, export_format: str = "csv") -> dict[str, object]:
     return {
-        "schema_version": "1.0.0",
+        "schema_version": "2.0.0",
         "release_id": release_id,
         "selection": {
             "query": "lima",
@@ -110,14 +110,14 @@ def test_recipe_and_api_exports_have_golden_parity(public_repo: Path, tmp_path: 
                 ("record_level", "morpheme"),
                 ("sentence_field", "id"),
                 ("sentence_field", "standard"),
-                ("sentence_field", "translation_columns"),
+                ("sentence_field", "translations"),
                 ("word_field", "id"),
                 ("word_field", "sentence_id"),
                 ("word_field", "form"),
                 ("morpheme_field", "id"),
                 ("morpheme_field", "word_id"),
                 ("morpheme_field", "form"),
-                ("morpheme_field", "translation_columns"),
+                ("morpheme_field", "translations"),
                 ("complete_fields", "true"),
                 ("max_rows", "250"),
                 ("format", "csv"),
@@ -178,10 +178,10 @@ def test_recipe_activates_a_compressed_release(public_repo: Path, tmp_path: Path
     assert execute_recipe(release.output, recipe, output) == 1
     row = json.loads(output.read_text())
     assert row["standard"] == "lima waco"
-    assert row["translations"] == "eng:A fictional translated line."
+    assert row["translation_eng_1"] == "A fictional translated line."
 
 
-def test_recipe_emits_language_specific_translation_columns(
+def test_recipe_emits_language_specific_translations(
     public_repo: Path,
     tmp_path: Path,
 ) -> None:
@@ -190,7 +190,7 @@ def test_recipe_emits_language_specific_translation_columns(
     selection = cast(dict[str, object], document["selection"])
     selection["query"] = ""
     fields = cast(dict[str, list[str]], document["fields"])
-    fields["sentence"] = ["id", "translation_columns"]
+    fields["sentence"] = ["id", "translations"]
     output = tmp_path / "translations.jsonl"
 
     validate_document(document, _schema())
@@ -227,16 +227,32 @@ def test_recipe_matches_from_translation_back_to_formosan(
     assert output.read_text() == ""
 
 
-def test_recipe_schema_rejects_unknown_and_legacy_fields(tmp_path: Path) -> None:
+@pytest.mark.parametrize("field", ["glosses", "translation_columns"])
+def test_recipe_schema_rejects_unknown_fields(tmp_path: Path, field: str) -> None:
+    document = _recipe("fb-20240102-deadbeef")
+    cast(dict[str, list[str]], document["fields"])["sentence"].append(field)
+    path = tmp_path / "recipe.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ValidationError):
+        load_recipe(path, _schema())
+
+
+def test_recipe_schema_rejects_executable_code(tmp_path: Path) -> None:
     document = _recipe("fb-20240102-deadbeef")
     document["executable"] = "print('no')"
     path = tmp_path / "recipe.json"
     path.write_text(json.dumps(document), encoding="utf-8")
+
     with pytest.raises(ValidationError):
         load_recipe(path, _schema())
 
-    document.pop("executable")
-    cast(dict[str, list[str]], document["fields"])["sentence"].append("glosses")
+
+def test_recipe_schema_rejects_version_one(tmp_path: Path) -> None:
+    document = _recipe("fb-20240102-deadbeef")
+    document["schema_version"] = "1.0.0"
+    path = tmp_path / "recipe.json"
     path.write_text(json.dumps(document), encoding="utf-8")
+
     with pytest.raises(ValidationError):
         load_recipe(path, _schema())

@@ -176,9 +176,13 @@ export function cardFromDictionaryEntry(
   targetLanguage: string,
 ): StudyCard {
   const front = entry.display_form.trim();
-  const back = [...new Set(entry.meanings.map((value) => value.trim()).filter(Boolean))].join(
-    " · ",
-  );
+  const languages = new Set(entry.meanings.map((meaning) => meaning.xml_lang));
+  const back = [...new Set(entry.meanings
+    .map((meaning) => ({...meaning, text: meaning.text.trim()}))
+    .filter((meaning) => meaning.text)
+    .map((meaning) => languages.size > 1
+      ? `${meaning.xml_lang}: ${meaning.text}`
+      : meaning.text))].join(" · ");
   if (!front || !back) throw new Error("A dictionary card needs a headword and meaning");
   const now = new Date().toISOString();
   const example = entry.examples[0];

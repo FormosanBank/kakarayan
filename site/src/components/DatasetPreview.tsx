@@ -18,16 +18,13 @@ function displayValue(value: string | number | null | undefined): string {
 }
 
 function columnDefinition(field: string): readonly [string, string] {
-  if (Object.hasOwn(DATASET_FIELD_INFO, field)) {
-    return DATASET_FIELD_INFO[field as keyof typeof DATASET_FIELD_INFO];
-  }
   if (/^translation_[a-z0-9_]+_\d+$/u.test(field)) {
     return [
       "One owner-level TRANSL element; the suffix is its XML language and occurrence",
       "一個元素所屬的 TRANSL；後綴為 XML 語言及出現順序",
     ];
   }
-  return ["Generated export column", "產生的匯出欄位"];
+  return DATASET_FIELD_INFO[field as keyof typeof DATASET_FIELD_INFO];
 }
 
 export function DatasetPreview({

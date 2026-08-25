@@ -85,6 +85,9 @@ export function SearchTool({
   const selectedTranslationLanguage = translationLanguageName(targetLanguage, locale);
   const searchLanguage = direction === "formosan" ? "formosan" : `translation:${targetLanguage}`;
   const resultTranslationLanguage = direction === "translation" ? targetLanguage : "";
+  const translationSearchReady = direction === "formosan" || targets.some(
+    (target) => target.xml_lang === targetLanguage,
+  );
   const relevantCorpora = useMemo(
     () => data.corpora.filter((corpus) => corpus.languages.includes(languageId)),
     [data.corpora, languageId],
@@ -102,8 +105,12 @@ export function SearchTool({
           const preferred = locale === "zh-Hant" ? "zho" : "eng";
           return available.has(preferred) ? preferred : values[0]?.xml_lang ?? "";
         });
+        if (values.length === 0) setDirection("formosan");
       },
-      () => setTargets([]),
+      () => {
+        setTargets([]);
+        setDirection("formosan");
+      },
     );
     return () => next.abort();
   }, [corpusId, data.meta.release_id, data.query.available, languageId, locale]);
@@ -112,7 +119,7 @@ export function SearchTool({
 
   const run = useCallback(
     async (append: boolean) => {
-      if (!query.trim() || !languageId || !data.query.available) return;
+      if (!query.trim() || !languageId || !data.query.available || !translationSearchReady) return;
       controller.current?.abort();
       const next = new AbortController();
       controller.current = next;
@@ -173,15 +180,16 @@ export function SearchTool({
     },
     [
       corpusId, cursor, data.meta.release_id, data.query.available, dialect, direction,
-      kind, languageId, match, query, requirements, setParams, targetLanguage, tx,
+      kind, languageId, match, query, requirements, setParams, targetLanguage,
+      translationSearchReady, tx,
     ],
   );
 
   useEffect(() => {
-    if (!autoSearch || initialSearchStarted.current) return;
+    if (!autoSearch || initialSearchStarted.current || !translationSearchReady) return;
     initialSearchStarted.current = true;
     void run(false);
-  }, [autoSearch, run]);
+  }, [autoSearch, run, translationSearchReady]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -232,12 +240,13 @@ export function SearchTool({
           <select value={languageId} onChange={(event) => {
             setLanguageId(event.target.value);
             setCorpusId("");
+            setTargets([]);
             onLanguageChange?.(event.target.value);
           }}>
             {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
           </select>
         </label>
-        <label className="field field--search-language">
+        <label className="field">
           {tx("Search text language", "搜尋文字的語言")}
           <select
             value={searchLanguage}
@@ -248,7 +257,7 @@ export function SearchTool({
                 return;
               }
               setDirection("translation");
-              setTargetLanguage(value.replace(/^translation:/u, ""));
+              setTargetLanguage(value.slice("translation:".length));
             }}
           >
             <option value="formosan">
@@ -270,7 +279,7 @@ export function SearchTool({
           </select>
         </label>
         <div className="search-form__actions">
-          <button className="button button--primary" disabled={busy || !query.trim() || !data.query.available}>
+          <button className="button button--primary" disabled={busy || !query.trim() || !data.query.available || !translationSearchReady}>
             {busy ? tx("Searching…", "搜尋中…") : t("search.submit")}
           </button>
         </div>
@@ -293,7 +302,10 @@ export function SearchTool({
             </div>
             <label className="field">
               {tx("Corpus", "語料庫")}
-              <select value={corpusId} onChange={(event) => setCorpusId(event.target.value)}>
+              <select value={corpusId} onChange={(event) => {
+                setCorpusId(event.target.value);
+                setTargets([]);
+              }}>
                 <option value="">{tx("All corpora", "所有語料庫")}</option>
                 {relevantCorpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}
               </select>

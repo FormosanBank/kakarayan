@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "2.0.0",
   "release_id": "fb-20240102-3b367525",
   "selection": {
     "query": "five",
@@ -16,9 +16,9 @@
     "complete_fields": true
   },
   "fields": {
-    "sentence": ["id", "standard", "translation_columns"],
+    "sentence": ["id", "standard", "translations"],
     "word": ["id", "sentence_id", "form"],
-    "morpheme": ["id", "word_id", "form", "translation_columns"]
+    "morpheme": ["id", "word_id", "form", "translations"]
   },
   "format": "csv",
   "spreadsheet_safe": true

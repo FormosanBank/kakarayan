@@ -16,9 +16,9 @@ it("emits the schema-validated representative recipe", () => {
       recordLevels: ["sentence", "word", "morpheme"],
       maxRows: 250,
       fields: {
-        sentence: ["id", "standard", "translation_columns"],
+        sentence: ["id", "standard", "translations"],
         word: ["id", "sentence_id", "form"],
-        morpheme: ["id", "word_id", "form", "translation_columns"],
+        morpheme: ["id", "word_id", "form", "translations"],
       },
       format: "csv",
     }),

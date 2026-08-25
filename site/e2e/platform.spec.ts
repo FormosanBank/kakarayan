@@ -396,6 +396,7 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   const recipePath = await (await recipeDownload).path();
   if (!recipePath) throw new Error("Recipe download has no local path");
   const recipe = JSON.parse(await readFile(recipePath, "utf8")) as {
+    schema_version: string;
     selection: {max_rows: number; record_units: string[]; translation_language: string};
     fields: Record<string, string[]>;
     format: string;
@@ -405,7 +406,9 @@ test("research preview, finite recipe, export, and summaries share the API", asy
     record_units: ["sentence", "word", "morpheme"],
     translation_language: "eng",
   });
+  expect(recipe.schema_version).toBe("2.0.0");
   expect(recipe.fields.sentence).toContain("text_id");
+  expect(recipe.fields.sentence).toContain("translations");
   expect(recipe.fields.word).toContain("sentence_id");
   expect(recipe.fields.morpheme).toContain("word_id");
   expect(["csv", "tsv", "jsonl"]).toContain(recipe.format);
