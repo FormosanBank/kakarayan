@@ -32,7 +32,8 @@ These definitions apply in both directions. A Formosan-direction sentence query 
 original, standardized, and alternate `FORM` values at S, W, and M levels, plus the selected
 token projection. Dictionary lookup searches the token projection and owner-level W and M
 `FORM` values. A translation-direction query searches S, W, and M `TRANSL` values tagged
-with the requested XML language.
+with the requested XML language. Reverse dictionary results place a matching source
+translation first so the displayed evidence and query highlight agree with the match.
 
 The Lookup page and landing-page lookup use the same dictionary and concordance routes. The
 Dataset Builder uses the same sentence candidate matcher; W and M datasets apply the same
