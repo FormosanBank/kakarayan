@@ -82,9 +82,11 @@ The API owns:
 - bounded queue waits and route-specific query deadlines;
 - health, readiness, release identity, and privacy-preserving operational records.
 
-Successful release-scoped GET responses are public and immutable. Validation and readiness
-responses are not cached. Query length, page size, SQLite work, and export rows have high
-finite limits. Export bytes are streamed rather than buffered in API memory.
+Successful release-scoped GET responses are public and cacheable for five minutes. The data
+release is immutable, but API representations may receive bug fixes, so the web client bypasses
+stale browser entries when it queries the service. Validation and readiness responses are not
+cached. Query length, page size, SQLite work, and export rows have high finite limits. Export
+bytes are streamed rather than buffered in API memory.
 
 ## Activation boundary
 

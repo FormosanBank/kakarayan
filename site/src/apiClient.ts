@@ -81,6 +81,7 @@ async function request<T>(
   try {
     for (let attempt = 0; ; attempt += 1) {
       const response = await fetch(`${apiBaseUrl}${path}`, {
+        cache: "no-store",
         headers: {Accept: "application/json", "X-Kakarayan-Client": "web-v1"},
         signal: controller.signal,
       });

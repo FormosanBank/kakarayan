@@ -39,6 +39,10 @@ describe("API request lifecycle", () => {
 
     await expect(result).resolves.toMatchObject({release_id: "fb-test", items: []});
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({cache: "no-store"}),
+    );
   });
 
   it("stops an unresponsive lookup after the interactive budget", async () => {

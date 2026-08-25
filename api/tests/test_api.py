@@ -41,7 +41,7 @@ def test_health_catalogues_and_contract(client: TestClient) -> None:
     amis = next(item for item in languages if item["name"] == "Amis")
     language = client.get(f"/v1/releases/{release_id}/languages/{amis['id']}")
     assert language.json()["name"] == "Amis"
-    assert "immutable" in language.headers["cache-control"]
+    assert language.headers["cache-control"] == "public, max-age=300"
 
     corpora = client.get("/v1/corpora").json()
     assert corpora[0]["name"] == "TestCorpus"

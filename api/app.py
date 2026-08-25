@@ -78,10 +78,8 @@ async def _controlled_chunks(chunks: Iterator[bytes], budget: QueryBudget) -> As
         budget.cancel()
 
 
-def _cache(response: Response, *, immutable: bool = False) -> None:
-    response.headers["Cache-Control"] = (
-        "public, max-age=31536000, immutable" if immutable else "public, max-age=300"
-    )
+def _cache(response: Response) -> None:
+    response.headers["Cache-Control"] = "public, max-age=300"
 
 
 def _record(event: str, **values: object) -> None:
@@ -355,19 +353,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def language(
         request: Request, response: Response, release_id: ReleaseId, language_id: str
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         return release_store(request, release_id).language(language_id)
 
     @app.get("/v1/releases/{release_id}/corpora/{corpus_id}", tags=["catalogue"])
     def corpus(request: Request, response: Response, release_id: ReleaseId, corpus_id: str) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         return release_store(request, release_id).corpus(corpus_id)
 
     @app.get("/v1/releases/{release_id}/texts/{text_id}", tags=["records"])
     async def text(
         request: Request, response: Response, release_id: ReleaseId, text_id: str
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         current = release_store(request, release_id)
         return await run_query(request, lambda: current.text(text_id))
 
@@ -375,7 +373,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def sentence(
         request: Request, response: Response, release_id: ReleaseId, sentence_id: str
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         current = release_store(request, release_id)
         return await run_query(request, lambda: current.sentence(sentence_id))
 
@@ -387,7 +385,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         language_id: LanguageId,
         corpus_id: OptionalCorpus = None,
     ) -> list[dict]:
-        _cache(response, immutable=True)
+        _cache(response)
         current = release_store(request, release_id)
         return await run_query(
             request,
@@ -409,7 +407,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: PageSize = 25,
         cursor: Cursor = None,
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         current = release_store(request, release_id)
         return await run_query(
             request,
@@ -442,7 +440,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: PageSize = 25,
         cursor: Cursor = None,
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         current = release_store(request, release_id)
         return await run_query(
             request,
@@ -474,7 +472,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: PageSize = 25,
         cursor: Cursor = None,
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         current = release_store(request, release_id)
         return await run_query(
             request,
@@ -501,7 +499,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         dialect: OptionalDialect = None,
         limit: Annotated[int, Query(ge=1, le=SUMMARY_MAX_ROWS)] = 25,
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         current = release_store(request, release_id)
         return await run_query(
             request,
@@ -560,7 +558,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         complete_fields: bool = False,
         max_rows: Annotated[int, Query(ge=1, le=DATASET_PREVIEW_MAX_ROWS)] = 12,
     ) -> dict:
-        _cache(response, immutable=True)
+        _cache(response)
         return await run_query(
             request,
             lambda: dataset_result(
@@ -639,7 +637,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             _controlled_chunks(iter(dataset_chunks(result, format)), budget),
             media_type=media_type,
             headers={
-                "Cache-Control": "public, max-age=31536000, immutable",
+                "Cache-Control": "public, max-age=300",
                 "Content-Disposition": f'attachment; filename="{filename}"',
                 "X-Kakarayan-Row-Count": str(result.returned_rows),
             },
@@ -736,7 +734,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
             media_type="application/zip",
             headers={
-                "Cache-Control": "public, max-age=31536000, immutable",
+                "Cache-Control": "public, max-age=300",
                 "Content-Encoding": "identity",
                 "Content-Disposition": (
                     f'attachment; filename="kakarayan-{release_id}-xml-levels.zip"'
