@@ -129,21 +129,13 @@ class DatasetQuery:
 
 
 @dataclass(frozen=True)
-class TranslationColumn:
-    xml_lang: str
-    occurrence: int
-    name: str
-
-
-@dataclass(frozen=True)
 class DatasetProjection:
     sql: str
     fields: tuple[str, ...]
-    translation_columns: tuple[TranslationColumn, ...]
 
     def expand(self, row: sqlite3.Row) -> dict[str, Any]:
         values = dict(row)
-        if not self.translation_columns:
+        if "__translations" not in values:
             return values
         serialized_translations = values.pop("__translations", "[]")
         result = {field: values.get(field, "") for field in self.fields}
@@ -289,7 +281,7 @@ def discover_translation_columns(
     connection: sqlite3.Connection,
     query: DatasetQuery,
     max_rows: int,
-) -> tuple[TranslationColumn, ...]:
+) -> tuple[str, ...]:
     """Discover TRANSL columns in the exact ordered row window being returned."""
     owner_type, owner_alias = dataset_owner(query.record_level)
     with_clause = f"{query.prefix}," if query.prefix else "WITH"
@@ -318,7 +310,7 @@ def discover_translation_columns(
         """,
         (*query.parameters, max_rows, owner_type),
     ).fetchall()
-    columns: list[TranslationColumn] = []
+    columns: list[str] = []
     for row in rows:
         xml_lang = str(row["xml_lang"])
         occurrences = int(row["occurrences"])
@@ -330,27 +322,17 @@ def discover_translation_columns(
                 f"{DATASET_TRANSLATION_COLUMN_LIMIT} TRANSL columns",
             )
         columns.extend(
-            TranslationColumn(
-                xml_lang=xml_lang,
-                occurrence=occurrence,
-                name=translation_column_name(xml_lang, occurrence),
-            )
+            translation_column_name(xml_lang, occurrence)
             for occurrence in range(1, occurrences + 1)
         )
     if not columns:
-        columns.append(
-            TranslationColumn(
-                xml_lang="und",
-                occurrence=1,
-                name="translation_und_1",
-            )
-        )
+        columns.append("translation_und_1")
     return tuple(columns)
 
 
 def build_dataset_projection(
     query: DatasetQuery,
-    translation_columns: tuple[TranslationColumn, ...],
+    translation_columns: tuple[str, ...],
 ) -> DatasetProjection:
     """Build SQL and public field order for one dataset response."""
     expressions: list[str] = []
@@ -358,14 +340,13 @@ def build_dataset_projection(
     for field in query.fields:
         if field == "translations":
             expressions.append(translation_values_expression(query.record_level))
-            fields.extend(column.name for column in translation_columns)
+            fields.extend(translation_columns)
         else:
             expressions.append(dataset_expression(query.record_level, field))
             fields.append(field)
     return DatasetProjection(
         sql=",\n".join(expressions),
         fields=tuple(fields),
-        translation_columns=translation_columns,
     )
 
 
