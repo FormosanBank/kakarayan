@@ -20,7 +20,11 @@ export const DATASET_FIELD_INFO = {
   standard: ["FormosanBank standardized FORM", "FormosanBank 標準化 FORM"],
   original: ["Source-faithful original FORM", "忠於來源的原始 FORM"],
   alternate_forms: ["Alternate FORM values", "替代 FORM 值"],
-  translations: ["Owner-level TRANSL values with language tags", "元素所屬的 TRANSL 值與語言標籤"],
+  translations: ["Legacy packed TRANSL values with language tags", "舊式合併 TRANSL 值與語言標籤"],
+  translation_columns: [
+    "Separate TRANSL columns by XML language and occurrence",
+    "依 XML 語言及出現順序分開的 TRANSL 欄位",
+  ],
   tokens: ["Ordered sentence token sequence", "句子的依序詞元"],
   token_count: ["Sentence token count", "句子詞元數"],
   phonology: ["Owner-level PHON values", "元素所屬的 PHON 值"],
@@ -41,33 +45,39 @@ export type DatasetFieldsByLevel = Record<DatasetLevel, DatasetField[]>;
 export const DATASET_FIELDS_BY_LEVEL: Record<DatasetLevel, DatasetField[]> = {
   sentence: [
     "id", "xml_id", "text_id", "position", "form", "standard", "original",
-    "alternate_forms", "translations", "tokens", "token_count", "phonology",
+    "alternate_forms", "translations", "translation_columns", "tokens", "token_count", "phonology",
     "source", "unclear", "language_id", "corpus_id", "dialect", "source_path", "audio",
   ],
   word: [
     "id", "xml_id", "parent_id", "sentence_id", "text_id", "position", "form",
-    "standard", "original", "alternate_forms", "translations", "phonology", "class",
+    "standard", "original", "alternate_forms", "translations", "translation_columns", "phonology", "class",
     "sclass", "unclear", "language_id", "corpus_id", "dialect", "source_path", "audio",
   ],
   morpheme: [
     "id", "xml_id", "parent_id", "word_id", "sentence_id", "text_id", "position",
-    "form", "standard", "original", "alternate_forms", "translations", "phonology",
+    "form", "standard", "original", "alternate_forms", "translations", "translation_columns", "phonology",
     "class", "sclass", "unclear", "language_id", "corpus_id", "dialect", "source_path",
     "audio",
   ],
 };
 
+export const DATASET_BUILDER_FIELDS_BY_LEVEL: Record<DatasetLevel, DatasetField[]> = {
+  sentence: DATASET_FIELDS_BY_LEVEL.sentence.filter((field) => field !== "translations"),
+  word: DATASET_FIELDS_BY_LEVEL.word.filter((field) => field !== "translations"),
+  morpheme: DATASET_FIELDS_BY_LEVEL.morpheme.filter((field) => field !== "translations"),
+};
+
 export const DEFAULT_DATASET_FIELDS: DatasetFieldsByLevel = {
   sentence: [
-    "id", "xml_id", "text_id", "form", "translations", "language_id", "corpus_id",
+    "id", "xml_id", "text_id", "form", "translation_columns", "language_id", "corpus_id",
     "dialect", "source_path",
   ],
   word: [
-    "id", "xml_id", "sentence_id", "text_id", "position", "form", "translations",
+    "id", "xml_id", "sentence_id", "text_id", "position", "form", "translation_columns",
     "language_id", "corpus_id", "dialect", "source_path",
   ],
   morpheme: [
     "id", "xml_id", "word_id", "sentence_id", "text_id", "position", "form",
-    "translations", "language_id", "corpus_id", "dialect", "source_path",
+    "translation_columns", "language_id", "corpus_id", "dialect", "source_path",
   ],
 };

@@ -25,7 +25,7 @@ async function disableServiceWorkerForRouting(page: Page) {
 
 async function controlGeometry(page: Page) {
   const formosan = await page.getByRole("combobox", {name: "Formosan language"}).boundingBox();
-  const translation = await page.getByRole("combobox", {name: "Translation"}).boundingBox();
+  const translation = await page.getByRole("combobox", {name: "Search text language"}).boundingBox();
   const action = await page.locator(".search-form__actions").boundingBox();
   if (!formosan || !translation || !action) throw new Error("Search control geometry unavailable");
   return {formosan, translation, action};
@@ -119,7 +119,7 @@ test("production lookup and finite dataset routes respond", {tag: "@production-s
   await page.goto("research");
   await page.getByLabel("Word or phrase").fill("lima");
   const previewResponse = page.waitForResponse(/\/datasets\/preview\?/u);
-  await page.getByRole("combobox", {name: "Language", exact: true}).first().selectOption({label: "Amis"});
+  await page.getByRole("combobox", {name: "Formosan language", exact: true}).first().selectOption({label: "Amis"});
   const preview = await previewResponse;
   expect(preview.ok()).toBe(true);
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
@@ -148,7 +148,7 @@ test("the GitHub Pages fallback restores a clean deep link", async ({page}) => {
   expect(servedFallback).toBe(true);
   await expect(page).toHaveURL(/\/kakarayan\/research\?language=lang_amis$/u);
   await expect(page.getByRole("heading", {level: 1})).toHaveText("Research tools");
-  await expect(page.getByRole("combobox", {name: "Language", exact: true}).first()).toHaveValue(
+  await expect(page.getByRole("combobox", {name: "Formosan language", exact: true}).first()).toHaveValue(
     "lang_amis",
   );
 });
@@ -190,7 +190,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   await page.goto("lookup?type=sentences&language=lang_amis");
   await page.reload();
   await page.getByText("Search options", {exact: true}).click();
-  await page.getByRole("radio", {name: "Search in English"}).check();
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
   await page.getByText("Contains", {exact: true}).click();
   await page.getByLabel("Word or phrase").fill("fictional");
   await page.getByRole("button", {name: "Search", exact: true}).click();
@@ -199,7 +199,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 
   await page.goto("lookup?type=dictionary");
   await selectFixtureScope(page);
-  await page.getByRole("radio", {name: "Search in English"}).check();
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
   await page.getByLabel("Word or meaning").fill("five");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
@@ -356,12 +356,13 @@ test("research preview, finite recipe, export, and summaries share the API", asy
     }
   });
   await page.goto("research");
-  const language = page.getByRole("combobox", {name: "Language", exact: true}).first();
+  const language = page.getByRole("combobox", {name: "Formosan language", exact: true}).first();
   await language.selectOption({label: "Amis"});
   const corpus = page.getByRole("combobox", {name: "Corpus", exact: true}).first();
   const labels = await corpus.locator("option").allTextContents();
   if (labels.includes("TestCorpus")) await corpus.selectOption({label: "TestCorpus"});
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  await expect(page.locator(".builder__preview th", {hasText: "translation_eng_1"})).toBeVisible();
   await expect(page.locator(".builder__summary")).toContainText("Matching rows");
 
   delayPreview = true;
@@ -372,10 +373,7 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
   delayPreview = false;
 
-  await page.getByRole("combobox", {name: "Search in"}).selectOption("translation");
-  const translationLanguage = page.getByRole("combobox", {name: "Translation language"});
-  await expect(translationLanguage).toBeVisible();
-  await translationLanguage.selectOption("eng");
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
   await page.getByLabel("Word or phrase").fill("five");
   await page.getByRole("combobox", {name: "Match"}).selectOption("contains");
   await expect(page.locator(".builder__summary dd").first()).toHaveText(/^[1-9][\d,]*$/u);
