@@ -617,6 +617,67 @@ class CorpusStore:
                 )
             ]
 
+    def _reverse_dictionary_evidence(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        headword: str,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        translation_language: str | None,
+        query: str,
+        match: MatchMode,
+    ) -> list[dict[str, Any]]:
+        clauses, parameters = self._scope(language_id, corpus_id, dialect)
+        if match == "contains" and len(query) < 3:
+            match_clause = "tr.normalized LIKE ? ESCAPE '\\'"
+            parameters.append(f"%{_like(query)}%")
+        else:
+            match_clause, match_parameters = _predicate(
+                "tr.normalized", query, match, "translation"
+            )
+            parameters.extend(match_parameters)
+        clauses.append(match_clause)
+        if translation_language:
+            clauses.append("tr.xml_lang = ?")
+            parameters.append(translation_language)
+        clauses.append(
+            "((tr.owner_type <> 'sentence' AND EXISTS ("
+            "SELECT 1 FROM forms matched_form "
+            "WHERE matched_form.owner_type = tr.owner_type "
+            "AND matched_form.owner_id = tr.owner_id "
+            "AND matched_form.normalized = ?)) "
+            "OR (tr.owner_type = 'word' AND EXISTS ("
+            "SELECT 1 FROM tokens matched_token "
+            "WHERE matched_token.word_id = tr.owner_id "
+            "AND matched_token.normalized = ?)) "
+            "OR (tr.owner_type = 'sentence' AND s.token_count = 1 AND EXISTS ("
+            "SELECT 1 FROM tokens matched_token "
+            "WHERE matched_token.sentence_id = s.id "
+            "AND matched_token.normalized = ?)))"
+        )
+        parameters.extend((headword, headword, headword))
+        return [
+            dict(row)
+            for row in connection.execute(
+                f"""
+                SELECT ts.sentence_id, tr.owner_id, t.corpus_id,
+                       tr.text AS matched_text, tr.xml_lang AS matched_xml_lang,
+                       tr.position AS matched_position
+                FROM translations tr
+                JOIN tier_scope_view ts
+                  ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+                JOIN sentences s ON s.id = ts.sentence_id
+                JOIN texts t ON t.id = s.parent_id
+                WHERE {" AND ".join(clauses)}
+                ORDER BY t.source_path, s.position, tr.position, tr.text
+                LIMIT ?
+                """,
+                (*parameters, DICTIONARY_MEANING_LIMIT + 1),
+            )
+        ]
+
     def _dictionary_evidence(
         self,
         connection: sqlite3.Connection,
@@ -626,6 +687,8 @@ class CorpusStore:
         corpus_id: str | None,
         dialect: str | None,
         translation_language: str | None,
+        reverse_query: str | None,
+        reverse_match: MatchMode,
     ) -> dict[str, Any]:
         clauses, parameters = self._scope(language_id, corpus_id, dialect)
         rows = [
@@ -663,10 +726,26 @@ class CorpusStore:
                     (*parameters, headword),
                 )
             ]
-        candidate_sentence_ids = list(dict.fromkeys(str(row["sentence_id"]) for row in rows))
+        matched_rows = (
+            self._reverse_dictionary_evidence(
+                connection,
+                headword=headword,
+                language_id=language_id,
+                corpus_id=corpus_id,
+                dialect=dialect,
+                translation_language=translation_language,
+                query=reverse_query,
+                match=reverse_match,
+            )
+            if reverse_query is not None
+            else []
+        )
+        candidate_sentence_ids = list(
+            dict.fromkeys(str(row["sentence_id"]) for row in (*matched_rows, *rows))
+        )
         sentence_ids = candidate_sentence_ids[:DICTIONARY_EXAMPLE_LIMIT]
         evidence_truncated = len(candidate_sentence_ids) > DICTIONARY_EXAMPLE_LIMIT
-        owner_ids = {str(row["owner_id"]) for row in rows if row.get("owner_id")}
+        owner_ids = {str(row["owner_id"]) for row in (*matched_rows, *rows) if row.get("owner_id")}
         if owner_ids:
             placeholders = ",".join("?" for _ in owner_ids)
             owner_ids.update(
@@ -677,6 +756,19 @@ class CorpusStore:
                 )
             )
         meaning_rows: list[dict[str, Any]] = []
+        seen_meanings: set[tuple[str, str]] = set()
+        for row in matched_rows:
+            key = (str(row["matched_text"]), str(row["matched_xml_lang"]))
+            if key in seen_meanings:
+                continue
+            seen_meanings.add(key)
+            meaning_rows.append(
+                {
+                    "text": row["matched_text"],
+                    "xml_lang": row["matched_xml_lang"],
+                    "first_position": row["matched_position"],
+                }
+            )
         pronunciations: list[str] = []
         if owner_ids:
             placeholders = ",".join("?" for _ in owner_ids)
@@ -684,7 +776,7 @@ class CorpusStore:
             language_parameters: tuple[object, ...] = (
                 (translation_language,) if translation_language else ()
             )
-            meaning_rows = [
+            related_meanings = [
                 dict(row)
                 for row in connection.execute(
                     f"SELECT text, xml_lang, MIN(position) AS first_position FROM translations "
@@ -693,6 +785,12 @@ class CorpusStore:
                     (*owner_ids, *language_parameters),
                 )
             ]
+            for row in related_meanings:
+                key = (str(row["text"]), str(row["xml_lang"]))
+                if key in seen_meanings:
+                    continue
+                seen_meanings.add(key)
+                meaning_rows.append(row)
             pronunciations = [
                 str(row[0])
                 for row in connection.execute(
@@ -755,7 +853,7 @@ class CorpusStore:
             or shortened
             or any(bool(example["summary_truncated"]) for example in examples)
         )
-        corpus_ids = list(dict.fromkeys(str(row["corpus_id"]) for row in rows))
+        corpus_ids = list(dict.fromkeys(str(row["corpus_id"]) for row in (*matched_rows, *rows)))
         return {
             "meanings": meanings,
             "pronunciations": pronunciations,
@@ -846,6 +944,8 @@ class CorpusStore:
                     corpus_id=corpus_id,
                     dialect=dialect,
                     translation_language=translation_language,
+                    reverse_query=normalized if direction == "translation" else None,
+                    reverse_match=match,
                 )
                 items.append(
                     {

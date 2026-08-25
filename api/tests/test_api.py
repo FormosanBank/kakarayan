@@ -188,6 +188,50 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
     assert {item["xml_lang"] for item in languages} == {"eng", "zho"}
 
 
+def test_reverse_dictionary_prioritizes_the_matching_translation(settings: Settings) -> None:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        owner_type, owner_id = connection.execute(
+            "SELECT owner_type, owner_id FROM translations WHERE normalized = 'five.word'"
+        ).fetchone()
+        connection.execute("UPDATE translations SET position = 100 WHERE normalized = 'five.word'")
+        connection.executemany(
+            """
+            INSERT INTO translations (
+              id, owner_type, owner_id, position, text, unclear, xml_lang,
+              kind, version, notes, normalized, attributes_json, inline_markup_json
+            ) VALUES (?, ?, ?, ?, ?, 0, 'eng', '', '', '', ?, '{}', '[]')
+            """,
+            [
+                (
+                    f"translation_decoy_{position}",
+                    owner_type,
+                    owner_id,
+                    position,
+                    f"decoy {position:02d}",
+                    f"decoy {position:02d}",
+                )
+                for position in range(13)
+            ],
+        )
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get(
+            release_path(client, "dictionary"),
+            params={
+                "q": "five.word",
+                "language_id": "lang_amis",
+                "direction": "translation",
+                "translation_language": "eng",
+                "match": "exact",
+            },
+        )
+
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["headword"] == "lima"
+    assert item["meanings"][0] == {"text": "five.word", "xml_lang": "eng"}
+
+
 def test_keyset_pages_and_query_identity(client: TestClient) -> None:
     url = release_path(client, "frequencies")
     first = client.get(url, params={"language_id": "lang_amis", "limit": 1})
