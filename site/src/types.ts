@@ -241,6 +241,13 @@ export interface SentenceSummary {
   original: string;
   translations: Translation[];
   translation_count: number;
+  match_evidence: Array<{
+    tier: "sentence" | "word" | "morpheme";
+    field: "form" | "translation";
+    text: string;
+    xml_lang: string;
+    kind: string;
+  }>;
   summary_truncated: boolean;
   audio_count: number;
 }

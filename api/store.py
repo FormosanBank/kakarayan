@@ -7,7 +7,7 @@ import sqlite3
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -35,6 +35,7 @@ QueryWorkload = Literal["interactive", "analytical"]
 SUMMARY_FORM_MAX_CHARS = 480
 SUMMARY_TRANSLATION_MAX_CHARS = 320
 SUMMARY_TRANSLATION_LIMIT = 3
+SUMMARY_MATCH_LIMIT = 3
 DICTIONARY_EXAMPLE_LIMIT = 2
 DICTIONARY_MEANING_LIMIT = 12
 DICTIONARY_PRONUNCIATION_LIMIT = 8
@@ -535,6 +536,8 @@ class CorpusStore:
     def _sentence_summaries(
         connection: sqlite3.Connection,
         rows: Sequence[dict[str, Any]],
+        match_evidence: Mapping[str, Sequence[dict[str, Any]]] | None = None,
+        match_evidence_truncated: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         if not rows:
             return []
@@ -563,6 +566,8 @@ class CorpusStore:
         ):
             audio_counts[str(row["sentence_id"])] = int(row["count"])
 
+        evidence_by_sentence = match_evidence or {}
+        truncated_evidence = match_evidence_truncated or set()
         result = []
         for row in rows:
             identifier = str(row["id"])
@@ -590,11 +595,13 @@ class CorpusStore:
                     "original": original,
                     "translations": summary_translations,
                     "translation_count": len(sentence_translations),
+                    "match_evidence": list(evidence_by_sentence.get(identifier, ())),
                     "summary_truncated": (
                         standard_truncated
                         or original_truncated
                         or translation_truncated
                         or citation_truncated
+                        or identifier in truncated_evidence
                     ),
                     "audio_count": audio_counts[identifier],
                 }
@@ -1076,7 +1083,21 @@ class CorpusStore:
                     (*candidate_parameters, *parameters, limit + 1),
                 )
             ]
-            items = self._sentence_summaries(connection, rows[:limit])
+            visible_rows = rows[:limit]
+            match_evidence, evidence_truncated = self._concordance_match_evidence(
+                connection,
+                sentence_ids=[str(row["id"]) for row in visible_rows],
+                normalized=normalized,
+                direction=direction,
+                translation_language=translation_language,
+                match=match,
+            )
+            items = self._sentence_summaries(
+                connection,
+                visible_rows,
+                match_evidence,
+                evidence_truncated,
+            )
         has_more = len(rows) > limit
         next_cursor = None
         if has_more and items:
@@ -1086,6 +1107,88 @@ class CorpusStore:
                 fingerprint,
             )
         return {"release_id": self.release_id, "items": items, "next_cursor": next_cursor}
+
+    @staticmethod
+    def _concordance_match_evidence(
+        connection: sqlite3.Connection,
+        *,
+        sentence_ids: Sequence[str],
+        normalized: str,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+    ) -> tuple[dict[str, list[dict[str, str]]], set[str]]:
+        if not sentence_ids:
+            return {}, set()
+        placeholders = ",".join("?" for _ in sentence_ids)
+        if direction == "translation":
+            table = "translations"
+            alias = "tr"
+            field = "translation"
+            xml_lang = "tr.xml_lang"
+            language_clause = " AND tr.xml_lang = ?" if translation_language else ""
+            language_parameters: tuple[object, ...] = (
+                (translation_language,) if translation_language else ()
+            )
+            vocabulary: Literal["formosan", "translation"] = "translation"
+        else:
+            table = "forms"
+            alias = "f"
+            field = "form"
+            xml_lang = "''"
+            language_clause = ""
+            language_parameters = ()
+            vocabulary = "formosan"
+        match_clause, match_parameters = _predicate(
+            f"{alias}.normalized", normalized, match, vocabulary
+        )
+        tier_order = f"CASE {alias}.owner_type WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2 END"
+        rows = connection.execute(
+            f"""
+            SELECT sentence_id, tier, field, text, xml_lang, kind, match_count
+            FROM (
+              SELECT ts.sentence_id, {alias}.owner_type AS tier, ? AS field,
+                     {alias}.text, {xml_lang} AS xml_lang, {alias}.kind,
+                     COUNT(*) OVER (PARTITION BY ts.sentence_id) AS match_count,
+                     ROW_NUMBER() OVER (
+                       PARTITION BY ts.sentence_id
+                       ORDER BY {tier_order}, {alias}.position, {alias}.id
+                     ) AS match_rank
+              FROM {table} {alias}
+              JOIN tier_scope_view ts
+                ON ts.owner_type = {alias}.owner_type AND ts.owner_id = {alias}.owner_id
+              WHERE ts.sentence_id IN ({placeholders})
+                {language_clause} AND {match_clause}
+            )
+            WHERE match_rank <= ?
+            ORDER BY sentence_id, match_rank
+            """,
+            (
+                field,
+                *sentence_ids,
+                *language_parameters,
+                *match_parameters,
+                SUMMARY_MATCH_LIMIT,
+            ),
+        )
+        evidence: dict[str, list[dict[str, str]]] = defaultdict(list)
+        truncated: set[str] = set()
+        for raw in rows:
+            row = dict(raw)
+            sentence_id = str(row["sentence_id"])
+            text, shortened = _bounded_text(row["text"], SUMMARY_TRANSLATION_MAX_CHARS)
+            evidence[sentence_id].append(
+                {
+                    "tier": str(row["tier"]),
+                    "field": str(row["field"]),
+                    "text": text,
+                    "xml_lang": str(row["xml_lang"]),
+                    "kind": str(row["kind"]),
+                }
+            )
+            if shortened or int(row["match_count"]) > SUMMARY_MATCH_LIMIT:
+                truncated.add(sentence_id)
+        return dict(evidence), truncated
 
     def frequencies(
         self,

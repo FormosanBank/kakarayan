@@ -34,6 +34,8 @@ token projection. Dictionary lookup searches the token projection and owner-leve
 `FORM` values. A translation-direction query searches S, W, and M `TRANSL` values tagged
 with the requested XML language. Reverse dictionary results place a matching source
 translation first so the displayed evidence and query highlight agree with the match.
+When a concordance match exists only below the sentence level, its bounded summary evidence
+shows the matching tier and value so the collapsed result can highlight what matched.
 
 The Lookup page and landing-page lookup use the same dictionary and concordance routes. The
 Dataset Builder uses the same sentence candidate matcher; W and M datasets apply the same
