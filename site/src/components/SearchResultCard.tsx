@@ -380,6 +380,13 @@ export function SearchResultCard({
   }
   const language = data.languages.find((item) => item.id === summary.language_id);
   const corpus = data.corpora.find((item) => item.id === summary.corpus_id);
+  const visibleTranslations = summary.translations
+    .filter((item) => !targetLanguage || item.xml_lang === targetLanguage)
+    .slice(0, 3);
+  const visibleMatch = direction === "formosan"
+    ? queryMatchesText(summary.standard || summary.original, query, mode)
+    : visibleTranslations.some((item) => queryMatchesText(item.text, query, mode));
+  const hiddenMatchEvidence = visibleMatch ? [] : summary.match_evidence.slice(0, 2);
   return (
     <article className="result-card result-card--summary" id={`record-${summary.id}`}>
       <div className="result-card__scope">
@@ -396,23 +403,41 @@ export function SearchResultCard({
         />
       </h3>
       <div className="translations">
-        {summary.translations
-          .filter((item) => !targetLanguage || item.xml_lang === targetLanguage)
-          .slice(0, 3)
-          .map((item, index) => {
-            const isMatch = direction === "translation" &&
-              queryMatchesText(item.text, query, mode);
-            return (
-              <p key={`${item.xml_lang}-${index}`} className={isMatch ? "translation-match" : undefined}>
-                <span className="translation-meta">
-                  {translationLanguageName(item.xml_lang, locale)}
-                </span>
-                <span className="translation-text">
-                  <QueryHighlight text={item.text} query={query} mode={mode} active={isMatch} />
-                </span>
-              </p>
-            );
-          })}
+        {hiddenMatchEvidence.map((item, index) => {
+          const tier = item.tier === "sentence"
+            ? tx("Sentence", "句")
+            : item.tier === "word"
+              ? tx("Word", "詞")
+              : tx("Morpheme", "語素");
+          const field = item.field === "translation"
+            ? translationLanguageName(item.xml_lang, locale)
+            : tx("source form", "來源形式");
+          return (
+            <p key={`match-${item.tier}-${item.field}-${index}`} className="translation-match">
+              <span className="translation-meta">
+                {tier} · {field}
+                <small>{tx("match", "相符")}</small>
+              </span>
+              <span className="translation-text">
+                <QueryHighlight text={item.text} query={query} mode={mode} active />
+              </span>
+            </p>
+          );
+        })}
+        {visibleTranslations.map((item, index) => {
+          const isMatch = direction === "translation" &&
+            queryMatchesText(item.text, query, mode);
+          return (
+            <p key={`${item.xml_lang}-${index}`} className={isMatch ? "translation-match" : undefined}>
+              <span className="translation-meta">
+                {translationLanguageName(item.xml_lang, locale)}
+              </span>
+              <span className="translation-text">
+                <QueryHighlight text={item.text} query={query} mode={mode} active={isMatch} />
+              </span>
+            </p>
+          );
+        })}
       </div>
       <button className="button button--quiet" onClick={() => { setError(""); setOpen(true); }}>
         {tx("Open full record", "開啟完整記錄")}

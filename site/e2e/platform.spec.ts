@@ -197,6 +197,13 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   const reverseSummary = page.locator(".result-card--summary").first();
   await expect(reverseSummary.locator(".translation-text mark")).toHaveText("fictional");
 
+  await page.getByText("Normalized exact", {exact: true}).click();
+  await page.getByLabel("Word or phrase").fill("five.word");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  const tierMatch = page.locator(".result-card--summary").first();
+  await expect(tierMatch.locator(".translation-text mark")).toHaveText("five.word");
+  await expect(tierMatch.locator(".translation-meta").first()).toContainText("Word");
+
   await page.goto("lookup?type=dictionary");
   await selectFixtureScope(page);
   await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
