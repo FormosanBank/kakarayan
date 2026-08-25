@@ -1,10 +1,12 @@
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
 from publisher.assemble_site import assemble
 from publisher.build import build_release
-from publisher.verify_release import VerificationError, verify_release
+from publisher.verify_release import VerificationError, _verify_database, verify_release
 from publisher.verify_site import verify_site
 
 
@@ -40,3 +42,15 @@ def test_release_verification_rejects_tampering(public_repo: Path, tmp_path: Pat
     metadata.write_bytes(metadata.read_bytes() + b"tampered")
     with pytest.raises(VerificationError, match="integrity mismatch"):
         verify_release(release.output)
+
+
+def test_database_verification_rejects_an_old_search_schema(
+    public_repo: Path, tmp_path: Path
+) -> None:
+    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    database = release.output / "formosanbank.sqlite"
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute("DROP TABLE reverse_dictionary_terms")
+
+    with pytest.raises(VerificationError, match="reverse_dictionary_terms"):
+        _verify_database(database)
