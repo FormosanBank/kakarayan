@@ -381,6 +381,111 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert unbounded.status_code == 422
 
 
+def test_dataset_translation_columns_preserve_language_and_xml_order(
+    settings: Settings,
+) -> None:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute(
+            """
+            INSERT INTO translations
+            SELECT id || '-alternative', owner_type, owner_id, position + 100,
+                   'A second English rendering.', unclear, xml_lang, kind, version,
+                   notes, 'a second english rendering.', attributes_json, inline_markup_json
+            FROM translations
+            WHERE owner_type = 'sentence' AND xml_lang = 'eng'
+            ORDER BY position
+            LIMIT 1
+            """
+        )
+
+    with TestClient(create_app(settings)) as client:
+        params = [
+            ("language_id", "lang_amis"),
+            ("field", "id"),
+            ("field", "translation_columns"),
+            ("max_rows", "2"),
+        ]
+        preview = client.get(release_path(client, "datasets/preview"), params=params)
+        exported = client.get(
+            release_path(client, "datasets/export"),
+            params=[*params, ("format", "csv")],
+        )
+
+    assert preview.status_code == 200
+    body = preview.json()
+    assert body["fields"] == [
+        "id",
+        "translation_eng_1",
+        "translation_eng_2",
+        "translation_zho_1",
+    ]
+    first, second = body["items"]
+    assert first["translation_eng_1"] == "A fictional translated line."
+    assert first["translation_eng_2"] == "A second English rendering."
+    assert first["translation_zho_1"] == ""
+    assert second["translation_eng_1"] == ""
+    assert second["translation_eng_2"] == ""
+    assert second["translation_zho_1"] == "虛構測試句"
+    assert exported.status_code == 200
+    assert exported.text.splitlines()[0] == (
+        "id,translation_eng_1,translation_eng_2,translation_zho_1"
+    )
+
+
+def test_complete_translation_columns_require_owner_level_translation(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        release_path(client, "datasets/preview"),
+        params=[
+            ("language_id", "lang_amis"),
+            ("record_level", "word"),
+            ("complete_fields", "true"),
+            ("field", "id"),
+            ("field", "translation_columns"),
+            ("max_rows", "10"),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert response.json()["estimated_rows"] == 1
+    assert response.json()["fields"] == ["id", "translation_eng_1"]
+    assert response.json()["items"][0]["translation_eng_1"] == "five.word"
+
+
+def test_dataset_rejects_pathologically_wide_translation_output(settings: Settings) -> None:
+    with closing(sqlite3.connect(settings.database_path)) as connection, connection:
+        connection.execute(
+            """
+            WITH RECURSIVE numbers(value) AS (
+              SELECT 1 UNION ALL SELECT value + 1 FROM numbers WHERE value < 256
+            )
+            INSERT INTO translations
+            SELECT tr.id || '-wide-' || numbers.value, tr.owner_type, tr.owner_id,
+                   tr.position + numbers.value, 'alternative ' || numbers.value,
+                   tr.unclear, tr.xml_lang, tr.kind, tr.version, tr.notes,
+                   'alternative ' || numbers.value, tr.attributes_json, tr.inline_markup_json
+            FROM translations tr CROSS JOIN numbers
+            WHERE tr.owner_type = 'sentence' AND tr.xml_lang = 'eng'
+            ORDER BY tr.position
+            LIMIT 256
+            """
+        )
+
+    with TestClient(create_app(settings)) as client:
+        response = client.get(
+            release_path(client, "datasets/preview"),
+            params=[
+                ("language_id", "lang_amis"),
+                ("field", "translation_columns"),
+                ("max_rows", "1"),
+            ],
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "dataset_too_wide"
+
+
 def test_streaming_export_is_not_limited_to_five_mebibytes(settings: Settings) -> None:
     large_translation = "a" * (5 * 1024 * 1024 + 1)
     with closing(sqlite3.connect(settings.database_path)) as connection, connection:

@@ -101,12 +101,12 @@
       "items": {
         "enum": [
           "id", "xml_id", "text_id", "position", "form", "standard", "original",
-          "alternate_forms", "translations", "tokens", "token_count", "phonology",
+          "alternate_forms", "translations", "translation_columns", "tokens", "token_count", "phonology",
           "source", "unclear", "language_id", "corpus_id", "dialect", "source_path", "audio"
         ]
       },
       "minItems": 1,
-      "maxItems": 19,
+      "maxItems": 20,
       "uniqueItems": true
     },
     "wordFields": {
@@ -114,12 +114,12 @@
       "items": {
         "enum": [
           "id", "xml_id", "parent_id", "sentence_id", "text_id", "position", "form",
-          "standard", "original", "alternate_forms", "translations", "phonology", "class",
+          "standard", "original", "alternate_forms", "translations", "translation_columns", "phonology", "class",
           "sclass", "unclear", "language_id", "corpus_id", "dialect", "source_path", "audio"
         ]
       },
       "minItems": 1,
-      "maxItems": 20,
+      "maxItems": 21,
       "uniqueItems": true
     },
     "morphemeFields": {
@@ -127,13 +127,13 @@
       "items": {
         "enum": [
           "id", "xml_id", "parent_id", "word_id", "sentence_id", "text_id", "position",
-          "form", "standard", "original", "alternate_forms", "translations", "phonology",
+          "form", "standard", "original", "alternate_forms", "translations", "translation_columns", "phonology",
           "class", "sclass", "unclear", "language_id", "corpus_id", "dialect", "source_path",
           "audio"
         ]
       },
       "minItems": 1,
-      "maxItems": 21,
+      "maxItems": 22,
       "uniqueItems": true
     }
   },

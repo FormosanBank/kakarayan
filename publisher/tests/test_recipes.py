@@ -110,14 +110,14 @@ def test_recipe_and_api_exports_have_golden_parity(public_repo: Path, tmp_path: 
                 ("record_level", "morpheme"),
                 ("sentence_field", "id"),
                 ("sentence_field", "standard"),
-                ("sentence_field", "translations"),
+                ("sentence_field", "translation_columns"),
                 ("word_field", "id"),
                 ("word_field", "sentence_id"),
                 ("word_field", "form"),
                 ("morpheme_field", "id"),
                 ("morpheme_field", "word_id"),
                 ("morpheme_field", "form"),
-                ("morpheme_field", "translations"),
+                ("morpheme_field", "translation_columns"),
                 ("complete_fields", "true"),
                 ("max_rows", "250"),
                 ("format", "csv"),
@@ -179,6 +179,28 @@ def test_recipe_activates_a_compressed_release(public_repo: Path, tmp_path: Path
     row = json.loads(output.read_text())
     assert row["standard"] == "lima waco"
     assert row["translations"] == "eng:A fictional translated line."
+
+
+def test_recipe_emits_language_specific_translation_columns(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    release = build_release(public_repo, tmp_path / "release")
+    document = _recipe(release.release_id, "jsonl")
+    selection = cast(dict[str, object], document["selection"])
+    selection["query"] = ""
+    fields = cast(dict[str, list[str]], document["fields"])
+    fields["sentence"] = ["id", "translation_columns"]
+    output = tmp_path / "translations.jsonl"
+
+    validate_document(document, _schema())
+    assert execute_recipe(release.output, document, output) == 2
+    rows = [json.loads(line) for line in output.read_text().splitlines()]
+    assert list(rows[0]) == ["id", "translation_eng_1", "translation_zho_1"]
+    assert rows[0]["translation_eng_1"] == "A fictional translated line."
+    assert rows[0]["translation_zho_1"] == ""
+    assert rows[1]["translation_eng_1"] == ""
+    assert rows[1]["translation_zho_1"] == "虛構測試句"
 
 
 def test_recipe_matches_from_translation_back_to_formosan(

@@ -69,17 +69,30 @@ Identity and ancestry columns include `id`, `xml_id`, `parent_id`, `text_id`,
 `sentence_id`, `word_id`, and `position`. Only ancestry columns that apply to the selected
 level are offered.
 
-Tier columns include `form`, `standard`, `original`, `alternate_forms`, `translations`,
-`phonology`, `audio`, and `unclear`. Values come only from the row owner. A word translation
-is never placed in an S row, and a morpheme gloss is never placed in a W row. `form` uses
-standard, original, then alternate FORM as a display fallback while the three source fields
-remain separately selectable.
+Tier columns include `form`, `standard`, `original`, `alternate_forms`,
+`translation_columns`, `phonology`, `audio`, and `unclear`. Values come only from the row
+owner. A word translation is never placed in an S row, and a morpheme gloss is never placed
+in a W row. `form` uses standard, original, then alternate FORM as a display fallback while
+the three source fields remain separately selectable.
+
+Selecting `translation_columns` expands the TRANSL elements found in the exact returned row
+window into deterministic columns such as `translation_eng_1`, `translation_eng_2`, and
+`translation_zho_1`. XML language tags determine the middle component. Repeated TRANSL
+elements in one language retain XML order through the numeric suffix. Every output row has
+the same headers and an empty cell when that owner lacks a particular language or
+occurrence. `complete_fields=true` requires at least one owner-level TRANSL element, not a
+value in every generated language column. A selection that would produce more than 256
+TRANSL columns is rejected as too wide.
+
+The packed `translations` field remains in API v1 for existing clients. It joins values as
+`xml_lang:text` with ` | ` separators and is not offered by the visual Dataset Builder.
 
 Sentence-only columns are `tokens`, `token_count`, and `source`. W and M rows may include
 `class` and `sclass`. Provenance columns are repeated on every level: `language_id`,
 `corpus_id`, `dialect`, and `source_path`.
 
-The same serializer supplies preview rows, API exports, and recipe execution. CSV and TSV
+The same wide-column serializer supplies preview rows, API exports, and recipe execution.
+CSV and TSV
 exports escape cells that spreadsheet software could interpret as formulas.
 
 ## Export recipes

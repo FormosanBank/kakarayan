@@ -21,6 +21,7 @@ DatasetField = Literal[
     "original",
     "alternate_forms",
     "translations",
+    "translation_columns",
     "tokens",
     "token_count",
     "phonology",
@@ -46,6 +47,7 @@ DATASET_FIELDS_BY_LEVEL: dict[RecordLevel, tuple[DatasetField, ...]] = {
         "original",
         "alternate_forms",
         "translations",
+        "translation_columns",
         "tokens",
         "token_count",
         "phonology",
@@ -69,6 +71,7 @@ DATASET_FIELDS_BY_LEVEL: dict[RecordLevel, tuple[DatasetField, ...]] = {
         "original",
         "alternate_forms",
         "translations",
+        "translation_columns",
         "phonology",
         "class",
         "sclass",
@@ -92,6 +95,7 @@ DATASET_FIELDS_BY_LEVEL: dict[RecordLevel, tuple[DatasetField, ...]] = {
         "original",
         "alternate_forms",
         "translations",
+        "translation_columns",
         "phonology",
         "class",
         "sclass",
@@ -193,6 +197,8 @@ def dataset_expression(level: RecordLevel, field: DatasetField) -> str:
             alias,
             "COALESCE(NULLIF(tier.xml_lang, ''), 'und') || ':' || tier.text",
         )
+    elif field == "translation_columns":
+        raise KeyError("translation_columns must be expanded for the selected rows")
     elif field == "tokens":
         value = """COALESCE((SELECT group_concat(surface, ' ') FROM (
             SELECT tok.surface FROM tokens tok
@@ -229,6 +235,28 @@ def dataset_projection(level: RecordLevel, fields: Sequence[DatasetField]) -> st
     return ",\n".join(dataset_expression(level, field) for field in fields)
 
 
+def translation_column_expression(
+    level: RecordLevel,
+    *,
+    xml_lang: str,
+    occurrence: int,
+    column: str,
+) -> str:
+    """Return one owner-level TRANSL value as a safe, deterministic wide column."""
+    if occurrence < 1:
+        raise ValueError("Translation occurrence must be positive")
+    owner_type, alias = _owner(level)
+    language = xml_lang or "und"
+    language_literal = "'" + language.replace("'", "''") + "'"
+    column_identifier = '"' + column.replace('"', '""') + '"'
+    return f"""COALESCE((
+        SELECT tier.text FROM translations tier
+        WHERE tier.owner_type = '{owner_type}' AND tier.owner_id = {alias}.id
+          AND COALESCE(NULLIF(tier.xml_lang, ''), 'und') = {language_literal}
+        ORDER BY tier.position, tier.id LIMIT 1 OFFSET {occurrence - 1}
+    ), '') AS {column_identifier}"""
+
+
 def dataset_completeness_clauses(level: RecordLevel, fields: Sequence[DatasetField]) -> list[str]:
     """Require optional selected fields to contain owner-level evidence."""
     owner_type, alias = _owner(level)
@@ -249,7 +277,7 @@ def dataset_completeness_clauses(level: RecordLevel, fields: Sequence[DatasetFie
                 f"EXISTS (SELECT 1 FROM forms f WHERE f.owner_type = '{owner_type}' "
                 f"AND f.owner_id = {alias}.id AND f.kind = 'alternate')"
             )
-        elif field == "translations":
+        elif field in {"translations", "translation_columns"}:
             clauses.append(
                 f"EXISTS (SELECT 1 FROM translations tr WHERE tr.owner_type = '{owner_type}' "
                 f"AND tr.owner_id = {alias}.id)"
