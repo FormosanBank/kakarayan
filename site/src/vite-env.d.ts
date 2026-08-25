@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   readonly VITE_KAKARAYAN_API_URL?: string;
   readonly VITE_APP_VERSION?: string;
+  readonly VITE_KAKARAYAN_BUILD_ID?: string;
 }
 
 interface ImportMeta {

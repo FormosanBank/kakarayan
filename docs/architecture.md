@@ -88,6 +88,9 @@ stale browser entries when it queries the service. Validation and readiness resp
 cached. Query length, page size, SQLite work, and export rows have high finite limits. Export
 bytes are streamed rather than buffered in API memory.
 
+The offline shell cache is keyed by both the data release and the Kakarayan build. Navigations
+revalidate the shell from the network, while content-hashed assets remain available offline.
+
 ## Activation boundary
 
 `api.prepare_release` performs deployment work before the server starts:

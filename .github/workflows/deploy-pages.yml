@@ -101,6 +101,7 @@ jobs:
       RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
       RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
       VITE_KAKARAYAN_API_URL: ${{ vars.KAKARAYAN_API_URL }}
+      VITE_KAKARAYAN_BUILD_ID: ${{ github.sha }}
       PLAYWRIGHT_API_MODE: remote
     steps:
       - name: Check out Kakarayan

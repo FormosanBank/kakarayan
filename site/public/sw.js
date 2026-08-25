@@ -32,7 +32,7 @@ self.addEventListener("fetch", (event) => {
     caches.match(request).then(async (cached) => {
       if (cached && !changesByRelease) return cached;
       try {
-        const response = await fetch(request);
+        const response = await fetch(request, changesByRelease ? {cache: "no-store"} : undefined);
         if (response.ok) {
           const copy = response.clone();
           void caches.open(cacheName).then((cache) => cache.put(request, copy));
