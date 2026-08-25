@@ -77,7 +77,9 @@ export function App() {
   const state = useAppData();
   useEffect(() => {
     if (!state.data || !("serviceWorker" in navigator)) return;
-    const url = `${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(state.data.meta.release_id)}`;
+    const buildId = import.meta.env.VITE_KAKARAYAN_BUILD_ID ?? "development";
+    const cacheVersion = `${state.data.meta.release_id}-${buildId}`;
+    const url = `${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(cacheVersion)}`;
     navigator.serviceWorker.register(url).catch(() => {
       // Offline support is additive. The core site remains usable without registration.
     });
