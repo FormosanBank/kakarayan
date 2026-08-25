@@ -26,12 +26,12 @@ Prepare the instance before merging, but do not point Pages at it yet:
 1. Attach a static IP, configure the firewall, add swap, and install Docker.
 2. Clone the pull-request branch and verify that the API image builds.
 3. Merge the query-API pull request into `main`.
-4. Build and publish one query-compatible data release from `main`.
+4. Build and publish one current-schema data release from `main`.
 5. Activate that exact release on Lightsail and verify `/readyz`.
 6. Set `KAKARAYAN_API_URL` to the Lightsail HTTPS URL.
 7. Deploy Pages with the same release ID.
 
-The `data-release` environment accepts only `main`, so the official compatible
+The `data-release` environment accepts only `main`, so the official current-schema
 release cannot be published from the pull-request branch. Pages also refuses to
 deploy when its release and the API release differ. These checks prevent a partial
 cutover.
@@ -192,9 +192,9 @@ docker image ls kakarayan-api
 
 The repository `.dockerignore` limits the build context to the API and locked
 Python dependency files. The multi-gigabyte local `build/` directory is never sent
-to Docker. Do not start the stack yet because no compatible release is active.
+to Docker. Do not start the stack yet because no current-schema release is active.
 
-## 5. Merge and publish a compatible data release
+## 5. Merge and publish a current-schema data release
 
 After pull-request checks pass, merge the query-API pull request into `main`. Then
 update the server checkout:
@@ -359,14 +359,14 @@ For later FormosanBank updates:
 5. Restart with `docker compose up -d` and verify `/readyz`.
 6. Deploy Pages with that same release ID.
 
-Keep the previous published GitHub release for rollback. Do not leave partial or
-stale database copies in the host data directory after a successful activation.
+Keep the previous current-schema GitHub release for rollback. Do not leave partial
+or stale database copies in the host data directory after a successful activation.
 
 ## Rollback
 
-Run the activation command with the prior published manifest, start the stack, and
-confirm `/readyz`. Then deploy Pages with the prior release ID. GitHub Releases are
-the durable immutable source, so rollback does not require a server snapshot.
+Run the activation command with a prior current-schema manifest, start the stack,
+and confirm `/readyz`. Then deploy Pages with the prior release ID. GitHub Releases
+are the durable immutable source, so rollback does not require a server snapshot.
 
 ## Resizing or replacing the host
 

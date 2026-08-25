@@ -194,21 +194,6 @@ class CorpusStore:
         except sqlite3.Error:
             self.close()
             raise
-        probe = self._connections.get_nowait()
-        try:
-            search_tables = {
-                str(row["name"])
-                for row in probe.execute(
-                    "SELECT name FROM sqlite_schema WHERE type = 'table' "
-                    "AND name IN ('formosan_sentence_terms', 'translation_sentence_terms', "
-                    "'reverse_dictionary_terms')"
-                )
-            }
-            self._has_formosan_sentence_terms = "formosan_sentence_terms" in search_tables
-            self._has_translation_sentence_terms = "translation_sentence_terms" in search_tables
-            self._has_reverse_dictionary_terms = "reverse_dictionary_terms" in search_tables
-        finally:
-            self._connections.put(probe)
 
     def close(self) -> None:
         while True:
@@ -389,133 +374,39 @@ class CorpusStore:
         translation_language: str | None,
         match: MatchMode,
     ) -> tuple[str, tuple[object, ...]]:
-        scope, scope_parameters = self._scope(language_id, corpus_id, dialect)
-        where = " AND ".join(scope)
-        if direction == "formosan":
-            if self._has_formosan_sentence_terms:
-                term_clauses = ["term.language_id = ?"]
-                formosan_term_parameters: list[object] = [language_id]
-                if corpus_id:
-                    term_clauses.append("t.corpus_id = ?")
-                    formosan_term_parameters.append(corpus_id)
-                if dialect:
-                    term_clauses.append("t.dialect = ?")
-                    formosan_term_parameters.append(dialect)
-                if match == "contains" and len(normalized) < 3:
-                    term_clause = "term.normalized LIKE ? ESCAPE '\\'"
-                    formosan_term_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
-                else:
-                    term_clause, formosan_term_match_parameters = _predicate(
-                        "term.normalized", normalized, match, "formosan"
-                    )
-                term_clauses.append(term_clause)
-                formosan_term_parameters.extend(formosan_term_match_parameters)
-                return (
-                    f"""
-                    SELECT DISTINCT term.sentence_id
-                    FROM formosan_sentence_terms term
-                    JOIN sentences s ON s.id = term.sentence_id
-                    JOIN texts t ON t.id = s.parent_id
-                    WHERE {" AND ".join(term_clauses)}
-                    """,
-                    tuple(formosan_term_parameters),
-                )
-            token_clause, token_parameters = _predicate(
-                "tok.normalized", normalized, match, "formosan"
-            )
-            form_clause, form_parameters = _predicate("f.normalized", normalized, match, "formosan")
-            sql = f"""
-                SELECT tok.sentence_id
-                FROM tokens tok INDEXED BY tokens_normalized
-                JOIN sentences s ON s.id = tok.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {where} AND {token_clause}
-                UNION
-                SELECT ts.sentence_id
-                FROM forms f INDEXED BY forms_normalized
-                JOIN tier_scope ts
-                  ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id
-                JOIN sentences s ON s.id = ts.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {where} AND {form_clause}
-            """
-            return sql, (
-                *scope_parameters,
-                *token_parameters,
-                *scope_parameters,
-                *form_parameters,
-            )
-        if self._has_translation_sentence_terms and translation_language:
-            term_clauses = ["term.language_id = ?", "term.xml_lang = ?"]
-            term_parameters: list[object] = [language_id, translation_language]
-            if corpus_id:
-                term_clauses.append("t.corpus_id = ?")
-                term_parameters.append(corpus_id)
-            if dialect:
-                term_clauses.append("t.dialect = ?")
-                term_parameters.append(dialect)
-            if match == "contains" and len(normalized) < 3:
-                term_clause = "term.normalized LIKE ? ESCAPE '\\'"
-                term_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
-            else:
-                term_clause, term_match_parameters = _predicate(
-                    "term.normalized", normalized, match, "translation"
-                )
-            term_clauses.append(term_clause)
-            term_parameters.extend(term_match_parameters)
-            return (
-                f"""
-                SELECT DISTINCT term.sentence_id
-                FROM translation_sentence_terms term
-                JOIN sentences s ON s.id = term.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(term_clauses)}
-                """,
-                tuple(term_parameters),
-            )
+        table = (
+            "formosan_sentence_terms" if direction == "formosan" else "translation_sentence_terms"
+        )
+        term_clauses = ["term.language_id = ?"]
+        term_parameters: list[object] = [language_id]
+        if direction == "translation" and translation_language:
+            term_clauses.append("term.xml_lang = ?")
+            term_parameters.append(translation_language)
+        if corpus_id:
+            term_clauses.append("t.corpus_id = ?")
+            term_parameters.append(corpus_id)
+        if dialect:
+            term_clauses.append("t.dialect = ?")
+            term_parameters.append(dialect)
+        match_parameters: tuple[str, ...]
         if match == "contains" and len(normalized) < 3:
-            language_clause = " AND tr.xml_lang = ?" if translation_language else ""
-            fallback_language_parameters: tuple[object, ...] = (
-                (translation_language,) if translation_language else ()
+            term_clause = "term.normalized LIKE ? ESCAPE '\\'"
+            match_parameters = (f"%{_like(normalized)}%",)
+        else:
+            term_clause, match_parameters = _predicate(
+                "term.normalized", normalized, match, direction
             )
-            return (
-                f"""
-                SELECT DISTINCT ts.sentence_id
-                FROM texts t INDEXED BY texts_scope
-                CROSS JOIN sentences s INDEXED BY sentences_parent
-                CROSS JOIN tier_scope ts INDEXED BY tier_scope_sentence
-                CROSS JOIN translations tr INDEXED BY translations_owner
-                WHERE {" AND ".join(scope)} AND s.parent_id = t.id
-                  AND ts.sentence_id = s.id
-                  AND tr.owner_type = ts.owner_type AND tr.owner_id = ts.owner_id
-                  AND tr.normalized LIKE ? ESCAPE '\\'{language_clause}
-                """,
-                (
-                    *scope_parameters,
-                    f"%{_like(normalized)}%",
-                    *fallback_language_parameters,
-                ),
-            )
-        translation_clause, translation_parameters = _predicate(
-            "tr.normalized", normalized, match, "translation"
-        )
-        language_clause = " AND tr.xml_lang = ?" if translation_language else ""
-        language_parameters: tuple[object, ...] = (
-            (translation_language,) if translation_language else ()
-        )
-        sql = f"""
-            SELECT DISTINCT ts.sentence_id
-            FROM translations tr
-            JOIN tier_scope ts
-              ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
-            JOIN sentences s ON s.id = ts.sentence_id
+        term_clauses.append(term_clause)
+        term_parameters.extend(match_parameters)
+        return (
+            f"""
+            SELECT DISTINCT term.sentence_id
+            FROM {table} term
+            JOIN sentences s ON s.id = term.sentence_id
             JOIN texts t ON t.id = s.parent_id
-            WHERE {where} AND {translation_clause}{language_clause}
-        """
-        return sql, (
-            *scope_parameters,
-            *translation_parameters,
-            *language_parameters,
+            WHERE {" AND ".join(term_clauses)}
+            """,
+            tuple(term_parameters),
         )
 
     @staticmethod
@@ -903,121 +794,41 @@ class CorpusStore:
             ]
         )
         position = _cursor_position(cursor, fingerprint, 1)
-        scope, scope_parameters = self._scope(language_id, corpus_id, dialect)
         if direction == "formosan":
-            clauses = ["d.language_id = ?"]
-            parameters: tuple[object, ...] = (language_id,)
-            if corpus_id:
-                clauses.append("d.corpus_id = ?")
-                parameters += (corpus_id,)
-            if dialect:
-                clauses.append("d.dialect = ?")
-                parameters += (dialect,)
-            match_clause, match_parameters = _predicate("d.headword", normalized, match, "formosan")
-            clauses.append(match_clause)
-            parameters += match_parameters
-            if position:
-                clauses.append("d.headword > ?")
-                parameters += (str(position[0]),)
-            sql = f"""
-                SELECT d.headword, MIN(d.display_form) AS display_form,
-                       SUM(d.occurrences) AS occurrences,
-                       COUNT(DISTINCT d.display_form) AS variant_count
-                FROM dictionary_terms d
-                WHERE {" AND ".join(clauses)}
-                GROUP BY d.headword
-                ORDER BY d.headword LIMIT ?
-            """
+            table, search_column = "dictionary_terms", "d.headword"
         else:
-            if self._has_reverse_dictionary_terms:
-                reverse_clauses = ["d.language_id = ?"]
-                reverse_parameters: tuple[object, ...] = (language_id,)
-                if translation_language:
-                    reverse_clauses.append("d.xml_lang = ?")
-                    reverse_parameters += (translation_language,)
-                if corpus_id:
-                    reverse_clauses.append("d.corpus_id = ?")
-                    reverse_parameters += (corpus_id,)
-                if dialect:
-                    reverse_clauses.append("d.dialect = ?")
-                    reverse_parameters += (dialect,)
-                if match == "contains" and len(normalized) < 3:
-                    reverse_match_clause = "d.normalized LIKE ? ESCAPE '\\'"
-                    reverse_match_parameters: tuple[str, ...] = (f"%{_like(normalized)}%",)
-                else:
-                    reverse_match_clause, reverse_match_parameters = _predicate(
-                        "d.normalized", normalized, match, "translation"
-                    )
-                reverse_clauses.append(reverse_match_clause)
-                reverse_parameters += reverse_match_parameters
-                if position:
-                    reverse_clauses.append("d.headword > ?")
-                    reverse_parameters += (str(position[0]),)
-                parameters = reverse_parameters
-                sql = f"""
-                    SELECT d.headword, MIN(d.display_form) AS display_form,
-                           SUM(d.occurrences) AS occurrences,
-                           COUNT(DISTINCT d.display_form) AS variant_count
-                    FROM reverse_dictionary_terms d
-                    WHERE {" AND ".join(reverse_clauses)}
-                    GROUP BY d.headword
-                    ORDER BY d.headword LIMIT ?
-                """
-            else:
-                translation_clause, translation_parameters = _predicate(
-                    "tr.normalized", normalized, match, "translation"
-                )
-                language_clause = "AND tr.xml_lang = ?" if translation_language else ""
-                language_parameters: tuple[object, ...] = (
-                    (translation_language,) if translation_language else ()
-                )
-                matching_translations = f"""
-                    SELECT tr.owner_type, tr.owner_id, ts.sentence_id
-                    FROM translations tr INDEXED BY translations_normalized
-                    JOIN tier_scope_view ts
-                      ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
-                    JOIN sentences s ON s.id = ts.sentence_id
-                    JOIN texts t ON t.id = s.parent_id
-                    WHERE {" AND ".join(scope)} AND {translation_clause} {language_clause}
-                """
-                candidates = """
-                    SELECT f.normalized AS headword, f.text AS display_form
-                    FROM matching_translations matched
-                    JOIN forms f
-                      ON f.owner_type = matched.owner_type AND f.owner_id = matched.owner_id
-                    WHERE matched.owner_type <> 'sentence'
-                    UNION ALL
-                    SELECT tok.normalized AS headword, tok.surface AS display_form
-                    FROM matching_translations matched
-                    JOIN tokens tok
-                      ON matched.owner_type = 'word' AND tok.word_id = matched.owner_id
-                    UNION ALL
-                    SELECT tok.normalized AS headword, tok.surface AS display_form
-                    FROM matching_translations matched
-                    JOIN sentences s
-                      ON matched.owner_type = 'sentence' AND s.id = matched.owner_id
-                    JOIN tokens tok ON tok.sentence_id = s.id
-                    WHERE s.token_count = 1
-                """
-                parameters = (
-                    *scope_parameters,
-                    *translation_parameters,
-                    *language_parameters,
-                )
-                cursor_clause = "WHERE headword > ?" if position else ""
-                cursor_parameters: tuple[object, ...] = (str(position[0]),) if position else ()
-                parameters += cursor_parameters
-                sql = f"""
-                    WITH matching_translations AS MATERIALIZED ({matching_translations}),
-                    candidates AS ({candidates}), grouped AS (
-                      SELECT headword, MIN(display_form) AS display_form,
-                             COUNT(*) AS occurrences,
-                             COUNT(DISTINCT display_form) AS variant_count
-                      FROM candidates WHERE headword <> '' GROUP BY headword
-                    )
-                    SELECT * FROM grouped {cursor_clause}
-                    ORDER BY headword LIMIT ?
-                """
+            table, search_column = "reverse_dictionary_terms", "d.normalized"
+        clauses = ["d.language_id = ?"]
+        parameters: tuple[object, ...] = (language_id,)
+        if direction == "translation" and translation_language:
+            clauses.append("d.xml_lang = ?")
+            parameters += (translation_language,)
+        if corpus_id:
+            clauses.append("d.corpus_id = ?")
+            parameters += (corpus_id,)
+        if dialect:
+            clauses.append("d.dialect = ?")
+            parameters += (dialect,)
+        match_parameters: tuple[str, ...]
+        if direction == "translation" and match == "contains" and len(normalized) < 3:
+            match_clause = "d.normalized LIKE ? ESCAPE '\\'"
+            match_parameters = (f"%{_like(normalized)}%",)
+        else:
+            match_clause, match_parameters = _predicate(search_column, normalized, match, direction)
+        clauses.append(match_clause)
+        parameters += match_parameters
+        if position:
+            clauses.append("d.headword > ?")
+            parameters += (str(position[0]),)
+        sql = f"""
+            SELECT d.headword, MIN(d.display_form) AS display_form,
+                   SUM(d.occurrences) AS occurrences,
+                   COUNT(DISTINCT d.display_form) AS variant_count
+            FROM {table} d
+            WHERE {" AND ".join(clauses)}
+            GROUP BY d.headword
+            ORDER BY d.headword LIMIT ?
+        """
         with self.connect() as connection:
             rows = [
                 dict(row)

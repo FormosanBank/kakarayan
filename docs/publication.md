@@ -92,7 +92,7 @@ returns the selected release ID.
 ## Deploy Pages
 
 Dispatch **Deploy GitHub Pages** with the same release ID. A relevant push to `main` also
-attempts deployment using the newest compatible release.
+attempts deployment using the newest current-schema release.
 
 The workflow:
 
@@ -158,7 +158,7 @@ shell files, every static metadata envelope, and strict size budgets.
 
 ## Rollback
 
-Data releases are immutable. Keep the prior published release available.
+Data releases are immutable. Keep the prior current-schema release available.
 
 1. Activate the prior release on Lightsail using [lightsail.md](lightsail.md).
 2. Wait for `/readyz` to report that ID.
