@@ -20,7 +20,9 @@ recording remains in page memory for local playback, download, or deletion. Kaka
 not upload it to its query service.
 
 ASR submission is a separate explicit action. The interface names the provider, describes
-what leaves the device, and requests consent before the first submission.
+what leaves the tab, links to the provider privacy policy, and requires unchecked-by-default
+consent for each page visit before submission. Users can keep, play, download, or delete a
+recording locally without consenting to ASR.
 
 ## Machine translation and ASR
 

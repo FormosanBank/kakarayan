@@ -264,6 +264,12 @@ export function Recorder({
           <p>{reference}</p>
         </div>
       )}
+      <p className="model-privacy-note">
+        {tx(
+          "Microphone audio remains in this tab unless you explicitly consent and press Transcribe.",
+          "麥克風音訊會保留在此分頁中，除非您明確同意並按下「轉錄」。",
+        )}
+      </p>
       <div className="recorder-panel">
         {!recording ? (
           <button className="button button--primary" onClick={startRecording}>
@@ -346,11 +352,18 @@ export function Recorder({
             />
             <span>
               {tx(
-                "Upload this recording to FormosanBank ASR on Hugging Face for automatic transcription.",
-                "將此錄音上傳到 Hugging Face 上的 FormosanBank 語音辨識服務以自動轉錄。",
+                "I agree to upload this recording to FormosanBank ASR on Hugging Face.",
+                "我同意將此錄音上傳到 Hugging Face 上的 FormosanBank 語音辨識服務。",
               )}
             </span>
           </label>
+          <p className="model-privacy-note">
+            {tx(
+              "Nothing is uploaded unless you check the box and press Transcribe. Kakarayan does not retain the upload; Hugging Face processing and logging policies apply.",
+              "除非勾選並按下「轉錄」，否則不會上傳任何內容。Kakarayan 不保留上傳資料；資料處理與記錄依 Hugging Face 政策辦理。",
+            )}{" "}
+            <a href="https://huggingface.co/privacy">{tx("Privacy policy", "隱私權政策")}</a>
+          </p>
           <div className="button-row">
             <button
               className="button button--primary"

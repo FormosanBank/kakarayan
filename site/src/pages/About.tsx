@@ -35,9 +35,26 @@ export function About({data}: {data: AppData}) {
         <h2>{tx("Source and standardized spelling", "來源與標準化拼寫")}</h2>
         <p>
           {tx(
-            "Kakarayan keeps the source spelling and the FormosanBank standardized form in separate fields.",
-            "Kakarayan 將來源拼寫與 FormosanBank 標準化形式保存在不同欄位。",
+            "Kakarayan displays original and standardized FORM values exactly as published in the XML. Search and frequency keys are separate normalized indexes, so surrounding punctuation does not split a frequency count.",
+            "Kakarayan 會如 XML 所發布，完整顯示原始及標準化 FORM 值。搜尋與頻率鍵使用分開的正規化索引，因此周圍標點不會拆分頻率計數。",
           )}
+        </p>
+      </section>
+      <section>
+        <h2>{tx("How updates are published", "更新發布方式")}</h2>
+        <p>
+          {tx(
+            "Each update builds an immutable data release from one reviewed FormosanBank commit, activates that release on the query API, then deploys the site against the same release ID.",
+            "每次更新都從一個經審查的 FormosanBank 提交建立不可變資料版本，將該版本啟用於查詢 API，再以相同版本識別碼部署網站。",
+          )}
+        </p>
+        <p>
+          <a href="https://github.com/FormosanBank/kakarayan/blob/main/docs/publication.md#routine-update">
+            {tx("Publication steps", "發布步驟")}
+          </a>{" · "}
+          <a href="https://github.com/FormosanBank/kakarayan/blob/main/docs/lightsail.md#routine-release-update">
+            {tx("Server update steps", "伺服器更新步驟")}
+          </a>
         </p>
       </section>
       <section>

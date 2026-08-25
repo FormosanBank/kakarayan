@@ -10,6 +10,7 @@ import {translate} from "../modelServices";
 import {RoutingProvider} from "../routing";
 import type {Language, ModelCatalog} from "../types";
 import {TranslationTool} from "./ModelTools";
+import {Recorder} from "./Recorder";
 
 const language: Language = {
   id: "lang_amis",
@@ -124,4 +125,35 @@ describe("translation progress", () => {
     await vi.waitFor(() => expect(container.querySelector(".model-progress")).toBeNull());
     expect(container.querySelector(".machine-output")).toHaveTextContent("lima");
   });
+
+  it("requires opt-in and links the provider privacy policy", () => {
+    const translateButton = [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Translate");
+    expect(translateButton).toBeDisabled();
+    expect(container.querySelector(".model-privacy-note")).toHaveTextContent(
+      "Nothing is sent unless you check the box and press Translate",
+    );
+    expect(container.querySelector<HTMLAnchorElement>('.model-privacy-note a')?.href).toBe(
+      "https://huggingface.co/privacy",
+    );
+  });
+});
+
+it("keeps recorder submission optional and explicit", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  await act(async () => root.render(
+    <I18nProvider>
+      <Recorder catalog={catalog} selectedLanguage="Amis" />
+    </I18nProvider>,
+  ));
+
+  expect(container.querySelector(".model-privacy-note")).toHaveTextContent(
+    "Microphone audio remains in this tab unless you explicitly consent",
+  );
+  expect(container).toHaveTextContent("Start recording");
+
+  await act(async () => root.unmount());
+  container.remove();
 });
