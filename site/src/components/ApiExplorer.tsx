@@ -73,6 +73,7 @@ export function ApiExplorer({
     }, PLAYGROUND_TIMEOUT_MS);
     try {
       const result = await fetch(request.url, {
+        cache: "no-store",
         headers: {Accept: "application/json", "X-Kakarayan-Client": "developer-playground-v1"},
         signal: next.signal,
       });
