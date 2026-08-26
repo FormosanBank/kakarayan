@@ -7,7 +7,9 @@ import logging
 import sqlite3
 import zipfile
 from contextlib import closing
+from typing import cast
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.app import create_app
@@ -641,7 +643,7 @@ def test_word_and_morpheme_translation_searches_start_from_indexed_candidates(
         assert response.status_code == 200
         assert response.json()["estimated_rows"] == 1
 
-    store = client.app.state.store
+    store = cast(FastAPI, client.app).state.store
     assert isinstance(store, CorpusStore)
     query = store._dataset_query(
         language_id="lang_amis",
