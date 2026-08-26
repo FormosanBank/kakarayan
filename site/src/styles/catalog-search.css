@@ -178,10 +178,173 @@
 }
 
 .search-form {
+  display: block;
+}
+
+.search-intent {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.search-intent > legend {
+  padding: 0 0 8px;
+  color: var(--body);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.search-intent__options {
   display: grid;
-  grid-template-columns: minmax(260px, 2fr) repeat(2, minmax(160px, 0.75fr)) 120px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 620px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+}
+
+.search-intent__options label {
+  min-width: 0;
+  cursor: pointer;
+}
+
+.search-intent__options label + label {
+  border-left: 1px solid var(--line-strong);
+}
+
+.search-intent__options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.search-intent__options span {
+  display: grid;
+  min-height: 58px;
+  gap: 2px;
+  align-content: center;
+  padding: 9px 14px;
+  color: var(--body);
+  background: white;
+}
+
+.search-intent__options strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.search-intent__options small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.search-intent__options input:checked + span {
+  color: white;
+  background: var(--ink);
+}
+
+.search-intent__options input:checked + span strong,
+.search-intent__options input:checked + span small {
+  color: inherit;
+}
+
+.search-intent__options input:disabled + span {
+  color: var(--muted);
+  cursor: not-allowed;
+  background: var(--surface);
+}
+
+.search-intent__options input:focus-visible + span {
+  position: relative;
+  z-index: 1;
+  outline: 3px solid var(--focus-ring);
+  outline-offset: -3px;
+}
+
+.lookup-guide {
+  width: fit-content;
+  margin-top: 10px;
+}
+
+.lookup-guide > summary {
+  color: var(--body);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.lookup-guide__content {
+  max-width: 760px;
+  padding: 14px 16px;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.lookup-guide ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  padding: 0;
+  margin: 0;
+  counter-reset: lookup-step;
+  list-style: none;
+}
+
+.lookup-guide li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 2px 8px;
+  align-content: start;
+  counter-increment: lookup-step;
+}
+
+.lookup-guide li::before {
+  display: grid;
+  grid-row: 1 / span 2;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--body);
+  content: counter(lookup-step);
+  font: 600 10px/1 var(--font-mono);
+  place-items: center;
+}
+
+.lookup-guide strong {
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.lookup-guide li span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.search-form__fields {
+  display: grid;
   gap: 12px;
   align-items: end;
+  margin-top: 22px;
+}
+
+.search-form__fields--formosan {
+  grid-template-columns: minmax(180px, 0.8fr) minmax(320px, 2.4fr) 120px;
+}
+
+.search-form__fields--translation {
+  grid-template-columns: minmax(170px, 0.75fr) minmax(170px, 0.75fr) minmax(260px, 1.6fr) 120px;
 }
 
 .search-form__actions {
@@ -196,8 +359,7 @@
 }
 
 .lookup-options {
-  grid-column: 1 / -1;
-  margin-top: 4px;
+  margin-top: 14px;
 }
 
 .lookup-options > summary,
@@ -844,6 +1006,29 @@
   margin: 20px 0;
 }
 
+.builder__search-intent {
+  grid-column: 1 / -1;
+}
+
+.builder__search-scope {
+  width: fit-content;
+  margin-top: -4px;
+}
+
+.builder__search-scope > summary {
+  color: var(--body);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.builder__search-scope p {
+  max-width: 70ch;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .builder__summary {
   position: sticky;
   top: 92px;
@@ -1090,6 +1275,10 @@
 
 .builder__preview-skeleton {
   pointer-events: none;
+}
+
+.builder__preview-error {
+  margin-top: 18px;
 }
 
 .builder__schema {

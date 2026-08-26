@@ -1,8 +1,6 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 
 import {
-  API_ANALYTICAL_TIMEOUT_MS,
-  ApiRequestError,
   datasetPreview,
   datasetUrl,
   translationLanguages,
@@ -29,6 +27,7 @@ interface PreviewState {
   signature: string;
   values: Partial<Record<DatasetLevel, DatasetPreviewResult>>;
   pending: DatasetLevel[];
+  errors: Partial<Record<DatasetLevel, string>>;
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -83,11 +82,13 @@ export function DatasetBuilder({data}: {data: AppData}) {
     signature: "",
     values: {},
     pending: [],
+    errors: {},
   });
   const [error, setError] = useState("");
-  const [previewError, setPreviewError] = useState({signature: "", message: ""});
   const [previewAttempt, setPreviewAttempt] = useState(0);
   const previewController = useRef<AbortController | null>(null);
+  const previewSnapshot = useRef(previewState);
+  const retryLevels = useRef<DatasetLevel[] | null>(null);
 
   const corpora = useMemo(
     () => data.corpora.filter((corpus) => !languageId || corpus.languages.includes(languageId)),
@@ -95,12 +96,20 @@ export function DatasetBuilder({data}: {data: AppData}) {
   );
   const selectedLanguage = data.languages.find((item) => item.id === languageId);
   const selectedTranslationLanguage = translationLanguageName(translationLanguage, locale);
-  const searchLanguage = direction === "formosan"
-    ? "formosan"
-    : `translation:${translationLanguage}`;
   const translationSearchReady = direction === "formosan" || translationOptions.some(
     (option) => option.xml_lang === translationLanguage,
   );
+  const queryLabel = !languageId
+    ? tx("Word or phrase", "單詞或片語")
+    : direction === "formosan"
+      ? tx(
+          `${selectedLanguage ? languageName(selectedLanguage) : "Formosan"} word or phrase`,
+          `${selectedLanguage ? languageName(selectedLanguage) : "臺灣南島語"}單詞或片語`,
+        )
+      : tx(
+          `${selectedTranslationLanguage} word or phrase`,
+          `${selectedTranslationLanguage}單詞或片語`,
+        );
   const rights = new Map(data.rights.entries.map((entry) => [entry.id, entry]));
   const selectedCorpora = corpusId
     ? corpora.filter((corpus) => corpus.id === corpusId)
@@ -145,9 +154,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     ? (previewIsCurrent ? previewState.pending : levels)
     : [];
   const previewBusy = previewLoadingLevels.length > 0;
-  const currentPreviewError = previewError.signature === previewSignature
-    ? previewError.message
-    : "";
+  const previewErrors = previewIsCurrent ? previewState.errors : {};
 
   const parameters = useCallback((
     level: DatasetLevel,
@@ -179,6 +186,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     const controller = new AbortController();
     translationLanguages(data.meta.release_id, languageId, corpusId, controller.signal).then(
       (options) => {
+        if (controller.signal.aborted) return;
         setError("");
         setTranslationOptions(options);
         setTranslationLanguage((current) => {
@@ -193,15 +201,18 @@ export function DatasetBuilder({data}: {data: AppData}) {
         }
       },
       (cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message : String(cause));
-          setTranslationOptions([]);
-          setDirection("formosan");
-        }
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : String(cause));
+        setTranslationOptions([]);
+        setDirection("formosan");
       },
     );
     return () => controller.abort();
   }, [corpusId, data.meta.release_id, data.query.available, languageId, locale]);
+
+  useEffect(() => {
+    previewSnapshot.current = previewState;
+  }, [previewState]);
 
   useEffect(() => {
     if (!canPreview) {
@@ -211,49 +222,55 @@ export function DatasetBuilder({data}: {data: AppData}) {
     const next = new AbortController();
     previewController.current = next;
     const timer = window.setTimeout(() => {
-      setPreviewError({signature: "", message: ""});
-      setPreviewState({signature: previewSignature, values: {}, pending: [...levels]});
+      const requestedRetry = retryLevels.current;
+      retryLevels.current = null;
+      const snapshot = previewSnapshot.current;
+      const preserveCompleted = requestedRetry !== null && snapshot.signature === previewSignature;
+      const requestedLevels = preserveCompleted
+        ? requestedRetry.filter((level) => levels.includes(level))
+        : [...levels];
+      const retainedErrors = preserveCompleted ? {...snapshot.errors} : {};
+      for (const level of requestedLevels) delete retainedErrors[level];
+      setPreviewState({
+        signature: previewSignature,
+        values: preserveCompleted ? snapshot.values : {},
+        pending: requestedLevels,
+        errors: retainedErrors,
+      });
       const loadPreviews = async () => {
-        let batchTimedOut = false;
-        const batchTimeout = window.setTimeout(() => {
-          batchTimedOut = true;
-          next.abort();
-        }, API_ANALYTICAL_TIMEOUT_MS);
-        try {
-          for (const level of levels) {
+        for (const level of requestedLevels) {
+          try {
             const result = await datasetPreview(
               data.meta.release_id,
               parameters(level, fields[level], 12),
               next.signal,
             );
             if (next.signal.aborted) {
-              if (batchTimedOut) {
-                throw new ApiRequestError("Dataset preview took too long", "client_timeout", 0);
-              }
               return;
             }
             setPreviewState((current) => current.signature === previewSignature
+              ? (() => {
+                  const errors = {...current.errors};
+                  delete errors[level];
+                  return {
+                    ...current,
+                    values: {...current.values, [level]: result},
+                    pending: current.pending.filter((item) => item !== level),
+                    errors,
+                  };
+                })()
+              : current);
+          } catch (cause) {
+            if (next.signal.aborted) return;
+            const message = apiErrorMessage(cause, tx);
+            setPreviewState((current) => current.signature === previewSignature
               ? {
                   ...current,
-                  values: {...current.values, [level]: result},
                   pending: current.pending.filter((item) => item !== level),
+                  errors: {...current.errors, [level]: message},
                 }
               : current);
           }
-        } catch (cause) {
-          if (next.signal.aborted && !batchTimedOut) return;
-          const reported = batchTimedOut
-            ? new ApiRequestError("Dataset preview took too long", "client_timeout", 0)
-            : cause;
-          setPreviewError({
-            signature: previewSignature,
-            message: apiErrorMessage(reported, tx),
-          });
-          setPreviewState((current) => current.signature === previewSignature
-            ? {...current, values: {}, pending: []}
-            : current);
-        } finally {
-          window.clearTimeout(batchTimeout);
         }
       };
       void loadPreviews();
@@ -275,14 +292,16 @@ export function DatasetBuilder({data}: {data: AppData}) {
 
   function cancelPreview() {
     previewController.current?.abort();
-    setPreviewError({signature: "", message: ""});
     setPreviewState((current) => current.signature === previewSignature
-      ? {...current, values: {}, pending: []}
+      ? {...current, pending: []}
       : current);
   }
 
-  function retryPreview() {
-    setPreviewError({signature: "", message: ""});
+  function retryPreview(level?: DatasetLevel) {
+    const requested = level
+      ? [level]
+      : levels.filter((item) => !previews[item] || previewErrors[item]);
+    retryLevels.current = requested.length > 0 ? requested : [...levels];
     setPreviewAttempt((value) => value + 1);
   }
 
@@ -379,53 +398,57 @@ export function DatasetBuilder({data}: {data: AppData}) {
             <label className="field">{tx("Formosan language", "臺灣南島語")}<select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setDialect(""); setTranslationOptions([]); }}><option value="">{tx("Choose…", "請選擇…")}</option>{data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}</select></label>
             <label className="field">{tx("Corpus", "語料庫")}<select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setTranslationOptions([]); }}><option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>{corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}</select></label>
             <label className="field">{tx("Dialect", "方言")}<select value={dialect} disabled={!languageId} onChange={(event) => setDialect(event.target.value)}><option value="">{tx("All dialects", "所有方言")}</option>{selectedLanguage?.dialects.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
-            <label className="field">{tx("Word or phrase", "單詞或片語")}<input value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} /></label>
-            <label className="field">
-              {tx("Search text language", "搜尋文字的語言")}
-              <select
-                value={searchLanguage}
-                disabled={!languageId}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === "formosan") {
-                    setDirection("formosan");
-                    return;
-                  }
-                  setDirection("translation");
-                  setTranslationLanguage(value.slice("translation:".length));
-                }}
-              >
-                <option value="formosan">
-                  {selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語")}
-                  {tx(" · all FORM tiers", " · 所有 FORM 層")}
-                </option>
-                {direction === "translation" && translationLanguage && !translationOptions.some(
-                  (option) => option.xml_lang === translationLanguage,
-                ) && (
-                  <option value={`translation:${translationLanguage}`}>
-                    {selectedTranslationLanguage} · TRANSL
-                  </option>
-                )}
-                {translationOptions.map((option) => (
-                  <option key={option.xml_lang} value={`translation:${option.xml_lang}`}>
-                    {translationLanguageName(option.xml_lang, locale)} · TRANSL ({number(option.records)})
-                  </option>
-                ))}
-              </select>
-              <small>
-                {direction === "formosan"
-                  ? tx(
-                      "Original, standardized, and alternate FORM values at S, W, and M levels.",
-                      "S、W、M 層級的原始、標準化及替代 FORM 值。",
-                    )
-                  : tx(
-                      `${selectedTranslationLanguage} TRANSL values at S, W, and M levels.`,
-                      `S、W、M 層級的${selectedTranslationLanguage} TRANSL 值。`,
-                    )}
-              </small>
-            </label>
+            <fieldset className="search-intent builder__search-intent" disabled={!languageId}>
+              <legend>{tx("Search within", "搜尋範圍")}</legend>
+              <div className="search-intent__options">
+                <label>
+                  <input checked={direction === "formosan"} name="dataset-search-intent" onChange={() => setDirection("formosan")} type="radio" />
+                  <span><strong>{tx("Formosan text", "族語文字")}</strong><small>{tx("Original, standardized, and alternate forms", "原始、標準化及替代形式")}</small></span>
+                </label>
+                <label>
+                  <input checked={direction === "translation"} disabled={translationOptions.length === 0} name="dataset-search-intent" onChange={() => setDirection("translation")} type="radio" />
+                  <span><strong>{tx("Translations", "翻譯文字")}</strong><small>{tx("English, Chinese, or another language", "中文、英文或其他語言")}</small></span>
+                </label>
+              </div>
+            </fieldset>
+            {direction === "translation" && (
+              <label className="field">
+                {tx("Translation language", "翻譯語言")}
+                <select
+                  disabled={!languageId || translationOptions.length === 0}
+                  value={translationLanguage}
+                  onChange={(event) => setTranslationLanguage(event.target.value)}
+                >
+                  {translationOptions.length === 0 && <option value="">{tx("Loading…", "載入中…")}</option>}
+                  {translationLanguage && !translationOptions.some(
+                    (option) => option.xml_lang === translationLanguage,
+                  ) && <option value={translationLanguage}>{selectedTranslationLanguage}</option>}
+                  {translationOptions.map((option) => (
+                    <option key={option.xml_lang} value={option.xml_lang}>
+                      {translationLanguageName(option.xml_lang, locale)} ({number(option.records)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="field">{queryLabel}<input value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} /></label>
             <label className="field">{tx("Match", "比對方式")}<select value={match} onChange={(event) => setMatch(event.target.value as MatchMode)}><option value="exact">{tx("Exact", "完全相符")}</option><option value="prefix">{tx("Prefix", "前綴")}</option><option value="contains">{tx("Contains", "包含")}</option></select></label>
           </div>
+
+          <details className="builder__search-scope">
+            <summary>{tx("Fields searched", "搜尋欄位")}</summary>
+            <p>
+              {direction === "formosan"
+                ? tx(
+                    "Original, standardized, and alternate FORM values at the selected S, W, and M levels.",
+                    "所選 S、W、M 層級的原始、標準化及替代 FORM 值。",
+                  )
+                : tx(
+                    `${selectedTranslationLanguage} TRANSL values at the selected S, W, and M levels.`,
+                    `所選 S、W、M 層級的${selectedTranslationLanguage} TRANSL 值。`,
+                  )}
+            </p>
+          </details>
 
           <fieldset className="builder__levels">
             <legend>{tx("XML levels", "XML 層級")}</legend>
@@ -493,10 +516,17 @@ export function DatasetBuilder({data}: {data: AppData}) {
           <dl>
             {levels.map((level) => {
               const info = DATASET_LEVEL_INFO.find(([value]) => value === level) ?? DATASET_LEVEL_INFO[0];
-              return <div key={level}><dt><code>{info[1]}</code> {tx(info[2], info[3])}</dt><dd>{languageId ? (previews[level] ? number(previews[level].estimated_rows) : (previewLoadingLevels.includes(level) ? "…" : "—")) : "—"}</dd></div>;
+              const status = previews[level]
+                ? number(previews[level].estimated_rows)
+                : previewLoadingLevels.includes(level)
+                  ? "…"
+                  : previewErrors[level]
+                    ? tx("Error", "錯誤")
+                    : "—";
+              return <div key={level}><dt><code>{info[1]}</code> {tx(info[2], info[3])}</dt><dd>{languageId ? status : "—"}</dd></div>;
             })}
-            <div><dt>{tx("Matching rows", "相符列數")}</dt><dd>{languageId ? (previewComplete ? number(estimatedRows) : (previewBusy ? "…" : "—")) : "—"}</dd></div>
-            <div><dt>{tx("Rows downloaded", "下載列數")}</dt><dd>{languageId ? (previewComplete ? number(exportRows) : (previewBusy ? "…" : "—")) : "—"}</dd></div>
+            <div><dt>{tx("Matching rows", "相符列數")}</dt><dd>{languageId ? (previewComplete ? number(estimatedRows) : (previewBusy ? "…" : (Object.keys(previewErrors).length > 0 ? tx("Incomplete", "未完成") : "—"))) : "—"}</dd></div>
+            <div><dt>{tx("Rows downloaded", "下載列數")}</dt><dd>{languageId ? (previewComplete ? number(exportRows) : (previewBusy ? "…" : (Object.keys(previewErrors).length > 0 ? tx("Incomplete", "未完成") : "—"))) : "—"}</dd></div>
           </dl>
           <label className="field">{tx("Maximum per level", "每層級上限")}<select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))}>{[1000, 10_000, 25_000, 50_000, 100_000].map((value) => <option key={value} value={value}>{number(value)}</option>)}</select></label>
           <label className="field">{tx("File type", "檔案類型")}<select value={format} onChange={(event) => setFormat(event.target.value as DatasetFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option><option value="jsonl">JSON Lines</option></select></label>
@@ -514,8 +544,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
               {tx("Cancel preview", "取消預覽")}
             </button>
           )}
-          {canPreview && !previewBusy && !previewComplete && !currentPreviewError && (
-            <button className="text-button" type="button" onClick={retryPreview}>
+          {canPreview && !previewBusy && !previewComplete && (
+            <button className="text-button" type="button" onClick={() => retryPreview()}>
               {tx("Retry preview", "重試預覽")}
             </button>
           )}
@@ -525,20 +555,14 @@ export function DatasetBuilder({data}: {data: AppData}) {
         </aside>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
-      {currentPreviewError && (
-        <div className="callout callout--error callout--action">
-          <span>{currentPreviewError}</span>
-          <button className="text-button" type="button" onClick={retryPreview}>
-            {tx("Retry preview", "重試預覽")}
-          </button>
-        </div>
-      )}
       <DatasetPreview
+        errors={previewErrors}
         fields={fields}
         languageSelected={Boolean(languageId)}
         levels={levels}
         previews={previews}
         loadingLevels={previewLoadingLevels}
+        onRetry={retryPreview}
       />
     </section>
   );

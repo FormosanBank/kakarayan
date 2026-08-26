@@ -12,6 +12,7 @@ it("renders the expanded translation columns returned by the API", async () => {
   await act(async () => root.render(
     <I18nProvider>
       <DatasetPreview
+        errors={{}}
         fields={{
           sentence: ["id", "translations"],
           word: [],
@@ -20,6 +21,7 @@ it("renders the expanded translation columns returned by the API", async () => {
         languageSelected
         levels={["sentence"]}
         loadingLevels={[]}
+        onRetry={() => undefined}
         previews={{
           sentence: {
             release_id: "fb-20240102-3b367525",

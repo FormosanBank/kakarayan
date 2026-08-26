@@ -42,7 +42,7 @@ test("a constrained Taiwan-like mobile lookup meets the interaction budget", asy
   await selectAmis(page);
   const shellMs = performance.now() - shellStarted;
 
-  await page.getByLabel("Word or phrase").fill("fangcalay");
+  await page.locator(".search-form__query input").fill("fangcalay");
   const submit = page.locator(".search-form").getByRole("button").first();
   const timings: number[] = [];
   for (let sample = 0; sample < sampleCount; sample += 1) {

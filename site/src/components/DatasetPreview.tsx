@@ -28,17 +28,21 @@ function columnDefinition(field: string): readonly [string, string] {
 }
 
 export function DatasetPreview({
+  errors,
   fields,
   languageSelected,
   levels,
   previews,
   loadingLevels,
+  onRetry,
 }: {
+  errors: Partial<Record<DatasetLevel, string>>;
   fields: DatasetFieldsByLevel;
   languageSelected: boolean;
   levels: DatasetLevel[];
   previews: Partial<Record<DatasetLevel, DatasetPreviewResult>>;
   loadingLevels: DatasetLevel[];
+  onRetry: (level: DatasetLevel) => void;
 }) {
   const {tx} = useI18n();
   const [activeLevel, setActiveLevel] = useState<DatasetLevel>(levels[0] ?? "sentence");
@@ -49,6 +53,7 @@ export function DatasetPreview({
   const previewFields = active?.fields ?? activeFields;
   const info = levelInfo.get(displayLevel) ?? DATASET_LEVEL_INFO[0];
   const activeLoading = loadingLevels.includes(displayLevel);
+  const activeError = errors[displayLevel];
   const previewBusy = loadingLevels.length > 0;
 
   return (
@@ -80,7 +85,7 @@ export function DatasetPreview({
                   type="button"
                 >
                   <code>{item[1]}</code> {tx(item[2], item[3])}
-                  <span>{previews[level]?.estimated_rows ?? (loadingLevels.includes(level) ? "…" : "—")}</span>
+                  <span>{previews[level]?.estimated_rows ?? (loadingLevels.includes(level) ? "…" : (errors[level] ? tx("Error", "錯誤") : "—"))}</span>
                 </button>
               );
             })}
@@ -102,7 +107,15 @@ export function DatasetPreview({
             label={tx(`Loading ${info[1]} preview`, `正在載入 ${info[1]} 預覽`)}
           />
         )}
-        {languageSelected && !activeLoading && activeFields.length > 0 && active?.items.length === 0 && (
+        {languageSelected && !activeLoading && activeError && activeFields.length > 0 && (
+          <div className="callout callout--error callout--action builder__preview-error">
+            <span>{activeError}</span>
+            <button className="text-button" type="button" onClick={() => onRetry(displayLevel)}>
+              {tx(`Retry ${info[1]} preview`, `重試 ${info[1]} 預覽`)}
+            </button>
+          </div>
+        )}
+        {languageSelected && !activeLoading && !activeError && activeFields.length > 0 && active?.items.length === 0 && (
           <div className="empty-state">
             {tx(
               "No complete rows match these filters and columns.",
@@ -110,7 +123,7 @@ export function DatasetPreview({
             )}
           </div>
         )}
-        {!activeLoading && active && active.items.length > 0 && activeFields.length > 0 && (
+        {!activeLoading && !activeError && active && active.items.length > 0 && activeFields.length > 0 && (
           <div className="table-scroll" tabIndex={0} role="region" aria-label={`${info[1]} preview`}>
             <table>
               <thead>

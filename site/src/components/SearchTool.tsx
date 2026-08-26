@@ -18,6 +18,7 @@ import type {
 import {CandidateGroups} from "./CandidateGroups";
 import {Diagnostics} from "./Diagnostics";
 import {LoadingState} from "./LoadingState";
+import {LookupGuide} from "./LookupGuide";
 import {SearchResultCard} from "./SearchResultCard";
 
 export type LookupKind = "dictionary" | "sentences";
@@ -69,7 +70,7 @@ export function SearchTool({
   );
   const [requirements, setRequirements] = useState<TierRequirement[]>([]);
   const [targets, setTargets] = useState<Array<{xml_lang: string; records: number}>>([]);
-  const [targetLanguage, setTargetLanguage] = useState(params.get("target") ?? "eng");
+  const [translationLanguage, setTranslationLanguage] = useState(params.get("target") ?? "eng");
   const [dictionaryEntries, setDictionaryEntries] = useState<DictionaryEntry[]>([]);
   const [sentences, setSentences] = useState<SentenceSummary[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -82,12 +83,24 @@ export function SearchTool({
   const initialSearchStarted = useRef(false);
 
   const selectedLanguage = data.languages.find((language) => language.id === languageId);
-  const selectedTranslationLanguage = translationLanguageName(targetLanguage, locale);
-  const searchLanguage = direction === "formosan" ? "formosan" : `translation:${targetLanguage}`;
-  const resultTranslationLanguage = direction === "translation" ? targetLanguage : "";
+  const selectedTranslationLanguage = translationLanguageName(translationLanguage, locale);
+  const resultTranslationLanguage = direction === "translation" ? translationLanguage : "";
   const translationSearchReady = direction === "formosan" || targets.some(
-    (target) => target.xml_lang === targetLanguage,
+    (target) => target.xml_lang === translationLanguage,
   );
+  const queryLabel = direction === "formosan"
+    ? (kind === "dictionary"
+        ? tx(
+            `${selectedLanguage ? languageName(selectedLanguage) : "Formosan"} word`,
+            `${selectedLanguage ? languageName(selectedLanguage) : "臺灣南島語"}單詞`,
+          )
+        : tx(
+            `${selectedLanguage ? languageName(selectedLanguage) : "Formosan"} word or phrase`,
+            `${selectedLanguage ? languageName(selectedLanguage) : "臺灣南島語"}單詞或片語`,
+          ))
+    : (kind === "dictionary"
+        ? tx(`${selectedTranslationLanguage} word or meaning`, `${selectedTranslationLanguage}單詞或釋義`)
+        : tx(`${selectedTranslationLanguage} word or phrase`, `${selectedTranslationLanguage}單詞或片語`));
   const relevantCorpora = useMemo(
     () => data.corpora.filter((corpus) => corpus.languages.includes(languageId)),
     [data.corpora, languageId],
@@ -98,9 +111,10 @@ export function SearchTool({
     const next = new AbortController();
     translationLanguages(data.meta.release_id, languageId, corpusId, next.signal).then(
       (values) => {
+        if (next.signal.aborted) return;
         setTargets(values);
         const available = new Set(values.map((item) => item.xml_lang));
-        setTargetLanguage((current) => {
+        setTranslationLanguage((current) => {
           if (available.has(current)) return current;
           const preferred = locale === "zh-Hant" ? "zho" : "eng";
           return available.has(preferred) ? preferred : values[0]?.xml_lang ?? "";
@@ -108,6 +122,7 @@ export function SearchTool({
         if (values.length === 0) setDirection("formosan");
       },
       () => {
+        if (next.signal.aborted) return;
         setTargets([]);
         setDirection("formosan");
       },
@@ -139,7 +154,7 @@ export function SearchTool({
           corpusId,
           dialect: kind === "sentences" ? dialect : "",
           direction,
-          translationLanguage: direction === "translation" ? targetLanguage : "",
+          translationLanguage: direction === "translation" ? translationLanguage : "",
           match,
           requirements: kind === "sentences" ? requirements : [],
           limit: 25,
@@ -162,7 +177,7 @@ export function SearchTool({
             language: languageId,
             direction,
             mode: match,
-            ...(direction === "translation" && targetLanguage && {target: targetLanguage}),
+            ...(direction === "translation" && translationLanguage && {target: translationLanguage}),
             ...(corpusId && {corpus: corpusId}),
             ...(dialect && {dialect}),
           });
@@ -180,7 +195,7 @@ export function SearchTool({
     },
     [
       corpusId, cursor, data.meta.release_id, data.query.available, dialect, direction,
-      kind, languageId, match, query, requirements, setParams, targetLanguage,
+      kind, languageId, match, query, requirements, setParams, translationLanguage,
       translationSearchReady, tx,
     ],
   );
@@ -227,61 +242,82 @@ export function SearchTool({
         </div>
       )}
       <form className="search-form" onSubmit={submit}>
-        <div className="field field--query">
-          <label htmlFor={`query-${kind}`}>
-            {kind === "dictionary"
-              ? tx("Word or meaning", "單詞或釋義")
-              : tx("Word or phrase", "單詞或片語")}
+        <fieldset className="search-intent">
+          <legend>{tx("What are you typing?", "您要輸入哪一種文字？")}</legend>
+          <div className="search-intent__options">
+            <label>
+              <input
+                checked={direction === "formosan"}
+                name={`search-intent-${kind}`}
+                onChange={() => setDirection("formosan")}
+                type="radio"
+              />
+              <span>
+                <strong>{tx("Formosan text", "族語文字")}</strong>
+                <small>{tx("A word or phrase in the language", "族語的單詞或片語")}</small>
+              </span>
+            </label>
+            <label>
+              <input
+                checked={direction === "translation"}
+                disabled={targets.length === 0}
+                name={`search-intent-${kind}`}
+                onChange={() => setDirection("translation")}
+                type="radio"
+              />
+              <span>
+                <strong>{tx("A translation", "翻譯文字")}</strong>
+                <small>{tx("An English, Chinese, or other meaning", "中文、英文或其他語言的釋義")}</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+        <LookupGuide />
+        <div className={`search-form__fields search-form__fields--${direction}`}>
+          {direction === "translation" && (
+            <label className="field search-form__translation-language">
+              {tx("Translation language", "翻譯語言")}
+              <select
+                disabled={targets.length === 0}
+                value={translationLanguage}
+                onChange={(event) => setTranslationLanguage(event.target.value)}
+              >
+                {targets.length === 0 && <option value="">{tx("Loading…", "載入中…")}</option>}
+                {translationLanguage && !targets.some(
+                  (target) => target.xml_lang === translationLanguage,
+                ) && (
+                  <option value={translationLanguage}>{selectedTranslationLanguage}</option>
+                )}
+                {targets.map((target) => (
+                  <option key={target.xml_lang} value={target.xml_lang}>
+                    {translationLanguageName(target.xml_lang, locale)} ({number(target.records)})
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="field search-form__formosan-language">
+            {direction === "translation"
+              ? tx("Find results in", "結果語言")
+              : tx("Formosan language", "臺灣南島語")}
+            <select value={languageId} onChange={(event) => {
+              setLanguageId(event.target.value);
+              setCorpusId("");
+              setTargets([]);
+              onLanguageChange?.(event.target.value);
+            }}>
+              {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
+            </select>
           </label>
-          <input id={`query-${kind}`} value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
-        </div>
-        <label className="field">
-          {tx("Formosan language", "臺灣南島語")}
-          <select value={languageId} onChange={(event) => {
-            setLanguageId(event.target.value);
-            setCorpusId("");
-            setTargets([]);
-            onLanguageChange?.(event.target.value);
-          }}>
-            {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          {tx("Search text language", "搜尋文字的語言")}
-          <select
-            value={searchLanguage}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "formosan") {
-                setDirection("formosan");
-                return;
-              }
-              setDirection("translation");
-              setTargetLanguage(value.slice("translation:".length));
-            }}
-          >
-            <option value="formosan">
-              {selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語")}
-              {tx(" · all FORM tiers", " · 所有 FORM 層")}
-            </option>
-            {direction === "translation" && targetLanguage && !targets.some(
-              (target) => target.xml_lang === targetLanguage,
-            ) && (
-              <option value={`translation:${targetLanguage}`}>
-                {selectedTranslationLanguage} · TRANSL
-              </option>
-            )}
-            {targets.map((target) => (
-              <option key={target.xml_lang} value={`translation:${target.xml_lang}`}>
-                {translationLanguageName(target.xml_lang, locale)} · TRANSL ({number(target.records)})
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="search-form__actions">
-          <button className="button button--primary" disabled={busy || !query.trim() || !data.query.available || !translationSearchReady}>
-            {busy ? tx("Searching…", "搜尋中…") : t("search.submit")}
-          </button>
+          <div className="field field--query search-form__query">
+            <label htmlFor={`query-${kind}`}>{queryLabel}</label>
+            <input id={`query-${kind}`} value={query} maxLength={2048} onChange={(event) => setQuery(event.target.value)} autoComplete="off" />
+          </div>
+          <div className="search-form__actions">
+            <button className="button button--primary" disabled={busy || !query.trim() || !data.query.available || !translationSearchReady}>
+              {busy ? tx("Searching…", "搜尋中…") : t("search.submit")}
+            </button>
+          </div>
         </div>
         <details className="lookup-options">
           <summary>{tx("Search options", "搜尋選項")}</summary>
