@@ -12,11 +12,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .search-form {
-    grid-template-columns: minmax(240px, 1.5fr) repeat(2, minmax(150px, 0.75fr));
+  .search-form__fields--translation {
+    grid-template-columns: repeat(2, minmax(150px, 0.75fr)) minmax(240px, 1.5fr);
   }
 
-  .search-form__actions {
+  .search-form__fields--translation .search-form__actions {
     grid-column: 1 / -1;
     width: 120px;
   }
@@ -270,7 +270,7 @@
     grid-template-columns: 1fr;
   }
 
-  .search-form,
+  .search-form__fields,
   .lookup-options__grid {
     grid-template-columns: 1fr;
   }
@@ -281,11 +281,6 @@
   }
 
   .search-form__actions,
-  .lookup-options {
-    grid-column: 1;
-  }
-
-  .search-form__actions,
   .search-form__actions .button {
     width: 100%;
   }
@@ -293,6 +288,11 @@
   .search-form__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .lookup-guide ol {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .lookup-kind-toggle,

@@ -12,7 +12,7 @@ const configured = import.meta.env.VITE_KAKARAYAN_API_URL?.trim();
 export const apiBaseUrl = (configured || "http://127.0.0.1:8000").replace(/\/$/u, "");
 export const API_READINESS_TIMEOUT_MS = 4_000;
 export const API_INTERACTIVE_TIMEOUT_MS = 6_000;
-export const API_ANALYTICAL_TIMEOUT_MS = 8_000;
+export const API_ANALYTICAL_TIMEOUT_MS = 20_000;
 
 interface ApiErrorBody {
   error?: {code?: string; message?: string};

@@ -25,17 +25,17 @@ async function disableServiceWorkerForRouting(page: Page) {
 
 async function controlGeometry(page: Page) {
   const formosan = await page.getByRole("combobox", {name: "Formosan language"}).boundingBox();
-  const translation = await page.getByRole("combobox", {name: "Search text language"}).boundingBox();
+  const query = await page.locator(".search-form__query input").boundingBox();
   const action = await page.locator(".search-form__actions").boundingBox();
-  if (!formosan || !translation || !action) throw new Error("Search control geometry unavailable");
-  return {formosan, translation, action};
+  if (!formosan || !query || !action) throw new Error("Search control geometry unavailable");
+  return {formosan, query, action};
 }
 
 function expectStableGeometry(
   before: Awaited<ReturnType<typeof controlGeometry>>,
   after: Awaited<ReturnType<typeof controlGeometry>>,
 ) {
-  for (const control of ["formosan", "translation", "action"] as const) {
+  for (const control of ["formosan", "query", "action"] as const) {
     expect(Math.abs(before[control].x - after[control].x)).toBeLessThanOrEqual(1);
     expect(Math.abs(before[control].width - after[control].width)).toBeLessThanOrEqual(1);
   }
@@ -102,22 +102,51 @@ test("the release-pinned shell, routes, and locale switch work", {tag: "@product
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
+test("lookup starts with user intent and provides a localized quick guide", async ({page}) => {
+  await page.goto("lookup?type=dictionary");
+
+  await expect(page.getByRole("radio", {name: /Formosan text/iu})).toBeChecked();
+  await expect(page.getByRole("combobox", {name: "Formosan language"})).toHaveValue("lang_amis");
+  await expect(page.locator(".search-form__query input")).toHaveAccessibleName("Amis word");
+
+  await page.getByText("30-second lookup guide", {exact: true}).click();
+  await expect(page.locator(".lookup-guide__content")).toContainText(
+    "A translation → English → Rukai → dog",
+  );
+
+  await page.getByText("A translation", {exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Translation language"})).toBeVisible();
+  await expect(page.getByRole("combobox", {name: "Find results in"})).toHaveValue("lang_amis");
+  await expect(page.locator(".search-form__query input")).toHaveAccessibleName(
+    "English word or meaning",
+  );
+  await expect(page.locator(".search-form__fields")).not.toContainText("TRANSL");
+
+  await page.getByRole("button", {name: "Traditional Chinese"}).click();
+  await expect(page.getByRole("radio", {name: /翻譯文字/u})).toBeChecked();
+  await expect(page.getByText("30 秒查詢指南", {exact: true})).toBeVisible();
+  await expect(page.locator(".lookup-guide__content")).toContainText(
+    "翻譯文字 → 中文 → 魯凱語 → 狗",
+  );
+  await expectAccessible(page);
+});
+
 test("production lookup and finite dataset routes respond", {tag: "@production-smoke"}, async ({page}) => {
   await disableServiceWorkerForRouting(page);
   await page.goto("lookup?type=dictionary");
   await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
-  await page.getByLabel("Word or meaning").fill("lima");
+  await page.locator(".search-form__query input").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".dictionary-entry").first()).toBeVisible();
 
   await page.goto("lookup?type=sentences");
   await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
-  await page.getByLabel("Word or phrase").fill("lima");
+  await page.locator(".search-form__query input").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 
   await page.goto("research");
-  await page.getByLabel("Word or phrase").fill("lima");
+  await page.getByRole("textbox", {name: /word or phrase$/iu}).fill("lima");
   const previewResponse = page.waitForResponse(/\/datasets\/preview\?/u);
   await page.getByRole("combobox", {name: "Formosan language", exact: true}).first().selectOption({label: "Amis"});
   const preview = await previewResponse;
@@ -160,7 +189,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   page.on("request", (request) => requests.push(request.url()));
   await page.goto("lookup?type=sentences");
   await selectFixtureScope(page);
-  await page.getByLabel("Word or phrase").fill("lima");
+  await page.locator(".search-form__query input").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
 
   const summary = page.locator(".result-card--summary").first();
@@ -189,16 +218,17 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 
   await page.goto("lookup?type=sentences&language=lang_amis");
   await page.reload();
+  await page.getByText("A translation", {exact: true}).click();
+  await page.getByRole("combobox", {name: "Translation language"}).selectOption("eng");
   await page.getByText("Search options", {exact: true}).click();
-  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
   await page.getByText("Contains", {exact: true}).click();
-  await page.getByLabel("Word or phrase").fill("fictional");
+  await page.locator(".search-form__query input").fill("fictional");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const reverseSummary = page.locator(".result-card--summary").first();
   await expect(reverseSummary.locator(".translation-text mark")).toHaveText("fictional");
 
   await page.getByText("Normalized exact", {exact: true}).click();
-  await page.getByLabel("Word or phrase").fill("five.word");
+  await page.locator(".search-form__query input").fill("five.word");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const tierMatch = page.locator(".result-card--summary").first();
   await expect(tierMatch.locator(".translation-text mark")).toHaveText("five.word");
@@ -206,8 +236,9 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 
   await page.goto("lookup?type=dictionary");
   await selectFixtureScope(page);
-  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
-  await page.getByLabel("Word or meaning").fill("five");
+  await page.getByText("A translation", {exact: true}).click();
+  await page.getByRole("combobox", {name: "Translation language"}).selectOption("eng");
+  await page.locator(".search-form__query input").fill("five");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
   await expect(entry.getByRole("heading")).toContainText("lima");
@@ -231,7 +262,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 test("search controls stay fixed when the action label changes", async ({page}) => {
   await disableServiceWorkerForRouting(page);
   await page.goto("lookup?type=dictionary");
-  await page.getByLabel("Word or meaning").fill("lima");
+  await page.locator(".search-form__query input").fill("lima");
   const button = page.locator(".search-form__actions .button");
   await expect(button).toHaveText("Search");
   const before = await controlGeometry(page);
@@ -272,7 +303,7 @@ test("a busy lookup fails fast and remains retryable", async ({page}) => {
     await route.continue();
   });
   await page.goto("lookup?type=dictionary");
-  await page.getByLabel("Word or meaning").fill("lima");
+  await page.locator(".search-form__query input").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
 
   const error = page.locator(".search-feedback .callout--error");
@@ -293,7 +324,7 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
     await route.fulfill({response, json: body});
   });
   await page.goto("learn");
-  await page.getByLabel("Word or meaning").fill("lima");
+  await page.locator(".search-form__query input").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
   await expect(entry).toBeVisible();
@@ -305,7 +336,7 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
     "aria-pressed",
     "true",
   );
-  await expect(page.getByLabel("Word or phrase")).toHaveValue("lima");
+  await expect(page.locator(".search-form__query input")).toHaveValue("lima");
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 });
 
@@ -320,12 +351,12 @@ test("lookup and record requests never leave stale results on screen", async ({p
   });
   await page.goto("lookup?type=sentences");
   await selectFixtureScope(page);
-  await page.getByLabel("Word or phrase").fill("lima");
+  await page.locator(".search-form__query input").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 
   holdSearch = true;
-  await page.getByLabel("Word or phrase").fill("waco");
+  await page.locator(".search-form__query input").fill("waco");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".loading-state--results")).toContainText("Searching the corpus");
   await expect(page.locator(".result-card--summary")).toHaveCount(0);
@@ -373,15 +404,16 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await expect(page.locator(".builder__summary")).toContainText("Matching rows");
 
   delayPreview = true;
-  await page.getByLabel("Word or phrase").fill("lima");
+  await page.getByRole("textbox", {name: /word or phrase$/iu}).fill("lima");
   await expect(page.locator(".builder__preview-skeleton")).toBeVisible();
   await expect(page.locator(".builder__preview").getByRole("table")).toHaveCount(0);
   await expect(page.locator(".builder__preview-skeleton")).toBeHidden();
   await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
   delayPreview = false;
 
-  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
-  await page.getByLabel("Word or phrase").fill("five");
+  await page.getByText("Translations", {exact: true}).click();
+  await page.getByRole("combobox", {name: "Translation language"}).selectOption("eng");
+  await page.getByRole("textbox", {name: /word or phrase$/iu}).fill("five");
   await page.getByRole("combobox", {name: "Match"}).selectOption("contains");
   await expect(page.locator(".builder__summary dd").first()).toHaveText(/^[1-9][\d,]*$/u);
 
@@ -436,6 +468,50 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await expect(page.locator(".summaries .loading-state--table")).toContainText("Computing corpus summary");
   releaseSummary();
   await expect(page.getByRole("table")).toBeVisible();
+});
+
+test("dataset previews isolate and retry one XML-level failure", async ({page}) => {
+  await disableServiceWorkerForRouting(page);
+  const requests = {sentence: 0, word: 0, morpheme: 0};
+  let failWordOnce = true;
+  await page.route(/\/datasets\/preview\?/u, async (route) => {
+    const level = new URL(route.request().url()).searchParams.get("record_level") as keyof typeof requests;
+    requests[level] += 1;
+    if (level === "word" && failWordOnce) {
+      failWordOnce = false;
+      await route.fulfill({
+        status: 504,
+        contentType: "application/json",
+        body: JSON.stringify({
+          error: {code: "query_timeout", message: "Dataset preview timed out"},
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("research");
+  await page.getByRole("combobox", {name: "Formosan language", exact: true}).first().selectOption({label: "Amis"});
+  await page.locator(".builder__level-options").getByText("Word", {exact: true}).click();
+  await page.locator(".builder__level-options").getByText("Morpheme", {exact: true}).click();
+
+  const previewTabs = page.locator(".builder__preview-tabs");
+  await expect(previewTabs.getByRole("tab", {name: /Word/iu})).toContainText("Error");
+  await previewTabs.getByRole("tab", {name: /Morpheme/iu}).click();
+  await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  await previewTabs.getByRole("tab", {name: /Sentence/iu}).click();
+  await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  await expect(page.getByRole("button", {name: "Download dataset"})).toBeDisabled();
+
+  const beforeRetry = {...requests};
+  await previewTabs.getByRole("tab", {name: /Word/iu}).click();
+  await page.getByRole("button", {name: "Retry W preview"}).click();
+  await expect(page.locator(".builder__preview").getByRole("table")).toBeVisible();
+  await expect(page.getByRole("button", {name: "Download dataset"})).toBeEnabled();
+  expect(requests.word).toBe(beforeRetry.word + 1);
+  expect(requests.sentence).toBe(beforeRetry.sentence);
+  expect(requests.morpheme).toBe(beforeRetry.morpheme);
 });
 
 test("developer routes expose the query contract and static metadata", async ({browserName, context, page}) => {
