@@ -68,8 +68,8 @@ The easiest first connection is **Connect using SSH** in the Lightsail console.
 The shell should open as `ubuntu`. A local SSH client is also valid:
 
 ```bash
-chmod 600 /absolute/path/to/hunter-ssh-tokyo.pem
-ssh -i /absolute/path/to/hunter-ssh-tokyo.pem ubuntu@STATIC_IP
+chmod 600 /absolute/path/to/lightsail-key.pem
+ssh -i /absolute/path/to/lightsail-key.pem ubuntu@STATIC_IP
 ```
 
 Inspect the machine before changing it:
@@ -81,7 +81,7 @@ swapon --show
 df -h /
 ```
 
-The production 4 GiB host gives the API a 3 GiB ceiling and Caddy a 128 MiB
+The production 2 GiB host gives the API a 1,400 MiB ceiling and Caddy a 128 MiB
 ceiling. The remaining memory is available to Ubuntu, Docker, filesystem cache,
 and deployment work. Add a 2 GiB swap file once as protection against short
 deployment spikes:
@@ -164,14 +164,13 @@ nano .env
 Set `KAKARAYAN_HOSTNAME` to the hostname made from the attached static IP. Leave
 the production and local frontend origins in `KAKARAYAN_CORS_ORIGINS`. The `.env`
 file contains no password and is ignored by Git, but it remains host-specific.
-Keep the 4 GiB host defaults of `3g` for the API and `128m` for Caddy. The default
+Keep the 2 GiB host defaults of `1400m` for the API and `128m` for Caddy. The default
 `KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantial analytical queries. Keep
 the initial request controls at 60 requests per minute, 5 exports per minute, and
 2 concurrent SQLite queries. Only one dataset or aggregate query may run at once,
 which leaves one lane available for dictionary, sentence, and record-detail requests.
-The API reuses both read-only connections with a 128 MiB SQLite cache per connection
-and a 2 GiB immutable-file mapping ceiling. The larger instance still has two vCPUs,
-so extra RAM improves cache and headroom without adding more query workers. A request
+The API reuses both read-only connections with a 64 MiB SQLite cache per connection
+and a 1 GiB immutable-file mapping ceiling. The instance has two vCPUs, so a request
 waits at most one second for a slot. Normal queries, previews, and exports have
 separate 10, 15, and 120 second deadlines. These values can be tuned in `.env`
 without changing code.
@@ -387,13 +386,13 @@ release identity changes are required.
 
 ## Cost and capacity
 
-Production uses the 4 GiB RAM, 2 vCPU, and 80 GB SSD general-purpose Lightsail
+Production uses the 2 GiB RAM, 2 vCPU, and 60 GB SSD general-purpose Lightsail
 bundle in Tokyo. At the listed plan rate when this runbook was updated, it costs
-$24 per month and includes 4 TB monthly transfer. The attached static IP has no
+$12 per month and includes 3 TB monthly transfer. The attached static IP has no
 added charge while attached, and Caddy certificates are free. Optional Lightsail
 snapshots are billed separately per stored GB.
 
-The API permits 100,000 export rows per selected XML level. Its 3 GiB container
+The API permits 100,000 export rows per selected XML level. Its 1,400 MiB container
 budget gives the persistent SQLite caches and mapped database pages room to reuse
 the indexed data without allowing one process to consume the whole host. Caddy has
 a 128 MiB ceiling. Keep total query concurrency at two and analytical concurrency at
