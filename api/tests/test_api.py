@@ -19,6 +19,7 @@ from api.limits import (
     QUERY_MAX_CHARS,
     SEARCH_PAGE_MAX_ROWS,
 )
+from api.store import CorpusStore
 
 
 def release_path(client: TestClient, path: str) -> str:
@@ -617,6 +618,50 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     assert morpheme_item["form"] == "lima"
     assert morpheme_item["translation_eng_1"] == "FIVE"
     assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
+
+
+def test_word_and_morpheme_translation_searches_start_from_indexed_candidates(
+    client: TestClient,
+) -> None:
+    for level in ("word", "morpheme"):
+        response = client.get(
+            release_path(client, "datasets/preview"),
+            params=[
+                ("language_id", "lang_amis"),
+                ("record_level", level),
+                ("q", "ive"),
+                ("direction", "translation"),
+                ("translation_language", "eng"),
+                ("match", "contains"),
+                ("field", "id"),
+                ("field", "form"),
+                ("field", "translations"),
+            ],
+        )
+        assert response.status_code == 200
+        assert response.json()["estimated_rows"] == 1
+
+    store = client.app.state.store
+    assert isinstance(store, CorpusStore)
+    query = store._dataset_query(
+        language_id="lang_amis",
+        corpus_id=None,
+        dialect=None,
+        q="ive",
+        direction="translation",
+        translation_language="eng",
+        match="contains",
+        requirements=(),
+        fields=("id", "form", "translations"),
+        record_level="word",
+        complete_fields=True,
+    )
+    assert query.prefix.startswith("WITH candidate_ids AS MATERIALIZED")
+    assert "FROM translations term" in query.prefix
+    assert "JOIN tier_scope ts" in query.prefix
+    assert "term.owner_id AS record_id" in query.prefix
+    assert "candidate.record_id" in query.source
+    assert "normalized" not in query.where
 
 
 def test_unclear_requirement_includes_translation_and_phonology_tiers(

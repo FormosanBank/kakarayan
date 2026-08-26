@@ -410,6 +410,43 @@ class CorpusStore:
             tuple(term_parameters),
         )
 
+    def _candidate_tier_records(
+        self,
+        *,
+        normalized: str,
+        language_id: str,
+        corpus_id: str | None,
+        dialect: str | None,
+        direction: SearchDirection,
+        translation_language: str | None,
+        match: MatchMode,
+        record_level: Literal["word", "morpheme"],
+    ) -> tuple[str, tuple[object, ...]]:
+        table = "forms" if direction == "formosan" else "translations"
+        predicate, predicate_parameters = _predicate(
+            "term.normalized", normalized, match, direction
+        )
+        clauses = [f"term.owner_type = '{record_level}'", predicate]
+        parameters: list[object] = list(predicate_parameters)
+        if direction == "translation" and translation_language:
+            clauses.append("term.xml_lang = ?")
+            parameters.append(translation_language)
+        scope_clauses, scope_parameters = self._scope(language_id, corpus_id, dialect)
+        clauses.extend(scope_clauses)
+        parameters.extend(scope_parameters)
+        return (
+            f"""
+            SELECT DISTINCT term.owner_id AS record_id
+            FROM {table} term
+            JOIN tier_scope ts
+              ON ts.owner_type = term.owner_type AND ts.owner_id = term.owner_id
+            JOIN sentences s ON s.id = ts.sentence_id
+            JOIN texts t ON t.id = s.parent_id
+            WHERE {" AND ".join(clauses)}
+            """,
+            tuple(parameters),
+        )
+
     @staticmethod
     def _tiers(
         connection: sqlite3.Connection,
@@ -1386,48 +1423,33 @@ class CorpusStore:
         )
         if q is not None and not normalized:
             raise ApiError(422, "invalid_parameter", "The query is empty after normalization")
-        if normalized and record_level == "sentence":
-            candidates, candidate_parameters = self._candidate_sentences(
-                normalized=normalized,
-                language_id=language_id,
-                corpus_id=corpus_id,
-                dialect=dialect,
-                direction=direction,
-                translation_language=translation_language,
-                match=match,
-            )
+        if normalized:
+            if record_level == "sentence":
+                candidates, candidate_parameters = self._candidate_sentences(
+                    normalized=normalized,
+                    language_id=language_id,
+                    corpus_id=corpus_id,
+                    dialect=dialect,
+                    direction=direction,
+                    translation_language=translation_language,
+                    match=match,
+                )
+            else:
+                candidates, candidate_parameters = self._candidate_tier_records(
+                    normalized=normalized,
+                    language_id=language_id,
+                    corpus_id=corpus_id,
+                    dialect=dialect,
+                    direction=direction,
+                    translation_language=translation_language,
+                    match=match,
+                    record_level=record_level,
+                )
             clauses: list[str] = []
             parameters = list(candidate_parameters)
         else:
             candidates = None
             clauses, parameters = self._scope(language_id, corpus_id, dialect)
-            if normalized:
-                owner_type, owner_alias = {
-                    "word": ("word", "w"),
-                    "morpheme": ("morpheme", "m"),
-                }[record_level]
-                if direction == "formosan":
-                    predicate, predicate_parameters = _predicate(
-                        "f.normalized", normalized, match, "formosan"
-                    )
-                    clauses.append(
-                        "EXISTS (SELECT 1 FROM forms f "
-                        f"WHERE f.owner_type = '{owner_type}' "
-                        f"AND f.owner_id = {owner_alias}.id AND {predicate})"
-                    )
-                else:
-                    predicate, predicate_parameters = _predicate(
-                        "tr.normalized", normalized, match, "translation"
-                    )
-                    language_clause = " AND tr.xml_lang = ?" if translation_language else ""
-                    clauses.append(
-                        "EXISTS (SELECT 1 FROM translations tr "
-                        f"WHERE tr.owner_type = '{owner_type}' "
-                        f"AND tr.owner_id = {owner_alias}.id AND {predicate}{language_clause})"
-                    )
-                    if translation_language:
-                        predicate_parameters = (*predicate_parameters, translation_language)
-                parameters.extend(predicate_parameters)
         self._tier_requirements(clauses, requirements)
         return candidates, clauses, parameters
 
@@ -1469,29 +1491,47 @@ class CorpusStore:
         if complete_fields:
             clauses.extend(dataset_completeness_clauses(record_level, fields))
         where = " AND ".join(clauses) if clauses else "1 = 1"
-        prefix = f"WITH candidate_ids AS ({candidates})" if candidates else ""
-        sentence_source = (
-            "candidate_ids candidate JOIN sentences s ON s.id = candidate.sentence_id"
-            if candidates
-            else "sentences s"
-        )
-        source, order = {
-            "sentence": (
-                f"{sentence_source} JOIN texts t ON t.id = s.parent_id",
-                "t.source_path, s.position, s.id",
-            ),
-            "word": (
-                f"{sentence_source} JOIN words w ON w.parent_id = s.id "
-                "JOIN texts t ON t.id = s.parent_id",
-                "t.source_path, s.position, w.position, w.id",
-            ),
-            "morpheme": (
-                f"{sentence_source} JOIN words w ON w.parent_id = s.id "
-                "JOIN morphemes m ON m.parent_id = w.id "
-                "JOIN texts t ON t.id = s.parent_id",
-                "t.source_path, s.position, w.position, m.position, m.id",
-            ),
-        }[record_level]
+        prefix = f"WITH candidate_ids AS MATERIALIZED ({candidates})" if candidates else ""
+        if candidates:
+            source, order = {
+                "sentence": (
+                    "candidate_ids candidate "
+                    "JOIN sentences s ON s.id = candidate.sentence_id "
+                    "JOIN texts t ON t.id = s.parent_id",
+                    "t.source_path, s.position, s.id",
+                ),
+                "word": (
+                    "candidate_ids candidate JOIN words w ON w.id = candidate.record_id "
+                    "JOIN sentences s ON s.id = w.parent_id "
+                    "JOIN texts t ON t.id = s.parent_id",
+                    "t.source_path, s.position, w.position, w.id",
+                ),
+                "morpheme": (
+                    "candidate_ids candidate JOIN morphemes m ON m.id = candidate.record_id "
+                    "JOIN words w ON w.id = m.parent_id "
+                    "JOIN sentences s ON s.id = w.parent_id "
+                    "JOIN texts t ON t.id = s.parent_id",
+                    "t.source_path, s.position, w.position, m.position, m.id",
+                ),
+            }[record_level]
+        else:
+            source, order = {
+                "sentence": (
+                    "sentences s JOIN texts t ON t.id = s.parent_id",
+                    "t.source_path, s.position, s.id",
+                ),
+                "word": (
+                    "sentences s JOIN words w ON w.parent_id = s.id "
+                    "JOIN texts t ON t.id = s.parent_id",
+                    "t.source_path, s.position, w.position, w.id",
+                ),
+                "morpheme": (
+                    "sentences s JOIN words w ON w.parent_id = s.id "
+                    "JOIN morphemes m ON m.parent_id = w.id "
+                    "JOIN texts t ON t.id = s.parent_id",
+                    "t.source_path, s.position, w.position, m.position, m.id",
+                ),
+            }[record_level]
         return DatasetQuery(
             prefix=prefix,
             source=source,
