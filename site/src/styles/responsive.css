@@ -173,10 +173,6 @@
     grid-template-columns: 1fr;
   }
 
-  .format-semantics {
-    grid-template-columns: 1fr;
-  }
-
   .api-explorer__heading {
     align-items: flex-start;
     flex-direction: column;

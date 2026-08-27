@@ -118,10 +118,7 @@ export function ApiExplorer({
   return (
     <section className="api-explorer" aria-labelledby="api-playground-title">
       <div className="section-heading api-explorer__heading">
-        <div>
-          <h2 id="api-playground-title">{tx("API playground", "API 測試工具")}</h2>
-          <p>{tx("Build a request and inspect the response.", "建立請求並檢視回應。")}</p>
-        </div>
+        <h2 id="api-playground-title">{tx("API playground", "API 測試工具")}</h2>
         <span className="api-explorer__release"><span>release</span> {releaseId}</span>
       </div>
       <div className="api-explorer__workspace">
@@ -225,7 +222,6 @@ export function ApiExplorer({
           ) : (
             <div className="api-explorer__empty">
               <span>{"{ }"}</span>
-              <p>{tx("Run the request to inspect its JSON response.", "執行請求以檢視 JSON 回應。")}</p>
             </div>
           )}
           {status && <p className="api-explorer__status" role="status">{status}</p>}
