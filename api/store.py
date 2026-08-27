@@ -1179,9 +1179,17 @@ class CorpusStore:
             language_clause = ""
             language_parameters = ()
             vocabulary = "formosan"
-        match_clause, match_parameters = _predicate(
-            f"{alias}.normalized", normalized, match, vocabulary
-        )
+        match_parameters: tuple[str, ...]
+        if match == "contains":
+            # The primary search has already reduced this query to the visible
+            # sentence IDs. Scanning their bounded tier rows is substantially
+            # cheaper than resolving the global trigram vocabulary again.
+            match_clause = f"{alias}.normalized LIKE ? ESCAPE '\\'"
+            match_parameters = (f"%{_like(normalized)}%",)
+        else:
+            match_clause, match_parameters = _predicate(
+                f"{alias}.normalized", normalized, match, vocabulary
+            )
         tier_order = f"CASE {alias}.owner_type WHEN 'sentence' THEN 0 WHEN 'word' THEN 1 ELSE 2 END"
         rows = connection.execute(
             f"""
