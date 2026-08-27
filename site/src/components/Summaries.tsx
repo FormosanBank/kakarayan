@@ -8,6 +8,7 @@ import {LoadingState} from "./LoadingState";
 
 type SummaryResult = Awaited<ReturnType<typeof summaries>>;
 type TableKind = "source" | "normalized" | "translation" | "distribution";
+const TABLE_KINDS: TableKind[] = ["source", "normalized", "translation", "distribution"];
 
 function rows(result: SummaryResult, kind: TableKind) {
   return {
@@ -64,6 +65,12 @@ export function Summaries({data}: {data: AppData}) {
   }
 
   const currentRows = result ? rows(result, kind) : [];
+  const tableLabel = (value: TableKind) => ({
+    source: tx("Source forms", "來源形式"),
+    normalized: tx("Normalized forms", "正規化形式"),
+    translation: tx("Translations", "翻譯"),
+    distribution: tx("Distribution", "分布"),
+  })[value];
   return (
     <section className="summaries">
       <div className="summary-controls">
@@ -118,16 +125,27 @@ export function Summaries({data}: {data: AppData}) {
             <div><strong>{number(result.source_types)}</strong><span>{tx("source forms", "來源形式")}</span></div>
             <div><strong>{number(result.normalized_types)}</strong><span>{tx("normalized forms", "正規化形式")}</span></div>
           </div>
-          <div className="summary-tabs" role="tablist">
-            {(["source", "normalized", "translation", "distribution"] as TableKind[]).map((value) => (
-              <button key={value} role="tab" aria-selected={kind === value} onClick={() => setKind(value)}>{value}</button>
+          <div className="summary-tabs" role="tablist" aria-label={tx("Summary table", "摘要表格")}>
+            {TABLE_KINDS.map((value) => (
+              <button
+                key={value}
+                role="tab"
+                aria-controls="summary-table"
+                aria-selected={kind === value}
+                onClick={() => setKind(value)}
+              >
+                {tableLabel(value)}
+              </button>
             ))}
           </div>
           <div className="summary-export"><button onClick={() => download(currentRows, kind)}>CSV</button></div>
           <div className="table-scroll" tabIndex={0}>
-            <table><thead><tr><th>{kind}</th><th>{tx("Count", "數量")}</th></tr></thead><tbody>
+            <table className="summary-table" id="summary-table">
+              <colgroup><col /><col className="summary-table__count" /></colgroup>
+              <thead><tr><th scope="col">{tableLabel(kind)}</th><th scope="col">{tx("Count", "數量")}</th></tr></thead><tbody>
               {currentRows.map((row) => <tr key={row.value}><td>{row.value}</td><td>{number(row.count)}</td></tr>)}
-            </tbody></table>
+              </tbody>
+            </table>
           </div>
         </>
       )}

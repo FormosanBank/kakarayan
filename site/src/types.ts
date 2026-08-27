@@ -208,6 +208,7 @@ export interface SearchRecord {
     position: number;
     file: string;
     url: string;
+    playback_urls: string[];
     start: number | null;
     end: number | null;
     source: string;

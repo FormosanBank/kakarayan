@@ -1,11 +1,13 @@
+import json
 from pathlib import Path
 
+from publisher.audio_sources import load_audio_sources
 from publisher.xml_records import discover_xml, project_xml
 
 
 def test_projection_preserves_tiers_and_canonical_counting(public_repo: Path) -> None:
     [path] = list(discover_xml(public_repo))
-    projection = project_xml(path, public_repo)
+    projection = project_xml(path, public_repo, load_audio_sources(public_repo))
 
     assert projection.source_path == "Corpora/TestCorpus/XML/fixture.xml"
     assert projection.counts == {
@@ -30,6 +32,10 @@ def test_projection_preserves_tiers_and_canonical_counting(public_repo: Path) ->
 
     sentence = projection.rows["sentences"][0]
     assert sentence["token_count"] == 2
+    assert json.loads(str(projection.rows["audio"][1]["playback_urls"])) == [
+        "https://huggingface.co/datasets/FormosanBank/TestCorpusAudio/resolve/"
+        "1111111111111111111111111111111111111111/sentence.wav"
+    ]
     assert [row["surface"] for row in projection.rows["tokens"]] == [
         "lima",
         "waco",

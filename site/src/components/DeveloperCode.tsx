@@ -3,6 +3,30 @@ import {useMemo, useState} from "react";
 import {useI18n} from "../i18n";
 
 type ExampleLanguage = "curl" | "javascript" | "python" | "r";
+type CodeLanguage = ExampleLanguage | "json";
+type TokenKind = "comment" | "function" | "keyword" | "literal" | "property" | "string";
+
+type CodeToken = {
+  kind?: TokenKind;
+  text: string;
+};
+
+const KEYWORDS: Record<CodeLanguage, ReadonlySet<string>> = {
+  curl: new Set(["curl"]),
+  javascript: new Set([
+    "async", "await", "const", "else", "export", "from", "if", "import", "let", "new",
+    "return", "throw", "var",
+  ]),
+  json: new Set(),
+  python: new Set([
+    "as", "async", "await", "def", "elif", "else", "for", "from", "if", "import", "in",
+    "return", "with", "while", "yield",
+  ]),
+  r: new Set(["break", "else", "for", "function", "if", "in", "next", "repeat", "while"]),
+};
+
+const LITERALS = new Set(["false", "null", "None", "NULL", "true", "True", "TRUE", "False", "FALSE"]);
+const TOKEN_PATTERN = /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\/.*$|#.*$|--?[A-Za-z][\w-]*|\b[A-Za-z_][\w]*\b|\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b/giu;
 
 const EXAMPLE_LANGUAGES: Array<{id: ExampleLanguage; label: string}> = [
   {id: "curl", label: "curl"},
@@ -13,6 +37,39 @@ const EXAMPLE_LANGUAGES: Array<{id: ExampleLanguage; label: string}> = [
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+function tokenKind(token: string, rest: string, language: CodeLanguage): TokenKind | undefined {
+  if ((token.startsWith("//") && language === "javascript")
+    || (token.startsWith("#") && language !== "javascript" && language !== "json")) {
+    return "comment";
+  }
+  if (token.startsWith('"') || token.startsWith("'") || token.startsWith("`")) {
+    return language === "json" && rest.trimStart().startsWith(":") ? "property" : "string";
+  }
+  if (/^\d/u.test(token) || LITERALS.has(token)) return "literal";
+  if (KEYWORDS[language].has(token) || (language === "curl" && token.startsWith("-"))) {
+    return "keyword";
+  }
+  if (rest.trimStart().startsWith("(")) return "function";
+  return undefined;
+}
+
+function syntaxTokens(line: string, language: CodeLanguage): CodeToken[] {
+  const tokens: CodeToken[] = [];
+  let cursor = 0;
+
+  for (const match of line.matchAll(TOKEN_PATTERN)) {
+    const index = match.index;
+    if (index > cursor) tokens.push({text: line.slice(cursor, index)});
+    const text = match[0];
+    const kind = tokenKind(text, line.slice(index + text.length), language);
+    tokens.push(kind ? {kind, text} : {text});
+    cursor = index + text.length;
+  }
+
+  if (cursor < line.length) tokens.push({text: line.slice(cursor)});
+  return tokens;
 }
 
 function requestExamples(url: string): Record<ExampleLanguage, string> {
@@ -77,14 +134,28 @@ function requestExamples(url: string): Record<ExampleLanguage, string> {
   };
 }
 
-export function CodeLines({label, value}: {label: string; value: string}) {
+export function CodeLines({
+  label,
+  language,
+  value,
+}: {
+  label: string;
+  language: CodeLanguage;
+  value: string;
+}) {
   return (
     <pre className="code-lines" aria-label={label} tabIndex={0}>
       <code>
         {value.split("\n").map((line, index) => (
           <span className="code-lines__line" key={`${index}-${line}`}>
             <span className="code-lines__number" aria-hidden="true">{index + 1}</span>
-            <span className="code-lines__text">{line || "\u00a0"}</span>
+            <span className="code-lines__text">
+              {line
+                ? syntaxTokens(line, language).map((token, tokenIndex) => token.kind
+                  ? <span className={`code-token code-token--${token.kind}`} key={`${tokenIndex}-${token.text}`}>{token.text}</span>
+                  : token.text)
+                : "\u00a0"}
+            </span>
           </span>
         ))}
       </code>
@@ -141,6 +212,7 @@ export function RequestExamples({url}: {url: string}) {
             `${EXAMPLE_LANGUAGES.find((option) => option.id === language)?.label} example`,
             `${EXAMPLE_LANGUAGES.find((option) => option.id === language)?.label} 範例`,
           )}
+          language={language}
           value={examples[language]}
         />
       </div>

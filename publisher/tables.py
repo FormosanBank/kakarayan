@@ -79,6 +79,7 @@ TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
         "position",
         "file",
         "url",
+        "playback_urls",
         "start",
         "end",
         "start_raw",

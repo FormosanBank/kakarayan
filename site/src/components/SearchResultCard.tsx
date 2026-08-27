@@ -14,21 +14,8 @@ import type {
   SentenceSummary,
 } from "../types";
 import {LoadingState} from "./LoadingState";
+import {EvidenceAudio} from "./EvidenceAudio";
 import {QueryHighlight} from "./QueryHighlight";
-
-function playableUrl(record: SearchRecord, index: number): string {
-  const audio = record.audio[index];
-  if (!audio) return "";
-  for (const value of [audio.url, audio.source, audio.file]) {
-    try {
-      const url = new URL(value);
-      if (url.protocol === "https:" || url.protocol === "http:") return url.href;
-    } catch {
-      // Relative and local filesystem references remain visible as provenance only.
-    }
-  }
-  return "";
-}
 
 function SentenceText({
   record,
@@ -238,24 +225,17 @@ function SearchResultDetail({
       {record.audio.length > 0 && (
         <details className="audio-evidence">
           <summary>{tx("Audio evidence", "音訊證據")} ({number(record.audio.length)})</summary>
-          {record.audio.slice(0, 5).map((audio, index) => {
-            const url = playableUrl(record, index);
-            return (
-              <div key={`${audio.owner_id}-${audio.position}`}>
-                <code>{audio.file || audio.url || audio.source || tx("unnamed reference", "未命名參照")}</code>
-                {audio.start !== null && (
-                  <span>
-                    {audio.start.toFixed(3)}s {tx("to", "至")} {audio.end?.toFixed(3) ?? tx("unknown", "未知")}s
-                  </span>
-                )}
-                {url ? (
-                  <audio controls preload="none" src={url} />
-                ) : (
-                  <small>{tx("Reference is not a public web URL.", "此參照不是公開網路網址。")}</small>
-                )}
-              </div>
-            );
-          })}
+          {record.audio.slice(0, 5).map((audio) => (
+            <div key={`${audio.owner_id}-${audio.position}`}>
+              <code>{audio.file || audio.url || audio.source || tx("unnamed reference", "未命名參照")}</code>
+              {audio.start !== null && (
+                <span>
+                  {audio.start.toFixed(3)}s {tx("to", "至")} {audio.end?.toFixed(3) ?? tx("unknown", "未知")}s
+                </span>
+              )}
+              <EvidenceAudio audio={audio} />
+            </div>
+          ))}
         </details>
       )}
       </div>

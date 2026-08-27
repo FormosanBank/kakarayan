@@ -1327,6 +1327,25 @@
   font-size: 13px;
 }
 
+.summary-table {
+  table-layout: fixed;
+}
+
+.summary-table__count {
+  width: 112px;
+}
+
+.summary-table th:first-child,
+.summary-table td:first-child {
+  overflow-wrap: anywhere;
+}
+
+.summary-table th:last-child,
+.summary-table td:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .tier-details,
 .audio-evidence,
 .card-inventory {

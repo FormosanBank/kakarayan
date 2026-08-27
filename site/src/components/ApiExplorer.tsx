@@ -217,7 +217,7 @@ export function ApiExplorer({
                 <button className="text-button" type="button" onClick={() => void copy(response, tx("Response copied.", "已複製回應。"))}>{tx("Copy response", "複製回應")}</button>
                 <a href={request.url} target="_blank" rel="noreferrer">{tx("Open JSON", "開啟 JSON")}</a>
               </div>
-              <CodeLines label={tx("JSON response", "JSON 回應")} value={response} />
+              <CodeLines label={tx("JSON response", "JSON 回應")} language="json" value={response} />
             </>
           ) : (
             <div className="api-explorer__empty">

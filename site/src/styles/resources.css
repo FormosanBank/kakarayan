@@ -594,6 +594,10 @@
 }
 
 .code-lines {
+  --code-keyword: #4f6376;
+  --code-string: #526a59;
+  --code-literal: #765e4d;
+  --code-comment: #737373;
   padding: 14px 0;
   margin: 0;
   overflow-x: hidden;
@@ -626,6 +630,29 @@
   padding-left: 12px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.code-token--keyword {
+  color: var(--code-keyword);
+  font-weight: 600;
+}
+
+.code-token--function,
+.code-token--property {
+  color: var(--code-keyword);
+}
+
+.code-token--string {
+  color: var(--code-string);
+}
+
+.code-token--literal {
+  color: var(--code-literal);
+}
+
+.code-token--comment {
+  color: var(--code-comment);
+  font-style: italic;
 }
 
 .code-example .code-lines {

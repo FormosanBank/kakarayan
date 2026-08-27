@@ -51,7 +51,7 @@ export function SearchTool({
   onPractice?: (record: SearchRecord, targetLanguage: string) => void;
   onViewSentences?: (entry: DictionaryEntry) => void;
 }) {
-  const {languageName, locale, number, t, tx} = useI18n();
+  const {dialectName, languageName, locale, number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const [query, setQuery] = useState(initialQuery ?? params.get("q") ?? "");
@@ -171,7 +171,7 @@ export function SearchTool({
           q: query.trim(),
           languageId,
           corpusId,
-          dialect: kind === "sentences" || selectedDialect !== undefined ? dialect : "",
+          dialect,
           direction,
           translationLanguage,
           match,
@@ -216,7 +216,7 @@ export function SearchTool({
     },
     [
       corpusId, cursor, data.meta.release_id, data.query.available, dialect, direction,
-      kind, languageId, match, query, requirements, selectedDialect, setParams, translationLanguage,
+      kind, languageId, match, query, requirements, setParams, translationLanguage,
       translationSearchReady, tx,
     ],
   );
@@ -284,6 +284,7 @@ export function SearchTool({
                 resetResults();
                 setLanguageId(event.target.value);
                 setCorpusId("");
+                setDialect("");
                 setTargets([]);
                 setTargetsLoading(true);
               }}>
@@ -385,45 +386,45 @@ export function SearchTool({
                 setMatch(value);
               }} /><span>{t(`search.${value}`)}</span></label>)}
             </fieldset>
-            {kind === "sentences" && selectedLanguage && (
-              <>
-                {selectedDialect === undefined && (
-                  <label className="field">
-                    {tx("Dialect", "方言")}
-                    <select value={dialect} onChange={(event) => {
-                      resetResults();
-                      setDialect(event.target.value);
-                    }}>
-                      <option value="">{tx("All dialects", "所有方言")}</option>
-                      {selectedLanguage.dialects.map((value) => <option key={value} value={value}>{value}</option>)}
-                    </select>
-                  </label>
-                )}
-                <fieldset className="filter-checks">
-                  <legend>{tx("Require tiers", "必須包含")}</legend>
-                  {REQUIREMENTS.map((value) => (
-                    <label key={value}>
-                      <input
-                        type="checkbox"
-                        checked={requirements.includes(value)}
-                        onChange={() => {
-                          resetResults();
-                          setRequirements((current) => current.includes(value)
-                            ? current.filter((item) => item !== value)
-                            : [...current, value]);
-                        }}
-                      />
-                      <span>{tx(value, {
-                        translation: "翻譯",
-                        audio: "音訊",
-                        phonology: "音韻",
-                        interlinear: "逐行分析",
-                        unclear: "不確定標註",
-                      }[value])}</span>
-                    </label>
+            {selectedDialect === undefined && selectedLanguage?.dialects.length ? (
+              <label className="field">
+                {tx("Dialect", "方言")}
+                <select value={dialect} onChange={(event) => {
+                  resetResults();
+                  setDialect(event.target.value);
+                }}>
+                  <option value="">{tx("All dialects", "所有方言")}</option>
+                  {selectedLanguage.dialects.map((value) => (
+                    <option key={value} value={value}>{dialectName(value)}</option>
                   ))}
-                </fieldset>
-              </>
+                </select>
+              </label>
+            ) : null}
+            {kind === "sentences" && (
+              <fieldset className="filter-checks">
+                <legend>{tx("Require tiers", "必須包含")}</legend>
+                {REQUIREMENTS.map((value) => (
+                  <label key={value}>
+                    <input
+                      type="checkbox"
+                      checked={requirements.includes(value)}
+                      onChange={() => {
+                        resetResults();
+                        setRequirements((current) => current.includes(value)
+                          ? current.filter((item) => item !== value)
+                          : [...current, value]);
+                      }}
+                    />
+                    <span>{tx(value, {
+                      translation: "翻譯",
+                      audio: "音訊",
+                      phonology: "音韻",
+                      interlinear: "逐行分析",
+                      unclear: "不確定標註",
+                    }[value])}</span>
+                  </label>
+                ))}
+              </fieldset>
             )}
           </div>
         </details>

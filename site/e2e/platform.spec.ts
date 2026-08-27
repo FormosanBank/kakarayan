@@ -2,6 +2,8 @@ import AxeBuilder from "@axe-core/playwright";
 import {expect, test, type Page} from "@playwright/test";
 import {readFile} from "node:fs/promises";
 
+import type {SearchRecord} from "../src/types";
+
 async function selectFixtureScope(page: Page) {
   await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
   await page.getByText("Search options", {exact: true}).click();
@@ -39,6 +41,25 @@ function expectStableGeometry(
     expect(Math.abs(before[control].x - after[control].x)).toBeLessThanOrEqual(1);
     expect(Math.abs(before[control].width - after[control].width)).toBeLessThanOrEqual(1);
   }
+}
+
+function silentWav(seconds: number): Buffer {
+  const sampleRate = 8_000;
+  const dataSize = sampleRate * seconds;
+  const result = Buffer.alloc(44 + dataSize, 128);
+  result.write("RIFF", 0);
+  result.writeUInt32LE(36 + dataSize, 4);
+  result.write("WAVEfmt ", 8);
+  result.writeUInt32LE(16, 16);
+  result.writeUInt16LE(1, 20);
+  result.writeUInt16LE(1, 22);
+  result.writeUInt32LE(sampleRate, 24);
+  result.writeUInt32LE(sampleRate, 28);
+  result.writeUInt16LE(1, 32);
+  result.writeUInt16LE(8, 34);
+  result.write("data", 36);
+  result.writeUInt32LE(dataSize, 40);
+  return result;
 }
 
 test("boot and resource screens show structured loading states", async ({page}) => {
@@ -126,6 +147,35 @@ test("lookup makes the search and results languages explicit", async ({page}) =>
   await expectAccessible(page);
 });
 
+test("dialect scope is optional and consistent in lookup and learn", async ({page}) => {
+  await page.goto("lookup?type=dictionary");
+  await selectFixtureScope(page);
+  const lookupDialect = page.getByRole("combobox", {name: "Dialect"});
+  await expect(lookupDialect).toHaveValue("");
+  await expect(lookupDialect.locator("option")).toContainText(["All dialects", "Xiuguluan"]);
+  await lookupDialect.selectOption("Xiuguluan");
+  await page.locator(".search-form__query input").fill("lima");
+  const dictionaryResponse = page.waitForResponse(/\/dictionary\?/u);
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  expect(new URL((await dictionaryResponse).url()).searchParams.get("dialect")).toBe("Xiuguluan");
+
+  await page.goto("lookup?type=sentences");
+  await page.getByText("Search options", {exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveValue("");
+
+  await page.goto("learn?language=lang_amis&tool=lookup");
+  const learnDialect = page.getByRole("combobox", {name: "Dialect"});
+  await expect(learnDialect).toHaveValue("");
+  await expect(learnDialect.locator("option")).toContainText(["All dialects", "Xiuguluan"]);
+  await learnDialect.selectOption("Xiuguluan");
+  await page.locator(".search-form__query input").fill("lima");
+  const learnResponse = page.waitForResponse(/\/dictionary\?/u);
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  expect(new URL((await learnResponse).url()).searchParams.get("dialect")).toBe("Xiuguluan");
+  await page.getByRole("button", {name: "Sentence lookup", exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveValue("Xiuguluan");
+});
+
 test("production lookup and finite dataset routes respond", {tag: "@production-smoke"}, async ({page}) => {
   await disableServiceWorkerForRouting(page);
   await page.goto("lookup?type=dictionary");
@@ -207,6 +257,13 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   const detail = page.locator(".result-card").first();
   await expect(detail.getByRole("button", {name: "Save to deck"})).toBeVisible();
   expect(requests.some((url) => /\/sentences\/[^/?]+$/u.test(url))).toBe(true);
+  await detail.getByText("Audio evidence", {exact: false}).click();
+  await expect(detail.locator("audio")).toHaveAttribute(
+    "src",
+    "https://huggingface.co/datasets/FormosanBank/TestCorpusAudio/resolve/1111111111111111111111111111111111111111/sentence.wav#t=0,2.5",
+  );
+  await expect(detail.locator("audio")).toHaveAttribute("data-clip-start", "0");
+  await expect(detail.locator("audio")).toHaveAttribute("data-clip-end", "2.5");
   await detail.getByText("Source and record details", {exact: true}).click();
   await expect(detail.getByRole("link", {name: "Source XML"})).toHaveAttribute(
     "href",
@@ -387,6 +444,59 @@ test("lookup and record requests never leave stale results on screen", async ({p
   await expect(page.getByRole("button", {name: "Save to deck"}).first()).toBeVisible();
 });
 
+test("source audio playback stays inside the XML alignment", async ({page}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "Media behavior is exercised once");
+  await disableServiceWorkerForRouting(page);
+  await page.route(/\/sentences\/[^/?]+$/u, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json() as SearchRecord;
+    const audio = body.audio[0];
+    if (!audio) throw new Error("Fixture sentence has no audio evidence");
+    audio.playback_urls = [];
+    audio.url = "https://audio.example.test/full.wav";
+    await route.fulfill({response, json: body});
+  });
+  await page.route("https://audio.example.test/full.wav", async (route) => {
+    await route.fulfill({
+      body: silentWav(10),
+      contentType: "audio/wav",
+      headers: {"Accept-Ranges": "bytes"},
+    });
+  });
+
+  await page.goto("lookup?type=sentences");
+  await selectFixtureScope(page);
+  await page.locator(".search-form__query input").fill("lima");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  await page.locator(".result-card--summary").first()
+    .getByRole("button", {name: "Open full record"}).click();
+  await page.getByText("Audio evidence (1)", {exact: true}).click();
+
+  const player = page.locator(".audio-evidence audio");
+  await expect(player).toBeVisible();
+  await expect(player).toHaveAttribute("src", "https://audio.example.test/full.wav#t=1.25,3.75");
+  await expect(player).toHaveAttribute("data-clip-start", "1.25");
+  await expect(player).toHaveAttribute("data-clip-end", "3.75");
+  await expect.poll(() => player.evaluate((audio) => (audio as HTMLAudioElement).currentTime))
+    .toBeCloseTo(1.25, 1);
+
+  await player.evaluate((audio) => {
+    (audio as HTMLAudioElement).currentTime = 0;
+  });
+  await expect.poll(() => player.evaluate((audio) => (audio as HTMLAudioElement).currentTime))
+    .toBeCloseTo(1.25, 1);
+
+  await player.evaluate(async (audio) => {
+    const element = audio as HTMLAudioElement;
+    element.currentTime = 3.55;
+    await element.play();
+  });
+  await expect.poll(() => player.evaluate((audio) => (audio as HTMLAudioElement).paused))
+    .toBe(true);
+  expect(await player.evaluate((audio) => (audio as HTMLAudioElement).currentTime))
+    .toBeLessThanOrEqual(3.8);
+});
+
 test("research preview, finite recipe, export, and summaries share the API", async ({page}) => {
   await disableServiceWorkerForRouting(page);
   let delayPreview = false;
@@ -479,7 +589,17 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await page.getByRole("button", {name: "Compute summaries"}).click();
   await expect(page.locator(".summaries .loading-state--table")).toContainText("Computing corpus summary");
   releaseSummary();
-  await expect(page.getByRole("table")).toBeVisible();
+  const summaryTable = page.locator(".summary-table");
+  await expect(summaryTable).toBeVisible();
+  const initialCount = await summaryTable.getByRole("columnheader", {name: "Count"}).boundingBox();
+  if (!initialCount) throw new Error("Summary count column geometry unavailable");
+  for (const label of ["Normalized forms", "Translations", "Distribution", "Source forms"]) {
+    await page.getByRole("tab", {name: label, exact: true}).click();
+    const currentCount = await summaryTable.getByRole("columnheader", {name: "Count"}).boundingBox();
+    if (!currentCount) throw new Error(`Summary count column geometry unavailable for ${label}`);
+    expect(Math.abs(currentCount.x - initialCount.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(currentCount.width - initialCount.width)).toBeLessThanOrEqual(1);
+  }
 });
 
 test("dataset previews isolate and retry one XML-level failure", async ({page}) => {
@@ -546,6 +666,8 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expect(page.locator(".api-explorer__response .loading-state--code")).toContainText("Waiting for API response");
   releaseRequest();
   await expect(page.locator(".api-explorer__response")).toContainText('"headword": "lima"');
+  await expect(page.locator(".api-explorer__response .code-token--property").first()).toBeVisible();
+  await expect(page.locator(".api-explorer__response .code-token--string").first()).toBeVisible();
   await page.unroute(/\/dictionary\?/u);
   await page.getByRole("button", {name: "Sentences", exact: true}).click();
   await expect(page.getByRole("button", {name: "Sentences", exact: true})).toHaveAttribute("aria-pressed", "true");
@@ -554,6 +676,11 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expect(page.locator(".code-example")).toContainText("/concordance");
   await page.getByRole("tab", {name: "JavaScript"}).click();
   await expect(page.getByRole("tabpanel")).toContainText("URLSearchParams");
+  const keywordColor = await page.locator(".code-example .code-token--keyword").first()
+    .evaluate((element) => getComputedStyle(element).color);
+  const stringColor = await page.locator(".code-example .code-token--string").first()
+    .evaluate((element) => getComputedStyle(element).color);
+  expect(keywordColor).not.toBe(stringColor);
   if (browserName === "chromium") {
     await page.getByRole("button", {name: "Copy code"}).click();
     await expect(page.getByRole("button", {name: "Copied"})).toBeVisible();

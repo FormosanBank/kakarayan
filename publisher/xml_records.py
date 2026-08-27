@@ -12,6 +12,7 @@ from pathlib import Path
 from lxml import etree
 
 from api.search import normalize_surface, normalize_text, tokenize
+from publisher.audio_sources import AudioSources
 from publisher.identifiers import dimension_id, record_id
 from publisher.languages import resolve_language
 
@@ -177,6 +178,7 @@ def _tier_row(
             {
                 "file": element.get("file", ""),
                 "url": element.get("url", ""),
+                "playback_urls": "[]",
                 "start": start,
                 "end": end,
                 "start_raw": element.get("start", ""),
@@ -353,7 +355,7 @@ def _append_owner(
     return owner_id
 
 
-def project_xml(path: Path, repo: Path) -> Projection:
+def project_xml(path: Path, repo: Path, audio_sources: AudioSources | None = None) -> Projection:
     """Project one canonical XML file while retaining its stable source locator."""
     source_path = path.resolve().relative_to(repo.resolve()).as_posix()
     parts = Path(source_path).parts
@@ -422,4 +424,14 @@ def project_xml(path: Path, repo: Path) -> Projection:
                 position=sentence_position,
             )
             sentence_position += 1
+    if audio_sources is not None:
+        for row in projection.rows["audio"]:
+            row["playback_urls"] = json.dumps(
+                audio_sources.playback_urls(
+                    source_path,
+                    str(row.get("file", "")),
+                    str(row.get("owner_type", "")),
+                ),
+                ensure_ascii=False,
+            )
     return projection

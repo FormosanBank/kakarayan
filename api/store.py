@@ -453,7 +453,7 @@ class CorpusStore:
         owner_type: str,
         owner_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
-        return {
+        tiers = {
             table: [
                 dict(row)
                 for row in connection.execute(
@@ -464,6 +464,9 @@ class CorpusStore:
             ]
             for table in ("forms", "phonology", "translations", "audio")
         }
+        for audio in tiers["audio"]:
+            audio["playback_urls"] = json.loads(str(audio["playback_urls"]))
+        return tiers
 
     def text(self, text_id: str) -> dict[str, Any]:
         with self.connect() as connection:
