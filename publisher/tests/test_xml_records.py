@@ -32,7 +32,7 @@ def test_projection_preserves_tiers_and_canonical_counting(public_repo: Path) ->
 
     sentence = projection.rows["sentences"][0]
     assert sentence["token_count"] == 2
-    assert json.loads(projection.rows["audio"][1]["playback_urls"]) == [
+    assert json.loads(str(projection.rows["audio"][1]["playback_urls"])) == [
         "https://huggingface.co/datasets/FormosanBank/TestCorpusAudio/resolve/"
         "1111111111111111111111111111111111111111/sentence.wav"
     ]

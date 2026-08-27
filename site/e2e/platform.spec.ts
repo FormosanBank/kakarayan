@@ -126,6 +126,35 @@ test("lookup makes the search and results languages explicit", async ({page}) =>
   await expectAccessible(page);
 });
 
+test("dialect scope is optional and consistent in lookup and learn", async ({page}) => {
+  await page.goto("lookup?type=dictionary");
+  await selectFixtureScope(page);
+  const lookupDialect = page.getByRole("combobox", {name: "Dialect"});
+  await expect(lookupDialect).toHaveValue("");
+  await expect(lookupDialect.locator("option")).toContainText(["All dialects", "Xiuguluan"]);
+  await lookupDialect.selectOption("Xiuguluan");
+  await page.locator(".search-form__query input").fill("lima");
+  const dictionaryResponse = page.waitForResponse(/\/dictionary\?/u);
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  expect(new URL((await dictionaryResponse).url()).searchParams.get("dialect")).toBe("Xiuguluan");
+
+  await page.goto("lookup?type=sentences");
+  await page.getByText("Search options", {exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveValue("");
+
+  await page.goto("learn?language=lang_amis&tool=lookup");
+  const learnDialect = page.getByRole("combobox", {name: "Dialect"});
+  await expect(learnDialect).toHaveValue("");
+  await expect(learnDialect.locator("option")).toContainText(["All dialects", "Xiuguluan"]);
+  await learnDialect.selectOption("Xiuguluan");
+  await page.locator(".search-form__query input").fill("lima");
+  const learnResponse = page.waitForResponse(/\/dictionary\?/u);
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  expect(new URL((await learnResponse).url()).searchParams.get("dialect")).toBe("Xiuguluan");
+  await page.getByRole("button", {name: "Sentence lookup", exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveValue("Xiuguluan");
+});
+
 test("production lookup and finite dataset routes respond", {tag: "@production-smoke"}, async ({page}) => {
   await disableServiceWorkerForRouting(page);
   await page.goto("lookup?type=dictionary");
@@ -207,6 +236,11 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   const detail = page.locator(".result-card").first();
   await expect(detail.getByRole("button", {name: "Save to deck"})).toBeVisible();
   expect(requests.some((url) => /\/sentences\/[^/?]+$/u.test(url))).toBe(true);
+  await detail.getByText("Audio evidence", {exact: false}).click();
+  await expect(detail.locator("audio")).toHaveAttribute(
+    "src",
+    "https://huggingface.co/datasets/FormosanBank/TestCorpusAudio/resolve/1111111111111111111111111111111111111111/sentence.wav",
+  );
   await detail.getByText("Source and record details", {exact: true}).click();
   await expect(detail.getByRole("link", {name: "Source XML"})).toHaveAttribute(
     "href",
@@ -479,7 +513,17 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   await page.getByRole("button", {name: "Compute summaries"}).click();
   await expect(page.locator(".summaries .loading-state--table")).toContainText("Computing corpus summary");
   releaseSummary();
-  await expect(page.getByRole("table")).toBeVisible();
+  const summaryTable = page.locator(".summary-table");
+  await expect(summaryTable).toBeVisible();
+  const initialCount = await summaryTable.getByRole("columnheader", {name: "Count"}).boundingBox();
+  if (!initialCount) throw new Error("Summary count column geometry unavailable");
+  for (const label of ["Normalized forms", "Translations", "Distribution", "Source forms"]) {
+    await page.getByRole("tab", {name: label, exact: true}).click();
+    const currentCount = await summaryTable.getByRole("columnheader", {name: "Count"}).boundingBox();
+    if (!currentCount) throw new Error(`Summary count column geometry unavailable for ${label}`);
+    expect(Math.abs(currentCount.x - initialCount.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(currentCount.width - initialCount.width)).toBeLessThanOrEqual(1);
+  }
 });
 
 test("dataset previews isolate and retry one XML-level failure", async ({page}) => {

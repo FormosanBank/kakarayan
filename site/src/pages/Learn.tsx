@@ -21,7 +21,10 @@ export function Learn({data}: {data: AppData}) {
   const initialLanguage = data.languages.find((language) => language.id === requestedLanguage) ?? amis ?? data.languages[0];
   const [languageId, setLanguageId] = useState(initialLanguage?.id ?? "");
   const language = data.languages.find((item) => item.id === languageId) ?? data.languages[0];
-  const [dialect, setDialect] = useState(language?.dialects[0] ?? "");
+  const requestedDialect = params.get("dialect") ?? "";
+  const [dialect, setDialect] = useState(
+    initialLanguage?.dialects.includes(requestedDialect) ? requestedDialect : "",
+  );
   const requestedTool = params.get("tool") as StudioTab | null;
   const [tab, setTab] = useState<StudioTab>(
     requestedTool && ["lookup", "deck", "practice", "translation", "orthography", "lessons"].includes(requestedTool)
@@ -35,9 +38,8 @@ export function Learn({data}: {data: AppData}) {
   const [pendingSentenceQuery, setPendingSentenceQuery] = useState<string | null>(null);
   const [practiceTarget, setPracticeTarget] = useState("");
   function changeLanguage(nextId: string) {
-    const next = data.languages.find((item) => item.id === nextId);
     setLanguageId(nextId);
-    setDialect(next?.dialects[0] ?? "");
+    setDialect("");
     setPendingSentenceQuery(null);
   }
 
@@ -80,6 +82,7 @@ export function Learn({data}: {data: AppData}) {
             <label className="field">
               {tx("Dialect", "方言")}
               <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
+                <option value="">{tx("All dialects", "所有方言")}</option>
                 {language.dialects.map((value) => <option key={value} value={value}>{dialectName(value)}</option>)}
               </select>
             </label>
