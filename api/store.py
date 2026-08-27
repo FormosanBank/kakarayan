@@ -668,62 +668,98 @@ class CorpusStore:
         self,
         connection: sqlite3.Connection,
         *,
-        headword: str,
+        headwords: Sequence[str],
         language_id: str,
         corpus_id: str | None,
         dialect: str | None,
         translation_language: str | None,
         query: str,
         match: MatchMode,
-    ) -> list[dict[str, Any]]:
-        clauses, parameters = self._scope(language_id, corpus_id, dialect)
+    ) -> dict[str, list[dict[str, Any]]]:
+        if not headwords:
+            return {}
+
+        requested = ", ".join("(?)" for _ in headwords)
+        term_clauses, term_parameters = self._scope(language_id, corpus_id, dialect, alias="d")
+        match_parameters: tuple[str, ...]
         if match == "contains" and len(query) < 3:
-            match_clause = "tr.normalized LIKE ? ESCAPE '\\'"
-            parameters.append(f"%{_like(query)}%")
+            match_clause = "d.normalized LIKE ? ESCAPE '\\'"
+            match_parameters = (f"%{_like(query)}%",)
         else:
-            match_clause, match_parameters = _predicate(
-                "tr.normalized", query, match, "translation"
-            )
-            parameters.extend(match_parameters)
-        clauses.append(match_clause)
+            match_clause, match_parameters = _predicate("d.normalized", query, match, "translation")
+        term_clauses.append(match_clause)
+        term_parameters.extend(match_parameters)
         if translation_language:
-            clauses.append("tr.xml_lang = ?")
-            parameters.append(translation_language)
-        clauses.append(
-            "((tr.owner_type <> 'sentence' AND EXISTS ("
-            "SELECT 1 FROM forms matched_form "
-            "WHERE matched_form.owner_type = tr.owner_type "
-            "AND matched_form.owner_id = tr.owner_id "
-            "AND matched_form.normalized = ?)) "
-            "OR (tr.owner_type = 'word' AND EXISTS ("
-            "SELECT 1 FROM tokens matched_token "
-            "WHERE matched_token.word_id = tr.owner_id "
-            "AND matched_token.normalized = ?)) "
-            "OR (tr.owner_type = 'sentence' AND s.token_count = 1 AND EXISTS ("
-            "SELECT 1 FROM tokens matched_token "
-            "WHERE matched_token.sentence_id = s.id "
-            "AND matched_token.normalized = ?)))"
-        )
-        parameters.extend((headword, headword, headword))
-        return [
-            dict(row)
-            for row in connection.execute(
-                f"""
-                SELECT ts.sentence_id, tr.owner_id, t.corpus_id,
-                       tr.text AS matched_text, tr.xml_lang AS matched_xml_lang,
-                       tr.position AS matched_position
-                FROM translations tr
-                JOIN tier_scope_view ts
-                  ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
-                JOIN sentences s ON s.id = ts.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(clauses)}
-                ORDER BY t.source_path, s.position, tr.position, tr.text
-                LIMIT ?
-                """,
-                (*parameters, DICTIONARY_MEANING_LIMIT + 1),
+            term_clauses.append("d.xml_lang = ?")
+            term_parameters.append(translation_language)
+        evidence_clauses, evidence_parameters = self._scope(language_id, corpus_id, dialect)
+        rows = connection.execute(
+            f"""
+            WITH requested(headword) AS (VALUES {requested}),
+            matched_terms AS MATERIALIZED (
+              SELECT DISTINCT d.headword, d.normalized, d.xml_lang
+              FROM reverse_dictionary_terms d
+              JOIN requested r ON r.headword = d.headword
+              WHERE {" AND ".join(term_clauses)}
+            ),
+            candidates AS (
+              SELECT mt.headword, ts.sentence_id, tr.owner_id, t.corpus_id,
+                     tr.text AS matched_text, tr.xml_lang AS matched_xml_lang,
+                     tr.position AS matched_position, t.source_path,
+                     s.position AS sentence_position
+              FROM matched_terms mt
+              JOIN translations tr
+                ON tr.normalized = mt.normalized AND tr.xml_lang = mt.xml_lang
+              JOIN tier_scope_view ts
+                ON ts.owner_type = tr.owner_type AND ts.owner_id = tr.owner_id
+              JOIN sentences s ON s.id = ts.sentence_id
+              JOIN texts t ON t.id = s.parent_id
+              WHERE {" AND ".join(evidence_clauses)}
+                AND (
+                  (tr.owner_type <> 'sentence' AND EXISTS (
+                    SELECT 1 FROM forms matched_form
+                    WHERE matched_form.owner_type = tr.owner_type
+                      AND matched_form.owner_id = tr.owner_id
+                      AND matched_form.normalized = mt.headword
+                  ))
+                  OR (tr.owner_type = 'word' AND EXISTS (
+                    SELECT 1 FROM tokens matched_token
+                    WHERE matched_token.word_id = tr.owner_id
+                      AND matched_token.normalized = mt.headword
+                  ))
+                  OR (tr.owner_type = 'sentence' AND s.token_count = 1 AND EXISTS (
+                    SELECT 1 FROM tokens matched_token
+                    WHERE matched_token.sentence_id = s.id
+                      AND matched_token.normalized = mt.headword
+                  ))
+                )
+            ),
+            ranked AS (
+              SELECT *, ROW_NUMBER() OVER (
+                PARTITION BY headword
+                ORDER BY source_path, sentence_position, matched_position,
+                         matched_text, sentence_id, owner_id
+              ) AS evidence_rank
+              FROM candidates
             )
-        ]
+            SELECT headword, sentence_id, owner_id, corpus_id, matched_text,
+                   matched_xml_lang, matched_position
+            FROM ranked
+            WHERE evidence_rank <= ?
+            ORDER BY headword, evidence_rank
+            """,
+            (
+                *headwords,
+                *term_parameters,
+                *evidence_parameters,
+                DICTIONARY_MEANING_LIMIT + 1,
+            ),
+        )
+        evidence: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+        for row in rows:
+            item = dict(row)
+            evidence[str(item.pop("headword"))].append(item)
+        return dict(evidence)
 
     def _dictionary_evidence(
         self,
@@ -734,8 +770,7 @@ class CorpusStore:
         corpus_id: str | None,
         dialect: str | None,
         translation_language: str | None,
-        reverse_query: str | None,
-        reverse_match: MatchMode,
+        matched_rows: Sequence[Mapping[str, Any]],
     ) -> dict[str, Any]:
         clauses, parameters = self._scope(language_id, corpus_id, dialect)
         rows = [
@@ -773,20 +808,6 @@ class CorpusStore:
                     (*parameters, headword),
                 )
             ]
-        matched_rows = (
-            self._reverse_dictionary_evidence(
-                connection,
-                headword=headword,
-                language_id=language_id,
-                corpus_id=corpus_id,
-                dialect=dialect,
-                translation_language=translation_language,
-                query=reverse_query,
-                match=reverse_match,
-            )
-            if reverse_query is not None
-            else []
-        )
         candidate_sentence_ids = list(
             dict.fromkeys(str(row["sentence_id"]) for row in (*matched_rows, *rows))
         )
@@ -982,17 +1003,32 @@ class CorpusStore:
                     (*parameters, limit + 1),
                 )
             ]
-            items = []
-            for row in rows[:limit]:
-                evidence = self._dictionary_evidence(
+            selected_rows = rows[:limit]
+            reverse_evidence = (
+                self._reverse_dictionary_evidence(
                     connection,
-                    headword=str(row["headword"]),
+                    headwords=[str(row["headword"]) for row in selected_rows],
                     language_id=language_id,
                     corpus_id=corpus_id,
                     dialect=dialect,
                     translation_language=translation_language,
-                    reverse_query=normalized if direction == "translation" else None,
-                    reverse_match=match,
+                    query=normalized,
+                    match=match,
+                )
+                if direction == "translation"
+                else {}
+            )
+            items = []
+            for row in selected_rows:
+                headword = str(row["headword"])
+                evidence = self._dictionary_evidence(
+                    connection,
+                    headword=headword,
+                    language_id=language_id,
+                    corpus_id=corpus_id,
+                    dialect=dialect,
+                    translation_language=translation_language,
+                    matched_rows=reverse_evidence.get(headword, ()),
                 )
                 items.append(
                     {
