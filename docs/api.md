@@ -94,7 +94,9 @@ citations, and a small example set. Each meaning has `text` and `xml_lang`. Conc
 results contain sentence summaries and a detail identifier. Full words, morphemes, forms,
 phonology, translations, and audio are returned only by the sentence detail route.
 Audio entries preserve the XML reference and provide ordered, release-pinned `playback_urls`
-when FormosanBank declares a public audio mirror.
+when FormosanBank declares a public audio mirror. Those URLs resolve the XML `file` and use
+a clip-local timeline. Raw `url` and `source` fallbacks retain the source-recording timeline,
+so clients must apply the entry's `start` and `end` offsets when playing them.
 
 ## Pagination
 
