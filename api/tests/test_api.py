@@ -209,6 +209,27 @@ def test_bidirectional_dictionary_and_concordance(client: TestClient) -> None:
             "kind": "gloss",
         }
     ]
+
+    tier_contains = client.get(
+        release_path(client, "concordance"),
+        params={
+            "q": "ive.w",
+            "language_id": "lang_amis",
+            "direction": "translation",
+            "translation_language": "eng",
+            "match": "contains",
+        },
+    )
+    assert tier_contains.status_code == 200
+    assert tier_contains.json()["items"][0]["match_evidence"] == [
+        {
+            "tier": "word",
+            "field": "translation",
+            "text": "five.word",
+            "xml_lang": "eng",
+            "kind": "gloss",
+        }
+    ]
     languages = client.get(
         release_path(client, "translation-languages"),
         params={"language_id": "lang_amis"},
