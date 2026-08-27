@@ -16,18 +16,44 @@ import type {
 import {LoadingState} from "./LoadingState";
 import {QueryHighlight} from "./QueryHighlight";
 
-function playableUrl(record: SearchRecord, index: number): string {
+function playableUrls(record: SearchRecord, index: number): string[] {
   const audio = record.audio[index];
-  if (!audio) return "";
-  for (const value of [audio.url, audio.source, audio.file]) {
+  if (!audio) return [];
+  const result: string[] = [];
+  for (const value of [...audio.playback_urls, audio.url, audio.source]) {
     try {
       const url = new URL(value);
-      if (url.protocol === "https:" || url.protocol === "http:") return url.href;
+      if ((url.protocol === "https:" || url.protocol === "http:") && !result.includes(url.href)) {
+        result.push(url.href);
+      }
     } catch {
       // Relative and local filesystem references remain visible as provenance only.
     }
   }
-  return "";
+  return result;
+}
+
+function SourceAudio({urls}: {urls: string[]}) {
+  const {tx} = useI18n();
+  const [candidate, setCandidate] = useState(0);
+  const [failed, setFailed] = useState(false);
+  if (urls.length === 0) {
+    return <small>{tx("Reference is not a public web URL.", "此參照不是公開網路網址。")}</small>;
+  }
+  if (failed) {
+    return <small>{tx("Audio could not be loaded.", "無法載入音訊。")}</small>;
+  }
+  return (
+    <audio
+      controls
+      preload="metadata"
+      src={urls[candidate]}
+      onError={() => {
+        if (candidate + 1 < urls.length) setCandidate(candidate + 1);
+        else setFailed(true);
+      }}
+    />
+  );
 }
 
 function SentenceText({
@@ -239,7 +265,7 @@ function SearchResultDetail({
         <details className="audio-evidence">
           <summary>{tx("Audio evidence", "音訊證據")} ({number(record.audio.length)})</summary>
           {record.audio.slice(0, 5).map((audio, index) => {
-            const url = playableUrl(record, index);
+            const urls = playableUrls(record, index);
             return (
               <div key={`${audio.owner_id}-${audio.position}`}>
                 <code>{audio.file || audio.url || audio.source || tx("unnamed reference", "未命名參照")}</code>
@@ -248,11 +274,7 @@ function SearchResultDetail({
                     {audio.start.toFixed(3)}s {tx("to", "至")} {audio.end?.toFixed(3) ?? tx("unknown", "未知")}s
                   </span>
                 )}
-                {url ? (
-                  <audio controls preload="none" src={url} />
-                ) : (
-                  <small>{tx("Reference is not a public web URL.", "此參照不是公開網路網址。")}</small>
-                )}
+                <SourceAudio urls={urls} />
               </div>
             );
           })}

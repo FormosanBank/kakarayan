@@ -251,7 +251,8 @@ def dataset_expression(level: RecordLevel, field: DatasetField) -> str:
     elif field == "audio":
         value = f"""COALESCE((SELECT '[' || group_concat(value, ',') || ']' FROM (
             SELECT json_object(
-              'file', a.file, 'url', a.url, 'start', a.start, 'end', a.end,
+              'file', a.file, 'url', a.url, 'playback_urls', json(a.playback_urls),
+              'start', a.start, 'end', a.end,
               'source', a.source, 'availability_status', a.availability_status
             ) AS value
             FROM audio a

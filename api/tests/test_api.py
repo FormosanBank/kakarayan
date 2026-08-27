@@ -73,6 +73,10 @@ def test_record_summary_then_detail(client: TestClient) -> None:
     assert sentence.status_code == 200
     body = sentence.json()
     assert body["standard"] == "lima waco"
+    assert body["audio"][0]["playback_urls"] == [
+        "https://huggingface.co/datasets/FormosanBank/TestCorpusAudio/resolve/"
+        "1111111111111111111111111111111111111111/sentence.wav"
+    ]
     assert body["forms"][0]["kind"] == "standard"
     assert body["words"][0]["morphemes"][0]["id"]
     assert any(item["text"] == "FIVE" for item in body["tier_translations"])

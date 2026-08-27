@@ -24,6 +24,7 @@ from referencing import Registry, Resource
 
 from publisher import API_VERSION, APPLICATION_VERSION, PUBLIC_DOWNLOAD_PATHS, SCHEMA_VERSION
 from publisher.archive import directory_entries, write_zip
+from publisher.audio_sources import load_audio_sources
 from publisher.languages import language_rows
 from publisher.model_catalog import configured_model_catalog
 from publisher.orthography import build_orthography_catalog
@@ -950,6 +951,7 @@ def build_release(
     release_id = _release_id(source, kakarayan_commit)
     generated_at = _timestamp(source.committed_at).isoformat().replace("+00:00", "Z")
     xml_paths = list(discover_xml(repo))
+    audio_sources = load_audio_sources(repo)
     corpus_names = sorted({path.relative_to(repo).parts[1] for path in xml_paths})
     rights = build_rights_catalog(corpus_names, overrides_path=rights_overrides)
     models = model_catalog or configured_model_catalog(generated_at)
@@ -985,7 +987,7 @@ def build_release(
             for writer in csv_writers.values():
                 writer.writeheader()
             for path in xml_paths:
-                projection = project_xml(path, repo)
+                projection = project_xml(path, repo, audio_sources)
                 _insert_projection(connection, projection)
                 _write_projection(projection, csv_writers, jsonl_files)
                 warnings.extend(

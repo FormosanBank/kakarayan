@@ -93,6 +93,8 @@ Initial dictionary results contain a headword, language-tagged `meanings`, scope
 citations, and a small example set. Each meaning has `text` and `xml_lang`. Concordance
 results contain sentence summaries and a detail identifier. Full words, morphemes, forms,
 phonology, translations, and audio are returned only by the sentence detail route.
+Audio entries preserve the XML reference and provide ordered, release-pinned `playback_urls`
+when FormosanBank declares a public audio mirror.
 
 ## Pagination
 
