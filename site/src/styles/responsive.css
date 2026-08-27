@@ -1,24 +1,16 @@
 @media (max-width: 1024px) {
-  .learner-scope {
-    grid-template-columns: 1fr;
-  }
-
-  .learner-scope__coverage {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
   .catalog-grid,
   .model-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .search-form__fields--translation {
-    grid-template-columns: repeat(2, minmax(150px, 0.75fr)) minmax(240px, 1.5fr);
+  .search-form__fields,
+  .search-form__fields--controlled {
+    grid-template-columns: repeat(3, minmax(150px, 1fr));
   }
 
-  .search-form__fields--translation .search-form__actions {
-    grid-column: 1 / -1;
-    width: 120px;
+  .search-form__query {
+    grid-column: span 2;
   }
 
   .builder__grid {
@@ -222,7 +214,7 @@
     min-height: 250px;
   }
 
-  .learner-scope__selectors,
+  .learner-toolbar,
   .manual-card__form {
     grid-template-columns: 1fr;
   }
@@ -288,11 +280,6 @@
   .search-form__actions {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .lookup-guide ol {
-    grid-template-columns: 1fr;
-    gap: 12px;
   }
 
   .lookup-kind-toggle,
@@ -385,14 +372,6 @@
     padding: 9px 8px;
     line-height: 1.2;
     white-space: normal;
-  }
-
-  .learner-scope__coverage {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .learner-scope__coverage > div:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
   }
 
   .tool-heading {

@@ -41,6 +41,24 @@ async function seedLegacyCard(page: Page) {
   );
 }
 
+test("learn keeps one language context across its tools", async ({page}) => {
+  await page.goto("learn");
+  await expect(page.getByRole("heading", {level: 1})).toHaveText("Learn");
+  await expect(page.getByRole("combobox", {name: "Formosan language"})).toHaveCount(1);
+  await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveCount(1);
+  await expect(page.getByRole("combobox", {name: "Search text language"})).toBeVisible();
+  await expect(page.getByRole("combobox", {name: "Results language"})).toBeVisible();
+  await expect(page.getByText("Corpus sentences", {exact: true})).toHaveCount(0);
+
+  await page.getByRole("button", {name: "Sentence lookup"}).click();
+  await page.getByText("Search options", {exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveCount(1);
+
+  await page.getByRole("tab", {name: "Translation", exact: true}).click();
+  await expect(page.getByRole("combobox", {name: "Formosan language"})).toHaveCount(1);
+  await expect(page.getByRole("heading", {name: "Machine translation"})).toBeVisible();
+});
+
 test("local study data migrates, backs up, and restores", async ({page}, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "IndexedDB is exercised once");
   await page.goto("learn");

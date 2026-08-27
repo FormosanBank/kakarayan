@@ -1,4 +1,4 @@
-import {useMemo, useState} from "react";
+import {useState} from "react";
 
 import {PageIntro} from "../components/Layout";
 import {LookupKindToggle} from "../components/LookupKindToggle";
@@ -14,7 +14,7 @@ import type {AppData, DictionaryEntry, SearchRecord} from "../types";
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
 
 export function Learn({data}: {data: AppData}) {
-  const {dialectName, languageName, number, t, tx} = useI18n();
+  const {dialectName, languageName, t, tx} = useI18n();
   const [params] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const requestedLanguage = params.get("language");
@@ -34,15 +34,6 @@ export function Learn({data}: {data: AppData}) {
   );
   const [pendingSentenceQuery, setPendingSentenceQuery] = useState<string | null>(null);
   const [practiceTarget, setPracticeTarget] = useState("");
-  const capability = useMemo(() => {
-    if (!language) return {mt: false, asr: false, orthography: false};
-    return {
-      mt: data.models.models.some((model) => model.task === "translation" && model.languages.includes(language.iso639_3)),
-      asr: data.models.models.some((model) => model.task === "automatic-speech-recognition" && model.languages.includes(language.iso639_3)),
-      orthography: data.orthography.tables.some((table) => table.language === language.name),
-    };
-  }, [data.models.models, data.orthography.tables, language]);
-
   function changeLanguage(nextId: string) {
     const next = data.languages.find((item) => item.id === nextId);
     setLanguageId(nextId);
@@ -78,28 +69,21 @@ export function Learn({data}: {data: AppData}) {
     <div className="page-wrap page-wrap--wide learner-page">
       <PageIntro title={t("learn.title")} />
       {language && (
-        <section className="learner-scope" aria-label={tx("Learning language", "學習語言")}>
-          <div className="learner-scope__selectors">
+        <section className="learner-toolbar" aria-label={tx("Learning context", "學習範圍")}>
+          <label className="field">
+            {tx("Formosan language", "臺灣南島語")}
+            <select value={language.id} onChange={(event) => changeLanguage(event.target.value)}>
+              {data.languages.map((item) => <option key={item.id} value={item.id}>{languageName(item)}</option>)}
+            </select>
+          </label>
+          {language.dialects.length > 0 && (
             <label className="field">
-              {tx("Learning language", "學習語言")}
-              <select value={language.id} onChange={(event) => changeLanguage(event.target.value)}>
-                {data.languages.map((item) => <option key={item.id} value={item.id}>{languageName(item)}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              {tx("Dialect context", "方言脈絡")}
+              {tx("Dialect", "方言")}
               <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
                 {language.dialects.map((value) => <option key={value} value={value}>{dialectName(value)}</option>)}
               </select>
             </label>
-          </div>
-          <dl className="learner-scope__coverage">
-            <div><dt>{tx("Corpus sentences", "語料句子")}</dt><dd>{number(language.counts.sentences ?? 0)}</dd></div>
-            <div><dt>{tx("Audio references", "音訊參照")}</dt><dd>{number(language.counts.audio ?? 0)}</dd></div>
-            <div><dt>MT</dt><dd>{capability.mt ? tx("model", "模型") : tx("corpus only", "僅語料")}</dd></div>
-            <div><dt>ASR</dt><dd>{capability.asr ? tx("model", "模型") : tx("not registered", "未登錄")}</dd></div>
-            <div><dt>{tx("Orthography", "正寫法")}</dt><dd>{capability.orthography ? tx("table", "轉換表") : tx("not registered", "未登錄")}</dd></div>
-          </dl>
+          )}
         </section>
       )}
       <div className="studio-tabs" role="tablist" aria-label={tx("Learner tools", "學習工具")}>
@@ -124,13 +108,13 @@ export function Learn({data}: {data: AppData}) {
             <LookupKindToggle kind={lookupKind} onChange={selectLookupKind} />
             <div id="lookup-results">
               <SearchTool
-                key={`${lookupKind}-${languageId}-${pendingSentenceQuery ?? ""}`}
+                key={`${lookupKind}-${languageId}-${dialect}-${pendingSentenceQuery ?? ""}`}
                 data={data}
                 kind={lookupKind}
                 learner
                 autoSearch={pendingSentenceQuery !== null}
                 selectedLanguageId={languageId}
-                onLanguageChange={changeLanguage}
+                selectedDialect={dialect}
                 onPractice={practice}
                 onViewSentences={viewSentences}
                 {...(pendingSentenceQuery !== null && {initialQuery: pendingSentenceQuery})}
@@ -148,7 +132,6 @@ export function Learn({data}: {data: AppData}) {
             languages={data.languages}
             selectedLanguageId={languageId}
             selectedDialect={dialect}
-            onLanguageChange={changeLanguage}
           />
         )}
         {tab === "orthography" && (

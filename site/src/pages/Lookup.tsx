@@ -31,14 +31,7 @@ export function Lookup({
 
   return (
     <div className="page-wrap page-wrap--wide lookup-page">
-      <PageIntro
-        eyebrow={tx("CORPUS LOOKUP", "語料查詢")}
-        title={tx("Dictionary and sentences", "單詞釋義與語境例句")}
-        lede={tx(
-          "Search Formosan words and sentences, or start with a translation to find the Formosan expression.",
-          "查詢臺灣南島語單詞與例句，或從翻譯反查相符的臺灣南島語表達。",
-        )}
-      />
+      <PageIntro title={tx("Dictionary and sentences", "單詞釋義與語境例句")} />
       <LookupKindToggle kind={kind} onChange={selectKind} />
       <div id="lookup-results">
         <SearchTool key={kind} data={data} kind={kind} />

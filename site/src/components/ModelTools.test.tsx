@@ -72,7 +72,6 @@ describe("translation progress", () => {
             languages={[language]}
             selectedLanguageId={language.id}
             selectedDialect="Coastal"
-            onLanguageChange={() => undefined}
           />
         </RoutingProvider>
       </I18nProvider>,
