@@ -47,7 +47,7 @@ export function ApiExplorer({
     endpoint.searchParams.set("direction", direction);
     endpoint.searchParams.set("match", match);
     endpoint.searchParams.set("limit", String(limit));
-    if (direction === "translation" && translationLanguage.trim()) {
+    if (translationLanguage.trim()) {
       endpoint.searchParams.set("translation_language", translationLanguage.trim());
     }
     return {
@@ -118,10 +118,7 @@ export function ApiExplorer({
   return (
     <section className="api-explorer" aria-labelledby="api-playground-title">
       <div className="section-heading api-explorer__heading">
-        <div>
-          <h2 id="api-playground-title">{tx("API playground", "API 測試工具")}</h2>
-          <p>{tx("Build a request and inspect the response.", "建立請求並檢視回應。")}</p>
-        </div>
+        <h2 id="api-playground-title">{tx("API playground", "API 測試工具")}</h2>
         <span className="api-explorer__release"><span>release</span> {releaseId}</span>
       </div>
       <div className="api-explorer__workspace">
@@ -173,12 +170,10 @@ export function ApiExplorer({
                 {[5, 25, 100, 250, 500, 1000].map((value) => <option key={value} value={value}>{number(value)}</option>)}
               </select>
             </label>
-            {direction === "translation" && (
-              <label className="field">
-                {tx("Translation language tag", "翻譯語言標籤")}
-                <input maxLength={32} value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value)} />
-              </label>
-            )}
+            <label className="field">
+              {tx("Translation language tag", "翻譯語言標籤")}
+              <input maxLength={32} value={translationLanguage} onChange={(event) => setTranslationLanguage(event.target.value)} />
+            </label>
           </div>
           <div className="api-request-preview" aria-label={tx("Generated request", "產生的請求")}>
             <div className="api-request-preview__route">
@@ -227,7 +222,6 @@ export function ApiExplorer({
           ) : (
             <div className="api-explorer__empty">
               <span>{"{ }"}</span>
-              <p>{tx("Run the request to inspect its JSON response.", "執行請求以檢視 JSON 回應。")}</p>
             </div>
           )}
           {status && <p className="api-explorer__status" role="status">{status}</p>}

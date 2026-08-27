@@ -102,32 +102,27 @@ test("the release-pinned shell, routes, and locale switch work", {tag: "@product
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
-test("lookup starts with user intent and provides a localized quick guide", async ({page}) => {
+test("lookup makes the search and results languages explicit", async ({page}) => {
   await page.goto("lookup?type=dictionary");
 
-  await expect(page.getByRole("radio", {name: /Formosan text/iu})).toBeChecked();
   await expect(page.getByRole("combobox", {name: "Formosan language"})).toHaveValue("lang_amis");
+  const searchLanguage = page.getByRole("combobox", {name: "Search text language"});
+  await expect(searchLanguage).toHaveValue("formosan");
+  await expect(searchLanguage.locator("option")).toContainText(["Amis", "English"]);
+  await expect(page.getByRole("combobox", {name: "Results language"})).toHaveValue("eng");
   await expect(page.locator(".search-form__query input")).toHaveAccessibleName("Amis word");
+  await expect(page.locator(".lookup-guide")).toHaveCount(0);
 
-  await page.getByText("30-second lookup guide", {exact: true}).click();
-  await expect(page.locator(".lookup-guide__content")).toContainText(
-    "A translation → English → Rukai → dog",
-  );
-
-  await page.getByText("A translation", {exact: true}).click();
-  await expect(page.getByRole("combobox", {name: "Translation language"})).toBeVisible();
-  await expect(page.getByRole("combobox", {name: "Find results in"})).toHaveValue("lang_amis");
+  await searchLanguage.selectOption("translation:eng");
+  await expect(page.locator(".search-form__result-language .field-output")).toHaveText("Amis");
   await expect(page.locator(".search-form__query input")).toHaveAccessibleName(
     "English word or meaning",
   );
-  await expect(page.locator(".search-form__fields")).not.toContainText("TRANSL");
 
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
-  await expect(page.getByRole("radio", {name: /翻譯文字/u})).toBeChecked();
-  await expect(page.getByText("30 秒查詢指南", {exact: true})).toBeVisible();
-  await expect(page.locator(".lookup-guide__content")).toContainText(
-    "翻譯文字 → 中文 → 魯凱語 → 狗",
-  );
+  await expect(page.getByRole("combobox", {name: "搜尋文字語言"})).toHaveValue("translation:eng");
+  await expect(page.locator(".search-form__result-language .field-output")).toContainText("阿美語");
+  await expect(page.getByText("30 秒查詢指南", {exact: true})).toHaveCount(0);
   await expectAccessible(page);
 });
 
@@ -136,7 +131,9 @@ test("production lookup and finite dataset routes respond", {tag: "@production-s
   await page.goto("lookup?type=dictionary");
   await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
   await page.locator(".search-form__query input").fill("lima");
+  const dictionaryResponse = page.waitForResponse(/\/dictionary\?/u);
   await page.getByRole("button", {name: "Search", exact: true}).click();
+  expect(new URL((await dictionaryResponse).url()).searchParams.get("translation_language")).toBe("eng");
   await expect(page.locator(".dictionary-entry").first()).toBeVisible();
 
   await page.goto("lookup?type=sentences");
@@ -218,8 +215,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 
   await page.goto("lookup?type=sentences&language=lang_amis");
   await page.reload();
-  await page.getByText("A translation", {exact: true}).click();
-  await page.getByRole("combobox", {name: "Translation language"}).selectOption("eng");
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
   await page.getByText("Search options", {exact: true}).click();
   await page.getByText("Contains", {exact: true}).click();
   await page.locator(".search-form__query input").fill("fictional");
@@ -236,8 +232,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 
   await page.goto("lookup?type=dictionary");
   await selectFixtureScope(page);
-  await page.getByText("A translation", {exact: true}).click();
-  await page.getByRole("combobox", {name: "Translation language"}).selectOption("eng");
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
   await page.locator(".search-form__query input").fill("five");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
@@ -324,12 +319,15 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
     await route.fulfill({response, json: body});
   });
   await page.goto("learn");
-  await page.locator(".search-form__query input").fill("lima");
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
+  await page.locator(".search-form__query input").fill("five");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
   await expect(entry).toBeVisible();
 
+  const sentenceResponse = page.waitForResponse(/\/concordance\?/u);
   await entry.getByRole("button", {name: "View sentences"}).click();
+  const sentenceRequest = new URL((await sentenceResponse).url());
 
   await expect(page).toHaveURL(/\/kakarayan\/learn\?/u);
   await expect(page.getByRole("button", {name: "Sentence lookup"})).toHaveAttribute(
@@ -337,6 +335,8 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
     "true",
   );
   await expect(page.locator(".search-form__query input")).toHaveValue("lima");
+  expect(sentenceRequest.searchParams.get("direction")).toBe("formosan");
+  expect(sentenceRequest.searchParams.get("q")).toBe("lima");
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 });
 
@@ -360,7 +360,19 @@ test("lookup and record requests never leave stale results on screen", async ({p
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".loading-state--results")).toContainText("Searching the corpus");
   await expect(page.locator(".result-card--summary")).toHaveCount(0);
+
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
+  await expect(page.locator(".result-card--summary")).toHaveCount(0);
+  await expect(page.locator(".search-form__query input")).toHaveValue("");
+  await expect(page.locator(".search-form__result-language .field-output")).toHaveText("Amis");
   releaseSearch();
+  await page.waitForTimeout(100);
+  await expect(page.locator(".result-card--summary")).toHaveCount(0);
+
+  holdSearch = false;
+  await page.getByRole("combobox", {name: "Search text language"}).selectOption("formosan");
+  await page.locator(".search-form__query input").fill("waco");
+  await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 
   let releaseRecord = () => undefined;
@@ -523,6 +535,7 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expect(page.getByRole("heading", {name: "Live query API"})).toBeVisible();
   await expect(page.locator(".developer-services")).toContainText("available");
   await expect(page.getByRole("link", {name: "API reference", exact: true})).toHaveAttribute("href", /\/docs$/u);
+  await expect(page.locator(".api-request-preview")).toContainText("translation_language");
   let releaseRequest = () => undefined;
   const requestGate = new Promise<void>((resolve) => { releaseRequest = resolve; });
   await page.route(/\/dictionary\?/u, async (route) => {

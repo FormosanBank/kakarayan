@@ -26,15 +26,13 @@ export function TranslationTool({
   languages,
   selectedLanguageId,
   selectedDialect,
-  onLanguageChange,
 }: {
   catalog: ModelCatalog;
   languages: Language[];
   selectedLanguageId: string;
   selectedDialect: string;
-  onLanguageChange: (languageId: string) => void;
 }) {
-  const {languageName, number, tx} = useI18n();
+  const {number, tx} = useI18n();
   const [text, setText] = useState("");
   const [direction, setDirection] =
     useState<TranslationRequest["direction"]>("English → Formosan");
@@ -190,14 +188,6 @@ export function TranslationTool({
                     "Chinese → Formosan": tx("Chinese → Formosan", "中文 → 南島語"),
                   }[value]}
                 </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            {tx("Formosan language", "臺灣南島語")}
-            <select value={language?.id ?? ""} onChange={(event) => onLanguageChange(event.target.value)}>
-              {languages.map((value) => (
-                <option key={value.id} value={value.id}>{languageName(value)}</option>
               ))}
             </select>
           </label>
