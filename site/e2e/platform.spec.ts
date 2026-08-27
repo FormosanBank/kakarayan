@@ -590,6 +590,8 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expect(page.locator(".api-explorer__response .loading-state--code")).toContainText("Waiting for API response");
   releaseRequest();
   await expect(page.locator(".api-explorer__response")).toContainText('"headword": "lima"');
+  await expect(page.locator(".api-explorer__response .code-token--property").first()).toBeVisible();
+  await expect(page.locator(".api-explorer__response .code-token--string").first()).toBeVisible();
   await page.unroute(/\/dictionary\?/u);
   await page.getByRole("button", {name: "Sentences", exact: true}).click();
   await expect(page.getByRole("button", {name: "Sentences", exact: true})).toHaveAttribute("aria-pressed", "true");
@@ -598,6 +600,11 @@ test("developer routes expose the query contract and static metadata", async ({b
   await expect(page.locator(".code-example")).toContainText("/concordance");
   await page.getByRole("tab", {name: "JavaScript"}).click();
   await expect(page.getByRole("tabpanel")).toContainText("URLSearchParams");
+  const keywordColor = await page.locator(".code-example .code-token--keyword").first()
+    .evaluate((element) => getComputedStyle(element).color);
+  const stringColor = await page.locator(".code-example .code-token--string").first()
+    .evaluate((element) => getComputedStyle(element).color);
+  expect(keywordColor).not.toBe(stringColor);
   if (browserName === "chromium") {
     await page.getByRole("button", {name: "Copy code"}).click();
     await expect(page.getByRole("button", {name: "Copied"})).toBeVisible();
