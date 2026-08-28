@@ -241,6 +241,7 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
 
   const summary = page.locator(".result-card--summary").first();
   await expect(summary).toBeVisible();
+  await expect(summary.getByRole("heading", {level: 2})).toBeVisible();
   await expect(summary).toContainText(/lima/iu);
   const summaryBox = await summary.boundingBox();
   const translationBox = await summary.locator(".translation-text").first().boundingBox();
@@ -293,9 +294,10 @@ test("sentence and reverse dictionary lookup use summaries then on-demand detail
   await page.locator(".search-form__query input").fill("five");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   const entry = page.locator(".dictionary-entry").first();
-  await expect(entry.getByRole("heading")).toContainText("lima");
+  await expect(entry.getByRole("heading", {level: 2})).toContainText("lima");
   await expect(entry).toContainText("English");
   await expect(entry.locator(".dictionary-entry__meaning mark").first()).toHaveText(/five/iu);
+  await expectAccessible(page);
 
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;

@@ -37,14 +37,14 @@ export function CandidateGroups({
         return (
           <article key={entry.id} className="dictionary-entry">
             <header>
-              <h3>
+              <h2>
                 <QueryHighlight
                   text={entry.display_form}
                   query={query}
                   mode={mode}
                   active={direction === "formosan"}
                 />
-              </h3>
+              </h2>
               <span>
                 {number(entry.occurrences)} {tx("occurrences", "筆出現")}
               </span>

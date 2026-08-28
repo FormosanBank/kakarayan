@@ -31,9 +31,9 @@ function SentenceText({
   const {tx} = useI18n();
   const text = record.standard || record.original || tx("Untranscribed sentence", "未轉錄句子");
   return (
-    <h3 className="kwic">
+    <h2 className="kwic">
       <QueryHighlight text={text} query={query} mode={mode} active={highlight} />
-    </h3>
+    </h2>
   );
 }
 
@@ -374,14 +374,14 @@ export function SearchResultCard({
         {summary.dialect && <span>{summary.dialect}</span>}
         <span>{corpus?.name ?? summary.corpus_id}</span>
       </div>
-      <h3 className="kwic">
+      <h2 className="kwic">
         <QueryHighlight
           text={summary.standard || summary.original}
           query={query}
           mode={mode}
           active={direction === "formosan"}
         />
-      </h3>
+      </h2>
       <div className="translations">
         {hiddenMatchEvidence.map((item, index) => {
           const tier = item.tier === "sentence"
