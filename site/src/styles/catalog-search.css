@@ -550,8 +550,8 @@
   content: "·";
 }
 
-.dictionary-entry h3,
-.result-card h3 {
+.dictionary-entry h2,
+.result-card h2 {
   margin: 8px 0;
   font-size: 20px;
 }
