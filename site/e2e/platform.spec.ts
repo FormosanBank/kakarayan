@@ -232,6 +232,13 @@ test("the GitHub Pages fallback restores a clean deep link", async ({page}) => {
 test("sentence and reverse dictionary lookup use summaries then on-demand detail", async ({
   page,
 }) => {
+  await page.route("https://huggingface.co/**", async (route) => {
+    await route.fulfill({
+      body: silentWav(3),
+      contentType: "audio/wav",
+      headers: {"Accept-Ranges": "bytes"},
+    });
+  });
   const requests: string[] = [];
   page.on("request", (request) => requests.push(request.url()));
   await page.goto("lookup?type=sentences");
