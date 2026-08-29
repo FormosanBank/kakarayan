@@ -133,7 +133,7 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
             assert "both owner_type and owner_id" in dictionary["tier_ownership"]["joins"]
             hierarchical_rows = archive.read("part-0000.jsonl")
             assert hashlib.sha256(hierarchical_rows).hexdigest() == (
-                "a6ea9cd94a6258ad4d089f4dd151cc98050e72495024add13bd25e51728d1d69"
+                "92ba868eac35a80ca867194b692fdabcaaafd9d5f9a9a35091bbeb0bae8029e2"
             )
             sentence = json.loads(hierarchical_rows.splitlines()[0])
             assert [item["text"] for item in sentence["tiers"]["translations"]] == [

@@ -8,7 +8,8 @@
     {"input": "", "normalized": ""}
   ],
   "text": [
-    {"input": "  A   fictional\ntranslated line. ", "normalized": "a fictional translated line."},
+    {"input": "  A   fictional\ntranslated line. ", "normalized": "a fictional translated line"},
+    {"input": "He saw a\u00a0deer\u00a0there!", "normalized": "he saw a deer there"},
     {"input": "虛構測試句", "normalized": "虛構測試句"},
     {"input": "MiXeD Case", "normalized": "mixed case"},
     {"input": "", "normalized": ""}
@@ -17,6 +18,7 @@
     {"value": "fangcalay", "query": "FANGCALAY", "mode": "exact", "surface": true, "matches": true},
     {"value": "fangcalay", "query": "fang", "mode": "prefix", "surface": true, "matches": true},
     {"value": "a fictional translated line", "query": "translated", "mode": "contains", "surface": false, "matches": true},
+    {"value": "He saw a deer there.", "query": "He saw a\u00a0deer\u00a0there", "mode": "exact", "surface": false, "matches": true},
     {"value": "虛構測試句", "query": "測試", "mode": "contains", "surface": false, "matches": true},
     {"value": "lima", "query": "li", "mode": "exact", "surface": true, "matches": false}
   ],
@@ -75,6 +77,19 @@
         "direction": "translation",
         "translation_language": "eng",
         "match": "contains"
+      },
+      "field": "standard",
+      "expected": ["lima waco"]
+    },
+    {
+      "name": "English full-sentence exact with whitespace and punctuation folding",
+      "route": "concordance",
+      "parameters": {
+        "q": "A\u00a0fictional translated line",
+        "language_id": "lang_amis",
+        "direction": "translation",
+        "translation_language": "eng",
+        "match": "exact"
       },
       "field": "standard",
       "expected": ["lima waco"]
