@@ -192,6 +192,24 @@ test("production lookup and finite dataset routes respond", {tag: "@production-s
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 
+  await page.getByText("Search options", {exact: true}).click();
+  const corpusLabels = await page.getByRole("combobox", {name: "Corpus"})
+    .locator("option").allTextContents();
+  const exactTranslation = corpusLabels.includes("TestCorpus")
+    ? "A fictional translated line"
+    : "He saw a\u00a0deer\u00a0there";
+  await page.getByRole("combobox", {name: "Search text language"})
+    .selectOption({label: "English"});
+  await page.locator(".search-form__query input").fill(exactTranslation);
+  const exactTranslationResponse = page.waitForResponse(/\/concordance\?/u);
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  expect((await exactTranslationResponse).ok()).toBe(true);
+  await expect(page.locator(".result-card--summary").first()).toBeVisible();
+  await expect(page.locator(".result-card--summary").first())
+    .toContainText(corpusLabels.includes("TestCorpus")
+      ? "A fictional translated line."
+      : "He saw a deer there.");
+
   await page.goto("research");
   await page.getByRole("textbox", {name: /word or phrase$/iu}).fill("lima");
   const previewResponse = page.waitForResponse(/\/datasets\/preview\?/u);

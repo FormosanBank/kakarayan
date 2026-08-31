@@ -9,8 +9,8 @@ exports.
 - Case-insensitive matching uses Unicode case folding.
 - Orthographic forms retain diacritics, apostrophes, and internal punctuation. Surrounding
   whitespace and punctuation are removed.
-- Translation and gloss text collapses repeated whitespace and preserves punctuation and
-  characters.
+- Translation and gloss text collapses repeated whitespace and removes surrounding
+  punctuation. Internal punctuation and characters are preserved.
 - Empty normalized queries are invalid.
 
 Displayed tier values are never replaced by these keys. Original, standardized, and

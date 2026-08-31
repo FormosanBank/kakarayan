@@ -28,11 +28,12 @@ def normalize_surface(value: str | None) -> str:
 
 
 def normalize_text(value: str | None) -> str:
-    """Normalize a translation or multi-word query while preserving characters."""
+    """Normalize a translation or multi-word query without outer punctuation."""
     if not value:
         return ""
     normalized = unicodedata.normalize("NFC", value)
-    return _SPACE_RE.sub(" ", normalized).strip().casefold()
+    collapsed = _SPACE_RE.sub(" ", normalized).strip()
+    return _EDGE_RE.sub("", collapsed).casefold()
 
 
 def tokenize(value: str | None) -> list[str]:
