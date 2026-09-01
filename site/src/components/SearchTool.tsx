@@ -65,7 +65,9 @@ export function SearchTool({
   );
   const requestedMode = params.get("mode");
   const [match, setMatch] = useState<MatchMode>(
-    MATCH_MODES.includes(requestedMode as MatchMode) ? (requestedMode as MatchMode) : "exact",
+    MATCH_MODES.includes(requestedMode as MatchMode)
+      ? (requestedMode as MatchMode)
+      : kind === "sentences" ? "contains" : "exact",
   );
   const [requirements, setRequirements] = useState<TierRequirement[]>([]);
   const [targets, setTargets] = useState<Array<{xml_lang: string; records: number}>>([]);
