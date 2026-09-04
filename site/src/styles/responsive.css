@@ -263,6 +263,10 @@
     grid-template-columns: 1fr;
   }
 
+  .search-form__query {
+    grid-column: auto;
+  }
+
   .lookup-options__grid {
     gap: 14px;
     padding: 14px;

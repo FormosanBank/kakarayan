@@ -123,26 +123,29 @@ test("the release-pinned shell, routes, and locale switch work", {tag: "@product
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
-test("lookup makes the search and results languages explicit", async ({page}) => {
+test("lookup only asks for a translation language when searching Formosan text", async ({page}) => {
   await page.goto("lookup?type=dictionary");
 
   await expect(page.getByRole("combobox", {name: "Formosan language"})).toHaveValue("lang_amis");
   const searchLanguage = page.getByRole("combobox", {name: "Search text language"});
   await expect(searchLanguage).toHaveValue("formosan");
   await expect(searchLanguage.locator("option")).toContainText(["Amis", "English"]);
-  await expect(page.getByRole("combobox", {name: "Results language"})).toHaveValue("eng");
+  await expect(page.getByRole("combobox", {name: "Translations in"})).toHaveValue("eng");
   await expect(page.locator(".search-form__query input")).toHaveAccessibleName("Amis word");
   await expect(page.locator(".lookup-guide")).toHaveCount(0);
 
   await searchLanguage.selectOption("translation:eng");
-  await expect(page.locator(".search-form__result-language .field-output")).toHaveText("Amis");
+  await expect(page.getByRole("combobox", {name: "Translations in"})).toHaveCount(0);
+  await expect(page.getByText("Results language", {exact: true})).toHaveCount(0);
+  await expect(page.getByRole("combobox", {name: "Formosan language"})).toHaveValue("lang_amis");
   await expect(page.locator(".search-form__query input")).toHaveAccessibleName(
     "English word or meaning",
   );
 
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
   await expect(page.getByRole("combobox", {name: "搜尋文字語言"})).toHaveValue("translation:eng");
-  await expect(page.locator(".search-form__result-language .field-output")).toContainText("阿美語");
+  await expect(page.getByRole("combobox", {name: "翻譯語言"})).toHaveCount(0);
+  await expect(page.getByText("結果語言", {exact: true})).toHaveCount(0);
   await expect(page.getByText("30 秒查詢指南", {exact: true})).toHaveCount(0);
   await expectAccessible(page);
 });
@@ -180,6 +183,8 @@ test("production lookup and finite dataset routes respond", {tag: "@production-s
   await disableServiceWorkerForRouting(page);
   await page.goto("lookup?type=dictionary");
   await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
+  await page.getByText("Search options", {exact: true}).click();
+  await expect(page.getByRole("radio", {name: "Normalized exact"})).toBeChecked();
   await page.locator(".search-form__query input").fill("lima");
   const dictionaryResponse = page.waitForResponse(/\/dictionary\?/u);
   await page.getByRole("button", {name: "Search", exact: true}).click();
@@ -188,18 +193,34 @@ test("production lookup and finite dataset routes respond", {tag: "@production-s
 
   await page.goto("lookup?type=sentences");
   await page.getByRole("combobox", {name: "Formosan language"}).selectOption({label: "Amis"});
+  await page.getByText("Search options", {exact: true}).click();
+  await expect(page.getByRole("radio", {name: "Contains"})).toBeChecked();
   await page.locator(".search-form__query input").fill("lima");
   await page.getByRole("button", {name: "Search", exact: true}).click();
   await expect(page.locator(".result-card--summary").first()).toBeVisible();
 
-  await page.getByText("Search options", {exact: true}).click();
   const corpusLabels = await page.getByRole("combobox", {name: "Corpus"})
     .locator("option").allTextContents();
+  const fragmentTranslation = corpusLabels.includes("TestCorpus")
+    ? "A fictional translated line."
+    : "If we reap the rice, where should we dry it?";
   const exactTranslation = corpusLabels.includes("TestCorpus")
     ? "A fictional translated line"
     : "He saw a\u00a0deer\u00a0there";
   await page.getByRole("combobox", {name: "Search text language"})
     .selectOption({label: "English"});
+  await page.locator(".search-form__query input").fill(
+    corpusLabels.includes("TestCorpus") ? "fictional translated" : "where should",
+  );
+  const fragmentResponse = page.waitForResponse(/\/concordance\?/u);
+  await page.getByRole("button", {name: "Search", exact: true}).click();
+  const fragment = await fragmentResponse;
+  expect(fragment.ok()).toBe(true);
+  expect(new URL(fragment.url()).searchParams.get("match")).toBe("contains");
+  await expect(page.locator(".result-card--summary").filter({hasText: fragmentTranslation}))
+    .toBeVisible();
+
+  await page.getByText("Normalized exact", {exact: true}).click();
   await page.locator(".search-form__query input").fill(exactTranslation);
   const exactTranslationResponse = page.waitForResponse(/\/concordance\?/u);
   await page.getByRole("button", {name: "Search", exact: true}).click();
@@ -448,7 +469,8 @@ test("lookup and record requests never leave stale results on screen", async ({p
   await page.getByRole("combobox", {name: "Search text language"}).selectOption("translation:eng");
   await expect(page.locator(".result-card--summary")).toHaveCount(0);
   await expect(page.locator(".search-form__query input")).toHaveValue("");
-  await expect(page.locator(".search-form__result-language .field-output")).toHaveText("Amis");
+  await expect(page.getByRole("combobox", {name: "Translations in"})).toHaveCount(0);
+  await expect(page.getByRole("combobox", {name: "Formosan language"})).toHaveValue("lang_amis");
   releaseSearch();
   await page.waitForTimeout(100);
   await expect(page.locator(".result-card--summary")).toHaveCount(0);
