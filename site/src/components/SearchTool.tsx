@@ -311,9 +311,9 @@ export function SearchTool({
               ))}
             </select>
           </label>
-          {direction === "formosan" ? (
+          {direction === "formosan" && (
             <label className="field search-form__result-language">
-              {tx("Results language", "結果語言")}
+              {tx("Translations in", "翻譯語言")}
               <select
                 disabled={targetsLoading || targets.length === 0}
                 value={translationLanguage}
@@ -336,15 +336,10 @@ export function SearchTool({
                 ))}
               </select>
             </label>
-          ) : (
-            <div className="field search-form__result-language">
-              <span>{tx("Results language", "結果語言")}</span>
-              <output className="field-output">
-                {selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語")}
-              </output>
-            </div>
           )}
-          <div className="field field--query search-form__query">
+          <div
+            className={`field field--query search-form__query ${direction === "translation" ? "search-form__query--wide" : ""}`}
+          >
             <label htmlFor={`query-${kind}`}>{queryLabel}</label>
             <input id={`query-${kind}`} value={query} maxLength={2048} onChange={(event) => {
               resetResults();
