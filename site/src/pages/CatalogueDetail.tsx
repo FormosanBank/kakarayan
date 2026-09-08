@@ -118,7 +118,7 @@ export function LanguageDetail({
               <dl className="detail-counts">
                 <div>
                   <dt>{tx("Searchable sentences in this language", "此語言的可搜尋句子")}</dt>
-                  <dd>{number(corpus.counts.sentences ?? 0)}</dd>
+                  <dd>{number(corpus.language_counts[language.id]?.sentences ?? 0)}</dd>
                 </div>
               </dl>
               <Link to={`/corpora/${corpus.id}`}>{tx("Corpus details →", "語料庫詳細資料 →")}</Link>
@@ -171,7 +171,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
             {tx("Search sentences", "搜尋例句")}
           </Link>
         )}
-        <Link className="button button--quiet" to={`/research?corpus=${corpus.id}`}>
+        <Link className="button button--quiet" to={`/research?corpus=${corpus.id}&language=${searchLanguageId}`}>
           {tx("Build corpus dataset", "建立語料庫資料集")}
         </Link>
         {GITBOOK_CORPUS_PAGES[corpus.id] && (
@@ -196,20 +196,26 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         </p>
         <p>
           <strong>{tx("Source statement:", "來源聲明：")}</strong>{" "}
-          {corpus.source || tx("No separate source statement was supplied.", "未提供個別來源聲明。")}
+          {corpus.source || (corpus.metadata_variants.source > 1
+            ? tx("Varies by text. See source records.", "依文本而異。請查看來源記錄。")
+            : tx("No separate source statement was supplied.", "未提供個別來源聲明。"))}
         </p>
         <p>
           <strong>{tx("Copyright statement:", "著作權聲明：")}</strong>{" "}
-          {corpus.copyright || tx("Consult corpus and central rights evidence.", "請查閱語料庫與中央權利證據。")}
+          {corpus.copyright || (corpus.metadata_variants.copyright > 1
+            ? tx("Varies by text. See source records.", "依文本而異。請查看來源記錄。")
+            : tx("Consult corpus and central rights evidence.", "請查閱語料庫與中央權利證據。"))}
         </p>
       </section>
       <section className="detail-section">
         <h2>{tx("Citation and machine-readable records", "引用與機器可讀記錄")}</h2>
-        <p>{corpus.citation || tx("No corpus citation string was supplied in source metadata.", "來源中繼資料未提供語料庫引用字串。")}</p>
+        <p>{corpus.citation || (corpus.metadata_variants.citation > 1
+          ? tx("Citations vary by text. Use the citation attached to each record.", "引用依文本而異。請使用各記錄附帶的引用。")
+          : tx("No corpus citation string was supplied in source metadata.", "來源中繼資料未提供語料庫引用字串。"))}</p>
         <p>
-          {tx("This catalogue found", "此目錄在來源文本中找到")} {number(corpus.citation_count)}{" "}
+          {tx("This catalogue found", "此目錄在來源文本中找到")} {number(corpus.metadata_variants.citation)}{" "}
           {tx(
-            `distinct non-empty citation string${corpus.citation_count === 1 ? "" : "s"} across source texts. Prepared text tables retain every text-level value.`,
+            `distinct non-empty citation string${corpus.metadata_variants.citation === 1 ? "" : "s"} across source texts. Prepared text tables retain every text-level value.`,
             "個相異的非空白引用字串。預備文本表會保留每一個文本層級的值。",
           )}
         </p>

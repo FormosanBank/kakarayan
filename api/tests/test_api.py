@@ -331,6 +331,24 @@ def test_summaries_bounds_errors_cors_and_read_only(client: TestClient) -> None:
     assert summary.status_code == 200
     assert summary.json()["sentences"] == 2
     assert summary.json()["source_types"] >= len(summary.json()["source_frequencies"])
+    dialect = client.get(
+        release_path(client, "summaries"),
+        params={
+            "language_id": "lang_amis",
+            "dialect": "Xiuguluan",
+        },
+    )
+    assert dialect.status_code == 200
+    assert dialect.json() == summary.json()
+    scoped = client.get(
+        release_path(client, "summaries"),
+        params={
+            "language_id": "lang_amis",
+            "corpus_id": "corpus_testcorpus",
+            "dialect": "Xiuguluan",
+        },
+    )
+    assert scoped.json() == summary.json()
 
     longer_query = client.get(
         release_path(client, "dictionary"),
@@ -645,6 +663,24 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     assert morpheme_item["form"] == "lima"
     assert morpheme_item["translation_eng_1"] == "FIVE"
     assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
+
+
+def test_selecting_unclear_column_does_not_filter_clear_records(client: TestClient) -> None:
+    url = release_path(client, "datasets/preview")
+    parameters = [
+        ("language_id", "lang_amis"),
+        ("field", "id"),
+        ("field", "unclear"),
+        ("complete_fields", "true"),
+    ]
+    response = client.get(url, params=parameters)
+    assert response.status_code == 200
+    assert response.json()["estimated_rows"] == 2
+    assert {row["unclear"] for row in response.json()["items"]} == {0, 1}
+    filtered = client.get(url, params=[*parameters, ("requirement", "unclear")])
+    assert filtered.status_code == 200
+    assert filtered.json()["estimated_rows"] == 1
+    assert filtered.json()["items"][0]["unclear"] == 1
 
 
 def test_word_and_morpheme_translation_searches_start_from_indexed_candidates(

@@ -57,7 +57,8 @@ export interface Corpus {
   bibtex_citation: string;
   source: string;
   copyright: string;
-  citation_count: number;
+  language_counts: Record<string, Counts>;
+  metadata_variants: Record<"citation" | "bibtex_citation" | "source" | "copyright", number>;
   counts: Counts;
 }
 

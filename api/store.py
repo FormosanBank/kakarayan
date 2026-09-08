@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from queue import Empty, LifoQueue
 from typing import Any, Literal
 
+from api.contracts import Summary
 from api.cursors import CursorValue, decode_cursor, encode_cursor, query_fingerprint
 from api.dataset_fields import (
     DatasetField,
@@ -950,6 +951,7 @@ class CorpusStore:
         fingerprint = query_fingerprint(
             [
                 "dictionary",
+                self.release_id,
                 normalized,
                 language_id,
                 corpus_id,
@@ -1105,6 +1107,7 @@ class CorpusStore:
         fingerprint = query_fingerprint(
             [
                 "concordance",
+                self.release_id,
                 normalized,
                 language_id,
                 corpus_id,
@@ -1288,7 +1291,16 @@ class CorpusStore:
     ) -> dict[str, Any]:
         normalized_prefix = normalize_surface(prefix or "")
         fingerprint = query_fingerprint(
-            ["frequencies", language_id, corpus_id, dialect, normalized_prefix, minimum, sort]
+            [
+                "frequencies",
+                self.release_id,
+                language_id,
+                corpus_id,
+                dialect,
+                normalized_prefix,
+                minimum,
+                sort,
+            ]
         )
         expected_cursor = 2 if sort == "count" else 1
         position = _cursor_position(cursor, fingerprint, expected_cursor)
@@ -1348,109 +1360,17 @@ class CorpusStore:
         dialect: str | None,
         limit: int,
     ) -> dict[str, Any]:
-        if not dialect:
-            with self.connect() as connection:
-                cached = connection.execute(
-                    "SELECT value_json FROM summary_cache WHERE language_id = ? AND corpus_id = ?",
-                    (language_id, corpus_id or ""),
-                ).fetchone()
-            if cached:
-                result = json.loads(str(cached[0]))
-                for key in (
-                    "source_frequencies",
-                    "normalized_frequencies",
-                    "translation_frequencies",
-                ):
-                    result[key] = result[key][:limit]
-                return {"release_id": self.release_id, **result}
-        clauses, parameters = self._scope(language_id, corpus_id, dialect)
-        where = " AND ".join(clauses)
         with self.connect() as connection:
-            sentence_count = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM sentences s "
-                    f"JOIN texts t ON t.id = s.parent_id WHERE {where}",
-                    parameters,
-                ).fetchone()[0]
-            )
-            token_count = int(
-                connection.execute(
-                    f"SELECT COUNT(*) FROM tokens tok JOIN sentences s ON s.id = tok.sentence_id "
-                    f"JOIN texts t ON t.id = s.parent_id WHERE {where}",
-                    parameters,
-                ).fetchone()[0]
-            )
-            source_type_count = int(
-                connection.execute(
-                    f"SELECT COUNT(DISTINCT tok.surface) FROM tokens tok "
-                    f"JOIN sentences s ON s.id = tok.sentence_id "
-                    f"JOIN texts t ON t.id = s.parent_id WHERE {where}",
-                    parameters,
-                ).fetchone()[0]
-            )
-            normalized_type_count = int(
-                connection.execute(
-                    f"SELECT COUNT(DISTINCT tok.normalized) FROM tokens tok "
-                    f"JOIN sentences s ON s.id = tok.sentence_id "
-                    f"JOIN texts t ON t.id = s.parent_id WHERE {where}",
-                    parameters,
-                ).fetchone()[0]
-            )
-            normalized = [
-                dict(row)
-                for row in connection.execute(
-                    f"SELECT tok.normalized AS value, COUNT(*) AS count FROM tokens tok "
-                    f"JOIN sentences s ON s.id = tok.sentence_id "
-                    "JOIN texts t ON t.id = s.parent_id "
-                    f"WHERE {where} GROUP BY tok.normalized ORDER BY count DESC, value LIMIT ?",
-                    (*parameters, limit),
-                )
-            ]
-            source = [
-                dict(row)
-                for row in connection.execute(
-                    f"SELECT tok.surface AS value, COUNT(*) AS count FROM tokens tok "
-                    f"JOIN sentences s ON s.id = tok.sentence_id "
-                    "JOIN texts t ON t.id = s.parent_id "
-                    f"WHERE {where} GROUP BY tok.surface ORDER BY count DESC, value LIMIT ?",
-                    (*parameters, limit),
-                )
-            ]
-            translations = [
-                dict(row)
-                for row in connection.execute(
-                    f"SELECT tr.normalized AS value, COUNT(*) AS count FROM translations tr "
-                    f"JOIN tier_scope_view ts ON ts.owner_type = tr.owner_type "
-                    "AND ts.owner_id = tr.owner_id "
-                    f"JOIN sentences s ON s.id = ts.sentence_id JOIN texts t ON t.id = s.parent_id "
-                    f"WHERE {where} AND tr.normalized <> '' GROUP BY tr.normalized "
-                    "ORDER BY count DESC, value LIMIT ?",
-                    (*parameters, limit),
-                )
-            ]
-            distributions = [
-                {
-                    "value": f"{row['corpus_id']} · {row['dialect'] or 'unknown'}",
-                    "count": row["count"],
-                }
-                for row in connection.execute(
-                    f"SELECT t.corpus_id, t.dialect, COUNT(*) AS count FROM sentences s "
-                    f"JOIN texts t ON t.id = s.parent_id WHERE {where} "
-                    "GROUP BY t.corpus_id, t.dialect ORDER BY count DESC, t.corpus_id, t.dialect",
-                    parameters,
-                )
-            ]
-        return {
-            "release_id": self.release_id,
-            "sentences": sentence_count,
-            "tokens": token_count,
-            "source_types": source_type_count,
-            "normalized_types": normalized_type_count,
-            "source_frequencies": source,
-            "normalized_frequencies": normalized,
-            "translation_frequencies": translations,
-            "distributions": distributions,
-        }
+            cached = connection.execute(
+                "SELECT value_json FROM summary_cache "
+                "WHERE language_id = ? AND corpus_id = ? AND dialect = ?",
+                (language_id, corpus_id or "", dialect or ""),
+            ).fetchone()
+        result = Summary.model_validate_json(str(cached[0])) if cached else Summary()
+        result.source_frequencies = result.source_frequencies[:limit]
+        result.normalized_frequencies = result.normalized_frequencies[:limit]
+        result.translation_frequencies = result.translation_frequencies[:limit]
+        return {"release_id": self.release_id, **result.model_dump()}
 
     def _dataset_clauses(
         self,

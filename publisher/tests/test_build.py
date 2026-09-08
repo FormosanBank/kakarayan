@@ -44,6 +44,33 @@ def test_release_identity_includes_source_and_application_revisions() -> None:
     assert _release_id(source, "3" * 40) == "fb-20240102-111111333333"
 
 
+def test_catalog_counts_are_language_scoped_and_metadata_does_not_choose_a_text(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    xml_dir = public_repo / "Corpora/TestCorpus/XML"
+    other = (xml_dir / "fixture.xml").read_text().replace('xml:lang="ami"', 'xml:lang="tay"')
+    other = (
+        other.replace("Xiuguluan", "Coastal")
+        .replace("Synthetic Kakarayan publisher fixture", "Another citation")
+        .replace("tests/fixtures/formosanbank", "Another source")
+    )
+    (xml_dir / "other.xml").write_text(other)
+    subprocess.run(["git", "-C", str(public_repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(public_repo), "commit", "-qm", "mixed scope"], check=True)
+    result = build_release(public_repo, tmp_path / "mixed")
+    corpus = json.loads((result.output / "catalog.json").read_text())["corpora"][0]
+    assert corpus["counts"]["sentences"] == 4
+    assert corpus["language_counts"]["lang_amis"]["sentences"] == 2
+    assert corpus["language_counts"]["lang_atayal"]["sentences"] == 2
+    for field, count in corpus["counts"].items():
+        assert sum(scope.get(field, 0) for scope in corpus["language_counts"].values()) == count
+    assert corpus["citation"] == corpus["source"] == ""
+    assert corpus["metadata_variants"]["citation"] == 2
+    assert corpus["metadata_variants"]["source"] == 2
+    assert corpus["copyright"] == "Synthetic fixture"
+
+
 def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path: Path) -> None:
     first = build_release(public_repo, tmp_path / "one")
     second = build_release(public_repo, tmp_path / "two")
@@ -62,7 +89,8 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert catalog["source"]["commit"] == first.source.commit
     assert catalog["corpora"][0]["name"] == "TestCorpus"
     assert catalog["corpora"][0]["rights_id"] == "rights_testcorpus"
-    assert catalog["corpora"][0]["citation_count"] == 1
+    assert catalog["corpora"][0]["metadata_variants"]["citation"] == 1
+    assert catalog["corpora"][0]["language_counts"]["lang_amis"]["sentences"] == 2
     amis = next(row for row in catalog["languages"] if row["name"] == "Amis")
     assert amis["counts"]["sentences"] == 2
     assert amis["dialects"] == ["Xiuguluan"]

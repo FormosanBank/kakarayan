@@ -7,7 +7,7 @@ import {
   RoutingProvider,
   useRoutePath,
 } from "./routing";
-import {prepareRouting, routeHref} from "./routePaths";
+import {prepareRouting, routeFromPathname, routeHref} from "./routePaths";
 
 function GuardFixture() {
   const path = useRoutePath();
@@ -106,5 +106,12 @@ describe("clean route migration", () => {
 
     expect(window.location.pathname).toBe("/developers");
     expect(window.location.search).toBe("?section=api");
+  });
+
+  it("rejects malformed percent encoding forwarded by Pages", () => {
+    window.history.replaceState(null, "", "/?__kakarayan_route=%2Flanguages%2F%25ZZ");
+    prepareRouting();
+    expect(routeFromPathname(window.location.pathname)).toBe("/not-found");
+    expect(routeFromPathname("/languages/%E9%98%BF")).toBe("/languages/%E9%98%BF");
   });
 });
