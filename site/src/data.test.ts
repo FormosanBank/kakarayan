@@ -17,7 +17,7 @@ function envelope(endpoint: string, data: unknown, release = releaseId) {
     generated_at: "2024-01-02T03:04:05Z",
     kakarayan: {repository: "FormosanBank/kakarayan", version: "0.2.0", commit: "a".repeat(40)},
     source: {repository: "FormosanBank/FormosanBank", commit: "b".repeat(40)},
-    canonical_url: `https://example.test/${endpoint}.json`,
+    canonical_url: `https://formosanbank.github.io/kakarayan/api/v1/${endpoint}.json`,
     data,
   };
 }
@@ -26,7 +26,7 @@ const endpointData: Record<string, unknown> = {
   meta: {current_release: releaseId},
   languages: [],
   corpora: [],
-  rights: {schema_version: "1.0.0", central_terms: {}, entries: []},
+  rights: appFixture().rights,
   models: {schema_version: "1.0.0", generated_at: "2024-01-02T03:04:05Z", provider: "Hugging Face", models: [], services: []},
   orthography: {schema_version: "1.0.0", source_commit: "b".repeat(40), tables: []},
   content: {schema_version: "1.0.0", entries: []},
@@ -75,6 +75,16 @@ it("rejects a mixed static release before querying the backend", async () => {
     );
   }));
   await expect(loadAppData()).rejects.toThrow("Static metadata release mismatch: corpora");
+});
+
+it("validates nested catalogue members and their endpoint, not only the envelope", async () => {
+  for (const invalid of [envelope("languages", [{id: "lang_amis"}]), envelope("corpora", [])]) {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const endpoint = /\/([^/]+)\.json$/u.exec(String(input))?.[1] ?? "";
+      return Response.json(endpoint === "languages" ? invalid : envelope(endpoint, endpointData[endpoint]));
+    }));
+    await expect(loadAppData()).rejects.toThrow("Invalid static API envelope");
+  }
 });
 
 it("recovers optional resources and readiness without unmounting local work", async () => {

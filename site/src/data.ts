@@ -2,6 +2,7 @@ import {createContext, useCallback, useEffect, useState, type Dispatch, type Set
 
 import {apiBaseUrl, checkApiRelease} from "./apiClient";
 import contract from "../../api/contract.json";
+import {StaticEnvelope} from "../node_modules/.cache/kakarayan-contracts/validators.cjs";
 import type {AppData, ApiEnvelope, Corpus, Language, Meta, OptionalResource, RightsCatalog} from "./types";
 
 const base = import.meta.env.BASE_URL;
@@ -9,7 +10,7 @@ export const ResourceRetryContext = createContext<(resource: OptionalResource) =
   throw new Error("Resource retry is not available outside the application");
 });
 
-async function json<T>(url: string, signal?: AbortSignal, timeoutMs = 8_000): Promise<T> {
+async function json(url: string, signal?: AbortSignal, timeoutMs = 8_000): Promise<unknown> {
   const controller = new AbortController();
   let rejectAbort: (reason: unknown) => void = () => undefined;
   const interrupted = new Promise<never>((_, reject) => { rejectAbort = reject; });
@@ -29,7 +30,7 @@ async function json<T>(url: string, signal?: AbortSignal, timeoutMs = 8_000): Pr
     return await Promise.race([(async () => {
       const response = await fetch(url, {headers: {Accept: "application/json"}, signal: controller.signal});
       if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
-      return await response.json() as T;
+      return await response.json();
     })(), interrupted]);
   } finally {
     window.clearTimeout(timer);
@@ -38,10 +39,10 @@ async function json<T>(url: string, signal?: AbortSignal, timeoutMs = 8_000): Pr
 }
 
 async function apiEnvelope<T>(url: string, signal?: AbortSignal, timeoutMs?: number): Promise<ApiEnvelope<T>> {
-  const envelope = await json<ApiEnvelope<T>>(url, signal, timeoutMs);
-  if (!envelope || typeof envelope !== "object" || envelope.api_version !== "v1" ||
-    envelope.read_model_version !== contract.read_model_version ||
-    !envelope.release_id || !envelope.source?.commit || !envelope.kakarayan?.commit || !("data" in envelope)) {
+  const envelope = await json(url, signal, timeoutMs);
+  const expected = url.split("/").pop()?.replace(/\.json$/u, "");
+  if (!StaticEnvelope<T>(envelope) || envelope.endpoint !== expected ||
+    envelope.read_model_version !== contract.read_model_version) {
     throw new Error(`Invalid static API envelope: ${url}`);
   }
   return envelope;

@@ -19,7 +19,17 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
-from api.contracts import READ_MODEL_VERSION
+from api.contracts import (
+    READ_MODEL_VERSION,
+    ConcordancePage,
+    DatasetPreviewResult,
+    DictionaryPage,
+    ErrorResponse,
+    Ready,
+    SearchRecord,
+    SummaryResponse,
+    TranslationLanguages,
+)
 from api.dataset_fields import DatasetField, RecordLevel, default_dataset_fields
 from api.errors import ApiError, api_error_handler, validation_error_handler
 from api.exports import dataset_chunks, zip_chunks
@@ -126,6 +136,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         summary="Read-only access to one pinned public FormosanBank release",
         version="1.0.0",
         lifespan=lifespan,
+        responses={
+            code: {"model": ErrorResponse} for code in (400, 403, 404, 408, 422, 429, 500, 503, 504)
+        },
         license_info={
             "name": "CC BY-NC 4.0",
             "url": "https://creativecommons.org/licenses/by-nc/4.0/",
@@ -287,7 +300,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "alive"}
 
-    @app.get("/readyz", tags=["service"])
+    @app.get("/readyz", tags=["service"], response_model=Ready)
     def ready(request: Request, response: Response) -> dict[str, str | int]:
         current = store(request)
         current.check_ready()
@@ -348,7 +361,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         current = release_store(request, release_id)
         return await run_query(request, lambda: current.text(text_id))
 
-    @app.get("/v1/releases/{release_id}/sentences/{sentence_id}", tags=["records"])
+    @app.get(
+        "/v1/releases/{release_id}/sentences/{sentence_id}",
+        tags=["records"],
+        response_model=SearchRecord,
+    )
     async def sentence(
         request: Request, response: Response, release_id: ReleaseId, sentence_id: str
     ) -> dict:
@@ -356,7 +373,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         current = release_store(request, release_id)
         return await run_query(request, lambda: current.sentence(sentence_id))
 
-    @app.get("/v1/releases/{release_id}/translation-languages", tags=["query"])
+    @app.get(
+        "/v1/releases/{release_id}/translation-languages",
+        tags=["query"],
+        response_model=TranslationLanguages,
+    )
     async def translation_languages(
         request: Request,
         response: Response,
@@ -371,7 +392,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             lambda: current.translation_languages(language_id=language_id, corpus_id=corpus_id),
         )
 
-    @app.get("/v1/releases/{release_id}/dictionary", tags=["query"])
+    @app.get("/v1/releases/{release_id}/dictionary", tags=["query"], response_model=DictionaryPage)
     async def dictionary(
         request: Request,
         response: Response,
@@ -403,7 +424,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         )
 
-    @app.get("/v1/releases/{release_id}/concordance", tags=["query"])
+    @app.get(
+        "/v1/releases/{release_id}/concordance", tags=["query"], response_model=ConcordancePage
+    )
     async def concordance(
         request: Request,
         response: Response,
@@ -468,7 +491,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             workload="analytical",
         )
 
-    @app.get("/v1/releases/{release_id}/summaries", tags=["query"])
+    @app.get("/v1/releases/{release_id}/summaries", tags=["query"], response_model=SummaryResponse)
     async def summaries(
         request: Request,
         response: Response,
@@ -521,7 +544,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             selection_rows=selection_rows,
         )
 
-    @app.get("/v1/releases/{release_id}/datasets/preview", tags=["datasets"])
+    @app.get(
+        "/v1/releases/{release_id}/datasets/preview",
+        tags=["datasets"],
+        response_model=DatasetPreviewResult,
+    )
     async def dataset_preview(
         request: Request,
         response: Response,

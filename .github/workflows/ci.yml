@@ -137,6 +137,7 @@ jobs:
           npm --prefix site audit --audit-level=high
           npm --prefix site run lint
           npm --prefix site run typecheck
+          git diff --exit-code -- site/src/contractTypes.d.ts
           npm --prefix site test
           npm --prefix site run build
           uv run python -m publisher.verify_site --site site/dist

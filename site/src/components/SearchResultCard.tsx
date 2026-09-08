@@ -240,8 +240,9 @@ function SearchResultDetail({
       )}
       </div>
       <footer>
+        {record.detail_truncated && <p role="status">{tx("Display shortened. Open Source XML for the full record.", "顯示內容已縮短。請開啟來源 XML 查看完整記錄。")}</p>}
         <div className="result-card__actions">
-          <button className="button button--primary" onClick={() => onSave(record)}>
+          <button className="button button--primary" disabled={record.detail_truncated} onClick={() => onSave(record)}>
             {t("search.save")}
           </button>
           {learner && onPractice && (

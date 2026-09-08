@@ -25,7 +25,9 @@ from api.dataset_fields import (
     dataset_completeness_clauses,
     discover_translation_columns,
 )
+from api.dictionary_evidence import load_evidence
 from api.errors import ApiError
+from api.records import sentence_detail, text_detail
 from api.release import ReleaseState, readonly_connection
 from api.search import MatchMode, match_snippet, normalize_surface, normalize_text
 
@@ -454,39 +456,9 @@ class CorpusStore:
             tuple(parameters),
         )
 
-    @staticmethod
-    def _tiers(
-        connection: sqlite3.Connection,
-        owner_type: str,
-        owner_id: str,
-    ) -> dict[str, list[dict[str, Any]]]:
-        tiers = {
-            table: [
-                dict(row)
-                for row in connection.execute(
-                    f"SELECT * FROM {table} WHERE owner_type = ? AND owner_id = ? "
-                    "ORDER BY position",
-                    (owner_type, owner_id),
-                )
-            ]
-            for table in ("forms", "phonology", "translations", "audio")
-        }
-        for audio in tiers["audio"]:
-            audio["playback_urls"] = json.loads(str(audio["playback_urls"]))
-        return tiers
-
     def text(self, text_id: str) -> dict[str, Any]:
         with self.connect() as connection:
-            record = _row(
-                connection.execute("SELECT * FROM texts WHERE id = ?", (text_id,)).fetchone()
-            )
-            if record is None:
-                raise ApiError(404, "text_not_found", "Text not found")
-            record["tiers"] = self._tiers(connection, "text", text_id)
-            record["sentence_count"] = connection.execute(
-                "SELECT COUNT(*) FROM sentences WHERE parent_id = ?", (text_id,)
-            ).fetchone()[0]
-            return record
+            return text_detail(connection, text_id)
 
     @staticmethod
     def _forms_by_kind(forms: Sequence[dict[str, Any]]) -> tuple[str, str]:
@@ -495,89 +467,9 @@ class CorpusStore:
         return standard, original
 
     def sentence(self, sentence_id: str) -> dict[str, Any]:
-        """Return the complete record only when a user expands one result."""
+        """Expand one record within a shared child and byte budget."""
         with self.connect() as connection:
-            record = _row(
-                connection.execute(
-                    """
-                    SELECT s.*, t.corpus_id, t.language_id, t.language, t.xml_lang,
-                           t.dialect, t.source_path, t.citation, t.copyright,
-                           t.id AS text_id
-                    FROM sentences s
-                    JOIN texts t ON t.id = s.parent_id
-                    WHERE s.id = ?
-                    """,
-                    (sentence_id,),
-                ).fetchone()
-            )
-            if record is None:
-                raise ApiError(404, "sentence_not_found", "Sentence not found")
-            tokens = [
-                dict(row)
-                for row in connection.execute(
-                    "SELECT * FROM tokens WHERE sentence_id = ? ORDER BY position LIMIT 1001",
-                    (sentence_id,),
-                )
-            ]
-            words = [
-                dict(row)
-                for row in connection.execute(
-                    "SELECT * FROM words WHERE parent_id = ? ORDER BY position LIMIT 1001",
-                    (sentence_id,),
-                )
-            ]
-            if len(tokens) > 1000 or len(words) > 1000:
-                raise ApiError(422, "record_too_large", "The record exceeds the API detail limit")
-            owner_pairs: list[tuple[str, str]] = [("sentence", sentence_id)]
-            for word in words:
-                owner_pairs.append(("word", str(word["id"])))
-                morphemes = [
-                    dict(row)
-                    for row in connection.execute(
-                        "SELECT * FROM morphemes WHERE parent_id = ? ORDER BY position LIMIT 1001",
-                        (word["id"],),
-                    )
-                ]
-                if len(morphemes) > 1000:
-                    raise ApiError(
-                        422, "record_too_large", "The record exceeds the API detail limit"
-                    )
-                word["morphemes"] = morphemes
-                owner_pairs.extend(("morpheme", str(item["id"])) for item in morphemes)
-
-            tiers: dict[str, list[dict[str, Any]]] = {
-                "forms": [],
-                "phonology": [],
-                "translations": [],
-                "audio": [],
-            }
-            for owner_type, owner_id in owner_pairs:
-                current = self._tiers(connection, owner_type, owner_id)
-                for table, rows in current.items():
-                    tiers[table].extend(rows)
-            sentence_forms = [
-                item
-                for item in tiers["forms"]
-                if item["owner_type"] == "sentence" and item["owner_id"] == sentence_id
-            ]
-            standard, original = self._forms_by_kind(sentence_forms)
-            sentence_translations = [
-                item
-                for item in tiers["translations"]
-                if item["owner_type"] == "sentence" and item["owner_id"] == sentence_id
-            ]
-            return {
-                **record,
-                "standard": standard,
-                "original": original,
-                "translations": sentence_translations,
-                "tier_translations": tiers["translations"],
-                "tokens": tokens,
-                "words": words,
-                "forms": tiers["forms"],
-                "phonology": tiers["phonology"],
-                "audio": tiers["audio"],
-            }
+            return sentence_detail(connection, sentence_id)
 
     @staticmethod
     def _sentence_summaries(
@@ -769,175 +661,45 @@ class CorpusStore:
             evidence[str(item.pop("headword"))].append(item)
         return dict(evidence)
 
+    @staticmethod
     def _dictionary_evidence(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        headword: str,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        translation_language: str | None,
-        matched_rows: Sequence[Mapping[str, Any]],
+        evidence: dict[str, Any],
+        examples_by_id: Mapping[str, dict[str, Any]],
         query: str,
     ) -> dict[str, Any]:
-        clauses, parameters = self._scope(language_id, corpus_id, dialect)
-        rows = [
-            dict(row)
-            for row in connection.execute(
-                f"""
-                SELECT tok.sentence_id, tok.word_id AS owner_id, tok.surface AS value,
-                       t.corpus_id
-                FROM tokens tok
-                JOIN sentences s ON s.id = tok.sentence_id
-                JOIN texts t ON t.id = s.parent_id
-                WHERE {" AND ".join(clauses)} AND tok.normalized = ?
-                ORDER BY t.source_path, s.position, tok.position
-                LIMIT 20
-                """,
-                (*parameters, headword),
-            )
-        ]
-        if not rows:
-            rows = [
-                dict(row)
-                for row in connection.execute(
-                    f"""
-                    SELECT ts.sentence_id, f.owner_id, f.text AS value, t.corpus_id
-                    FROM forms f
-                    JOIN tier_scope_view ts
-                      ON ts.owner_type = f.owner_type AND ts.owner_id = f.owner_id
-                    JOIN sentences s ON s.id = ts.sentence_id
-                    JOIN texts t ON t.id = s.parent_id
-                    WHERE {" AND ".join(clauses)} AND f.owner_type <> 'sentence'
-                      AND f.normalized = ?
-                    ORDER BY t.source_path, s.position, f.position
-                    LIMIT 20
-                    """,
-                    (*parameters, headword),
-                )
-            ]
-        candidate_sentence_ids = list(
-            dict.fromkeys(str(row["sentence_id"]) for row in (*matched_rows, *rows))
+        examples = sorted(
+            [examples_by_id[identifier] for identifier in evidence["sentence_ids"]],
+            key=lambda row: (row["source_path"], row["position"], row["id"]),
         )
-        sentence_ids = candidate_sentence_ids[:DICTIONARY_EXAMPLE_LIMIT]
-        evidence_truncated = len(candidate_sentence_ids) > DICTIONARY_EXAMPLE_LIMIT
-        owner_ids = {str(row["owner_id"]) for row in (*matched_rows, *rows) if row.get("owner_id")}
-        if owner_ids:
-            placeholders = ",".join("?" for _ in owner_ids)
-            owner_ids.update(
-                str(row[0])
-                for row in connection.execute(
-                    f"SELECT id FROM morphemes WHERE parent_id IN ({placeholders})",
-                    tuple(owner_ids),
-                )
-            )
-        meaning_rows: list[dict[str, Any]] = []
-        seen_meanings: set[tuple[str, str]] = set()
-        for row in matched_rows:
-            key = (str(row["matched_text"]), str(row["matched_xml_lang"]))
-            if key in seen_meanings:
-                continue
-            seen_meanings.add(key)
-            meaning_rows.append(
-                {
-                    "text": row["matched_text"],
-                    "xml_lang": row["matched_xml_lang"],
-                    "first_position": row["matched_position"],
-                }
-            )
-        pronunciations: list[str] = []
-        if owner_ids:
-            placeholders = ",".join("?" for _ in owner_ids)
-            language_clause = " AND xml_lang = ?" if translation_language else ""
-            language_parameters: tuple[object, ...] = (
-                (translation_language,) if translation_language else ()
-            )
-            related_meanings = [
-                dict(row)
-                for row in connection.execute(
-                    f"SELECT text, xml_lang, MIN(position) AS first_position FROM translations "
-                    f"WHERE owner_id IN ({placeholders}){language_clause} AND text <> '' "
-                    "GROUP BY text, xml_lang ORDER BY xml_lang, first_position, text LIMIT 13",
-                    (*owner_ids, *language_parameters),
-                )
-            ]
-            for row in related_meanings:
-                key = (str(row["text"]), str(row["xml_lang"]))
-                if key in seen_meanings:
-                    continue
-                seen_meanings.add(key)
-                meaning_rows.append(row)
-            pronunciations = [
-                str(row[0])
-                for row in connection.execute(
-                    f"SELECT DISTINCT text FROM phonology WHERE owner_id IN ({placeholders}) "
-                    "AND text <> '' ORDER BY position LIMIT 9",
-                    tuple(owner_ids),
-                )
-            ]
-        if not meaning_rows and sentence_ids:
-            placeholders = ",".join("?" for _ in sentence_ids)
-            language_clause = " AND xml_lang = ?" if translation_language else ""
-            language_parameters = (translation_language,) if translation_language else ()
-            meaning_rows = [
-                dict(row)
-                for row in connection.execute(
-                    f"SELECT text, xml_lang, MIN(position) AS first_position FROM translations "
-                    "WHERE owner_type = 'sentence' "
-                    f"AND owner_id IN ({placeholders}){language_clause} AND text <> '' "
-                    "GROUP BY text, xml_lang ORDER BY xml_lang, first_position, text LIMIT 13",
-                    (*sentence_ids, *language_parameters),
-                )
-            ]
-        examples: list[dict[str, Any]] = []
-        if sentence_ids:
-            placeholders = ",".join("?" for _ in sentence_ids)
-            example_rows = [
-                dict(row)
-                for row in connection.execute(
-                    f"""
-                    SELECT s.id, s.parent_id AS text_id, s.xml_id, s.position, s.token_count,
-                           t.corpus_id, t.language_id, t.language, t.dialect,
-                           t.source_path, t.citation
-                    FROM sentences s JOIN texts t ON t.id = s.parent_id
-                    WHERE s.id IN ({placeholders})
-                    ORDER BY t.source_path, s.position, s.id
-                    """,
-                    sentence_ids,
-                )
-            ]
-            examples = self._sentence_summaries(connection, example_rows, query=query)
-        meanings: list[dict[str, str]] = []
-        meanings_truncated = len(meaning_rows) > DICTIONARY_MEANING_LIMIT
+        meaning_rows = evidence["meanings"]
+        truncated = evidence["truncated"] or len(meaning_rows) > DICTIONARY_MEANING_LIMIT
+        meanings = []
         for row in meaning_rows[:DICTIONARY_MEANING_LIMIT]:
-            text, shortened = match_snippet(str(row["text"]), query, DICTIONARY_VALUE_MAX_CHARS)
-            meanings.append({"text": text, "xml_lang": str(row["xml_lang"])})
-            meanings_truncated = meanings_truncated or shortened
-        evidence_truncated = evidence_truncated or meanings_truncated
+            value, shortened = match_snippet(str(row["text"]), query, DICTIONARY_VALUE_MAX_CHARS)
+            meanings.append({"text": value, "xml_lang": str(row["xml_lang"])})
+            truncated = truncated or shortened
         pronunciations, shortened = _bounded_values(
-            pronunciations,
+            evidence["pronunciations"],
             maximum_items=DICTIONARY_PRONUNCIATION_LIMIT,
             maximum_chars=DICTIONARY_VALUE_MAX_CHARS,
         )
-        evidence_truncated = evidence_truncated or shortened
+        truncated = truncated or shortened
+        rows, matched = evidence["rows"], evidence["matched"]
         raw_variants = list(dict.fromkeys(str(row["value"]) for row in rows if row.get("value")))
         variants, shortened = _bounded_values(
-            raw_variants, maximum_items=8, maximum_chars=DICTIONARY_VALUE_MAX_CHARS
+            raw_variants,
+            maximum_items=8,
+            maximum_chars=DICTIONARY_VALUE_MAX_CHARS,
         )
-        evidence_truncated = (
-            evidence_truncated
-            or shortened
-            or any(bool(example["summary_truncated"]) for example in examples)
-        )
-        corpus_ids = list(dict.fromkeys(str(row["corpus_id"]) for row in (*matched_rows, *rows)))
         return {
             "meanings": meanings,
             "pronunciations": pronunciations,
             "variants": variants,
-            "corpus_ids": corpus_ids,
+            "corpus_ids": list(dict.fromkeys(str(row["corpus_id"]) for row in (*matched, *rows))),
             "examples": examples,
-            "summary_truncated": evidence_truncated,
+            "summary_truncated": truncated
+            or shortened
+            or any(bool(example["summary_truncated"]) for example in examples),
         }
 
     def dictionary(
@@ -1028,18 +790,24 @@ class CorpusStore:
                 if direction == "translation"
                 else {}
             )
+            evidence_by_head, example_rows = load_evidence(
+                connection,
+                [str(row["headword"]) for row in selected_rows],
+                *self._scope(language_id, corpus_id, dialect),
+                translation_language,
+                reverse_evidence,
+            )
+            examples_by_id = {
+                row["id"]: row
+                for row in self._sentence_summaries(connection, example_rows, query=normalized)
+            }
             items = []
             for row in selected_rows:
                 headword = str(row["headword"])
                 evidence = self._dictionary_evidence(
-                    connection,
-                    headword=headword,
-                    language_id=language_id,
-                    corpus_id=corpus_id,
-                    dialect=dialect,
-                    translation_language=translation_language,
-                    matched_rows=reverse_evidence.get(headword, ()),
-                    query=normalized,
+                    evidence_by_head[headword],
+                    examples_by_id,
+                    normalized,
                 )
                 items.append(
                     {

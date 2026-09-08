@@ -21,6 +21,18 @@ afterEach(() => {
 });
 
 describe("API request lifecycle", () => {
+  it.each([
+    {release_id: "fb-test", items: [{}], next_cursor: null},
+    {release_id: "fb-test", items: "broken", next_cursor: null},
+    {release_id: "fb-test", items: [], next_cursor: 0},
+  ])("rejects malformed successful responses", async (payload) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(payload)));
+    await expect(dictionary("fb-test", options)).rejects.toMatchObject({code: "invalid_response", status: 502});
+  });
+  it("rejects responses from another release", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({release_id: "other", items: [], next_cursor: null})));
+    await expect(dictionary("fb-test", options)).rejects.toMatchObject({code: "release_mismatch"});
+  });
   it.each([429, 503, 504, 403])("leaves export preflight failures actionable (%s)", async (status) => {
     const mock = vi.fn().mockResolvedValue(Response.json({error: {code: "blocked", message: "Try again"}}, {status}));
     vi.stubGlobal("fetch", mock);

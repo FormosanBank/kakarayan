@@ -1,4 +1,5 @@
 import contract from "../../api/contract.json";
+import * as validate from "../node_modules/.cache/kakarayan-contracts/validators.cjs";
 import type {
   DictionaryEntry,
   MatchMode,
@@ -14,10 +15,6 @@ export const apiBaseUrl = (configured || "http://127.0.0.1:8000").replace(/\/$/u
 export const API_READINESS_TIMEOUT_MS = 4_000;
 export const API_INTERACTIVE_TIMEOUT_MS = 6_000;
 export const API_ANALYTICAL_TIMEOUT_MS = 20_000;
-
-interface ApiErrorBody {
-  error?: {code?: string; message?: string};
-}
 
 export class ApiRequestError extends Error {
   readonly code: string;
@@ -64,6 +61,7 @@ function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
 
 async function request<T>(
   path: string,
+  valid: (value: unknown) => value is T,
   signal?: AbortSignal,
   {timeoutMs = API_INTERACTIVE_TIMEOUT_MS, retryBusy = true}: {
     timeoutMs?: number;
@@ -86,20 +84,32 @@ async function request<T>(
         headers: {Accept: "application/json", "X-Kakarayan-Client": "web-v1"},
         signal: controller.signal,
       });
-      if (response.ok) return (await response.json()) as T;
-      let body: ApiErrorBody = {};
+      if (response.ok) {
+        const value: unknown = await response.json();
+        if (!valid(value)) throw new ApiRequestError("The query service returned invalid data", "invalid_response", 502);
+        const release = /^\/v1\/releases\/([^/]+)\//u.exec(path)?.[1];
+        if (release && value && typeof value === "object" && "release_id" in value && value.release_id !== decodeURIComponent(release)) {
+          throw new ApiRequestError("The query service returned a different release", "release_mismatch", 502);
+        }
+        return value;
+      }
+      let code = "http_error";
+      let message = `${response.status} ${response.statusText}`;
       try {
-        body = (await response.json()) as ApiErrorBody;
+        const body: unknown = await response.json();
+        if (body && typeof body === "object" && "error" in body && body.error && typeof body.error === "object") {
+          if ("code" in body.error && typeof body.error.code === "string") code = body.error.code;
+          if ("message" in body.error && typeof body.error.message === "string") message = body.error.message;
+        }
       } catch {
         // HTTP status remains useful when a proxy supplies a non-JSON error page.
       }
-      const code = body.error?.code || "http_error";
       if (retryBusy && attempt === 0 && response.status === 503 && code === "server_busy") {
         await wait(retryDelay(response), controller.signal);
         continue;
       }
       throw new ApiRequestError(
-        body.error?.message || `${response.status} ${response.statusText}`,
+        message,
         code,
         response.status,
       );
@@ -133,7 +143,7 @@ export async function checkApiRelease(
   });
   try {
     const ready = await Promise.race([
-      request<{status: string; release_id: string; read_model_version: number}>("/readyz", controller.signal),
+      request("/readyz", validate.Ready, controller.signal),
       timeout,
     ]);
     if (ready.release_id !== releaseId) {
@@ -188,7 +198,7 @@ export function dictionary(
   options: Parameters<typeof searchParameters>[0],
   signal?: AbortSignal,
 ): Promise<PageResult<DictionaryEntry>> {
-  return request(`${releasePath(releaseId, "dictionary")}?${searchParameters(options)}`, signal);
+  return request(`${releasePath(releaseId, "dictionary")}?${searchParameters(options)}`, validate.DictionaryPage, signal);
 }
 
 export function concordance(
@@ -196,7 +206,7 @@ export function concordance(
   options: Parameters<typeof searchParameters>[0],
   signal?: AbortSignal,
 ): Promise<PageResult<SentenceSummary>> {
-  return request(`${releasePath(releaseId, "concordance")}?${searchParameters(options)}`, signal);
+  return request(`${releasePath(releaseId, "concordance")}?${searchParameters(options)}`, validate.ConcordancePage, signal);
 }
 
 export function sentenceDetail(
@@ -204,7 +214,7 @@ export function sentenceDetail(
   sentenceId: string,
   signal?: AbortSignal,
 ): Promise<SearchRecord> {
-  return request(releasePath(releaseId, `sentences/${encodeURIComponent(sentenceId)}`), signal);
+  return request(releasePath(releaseId, `sentences/${encodeURIComponent(sentenceId)}`), validate.SearchRecord, signal);
 }
 
 export function translationLanguages(
@@ -217,6 +227,7 @@ export function translationLanguages(
   if (corpusId) parameters.set("corpus_id", corpusId);
   return request(
     `${releasePath(releaseId, "translation-languages")}?${parameters}`,
+    validate.TranslationLanguages,
     signal,
   );
 }
@@ -229,17 +240,7 @@ export function summaries(
 ) {
   const parameters = new URLSearchParams({language_id: languageId, limit: "50"});
   if (corpusId) parameters.set("corpus_id", corpusId);
-  return request<{
-    release_id: string;
-    sentences: number;
-    tokens: number;
-    source_types: number;
-    normalized_types: number;
-    source_frequencies: Array<{value: string; count: number}>;
-    normalized_frequencies: Array<{value: string; count: number}>;
-    translation_frequencies: Array<{value: string; count: number}>;
-    distributions: Array<{value: string; count: number}>;
-  }>(`${releasePath(releaseId, "summaries")}?${parameters}`, signal, {
+  return request(`${releasePath(releaseId, "summaries")}?${parameters}`, validate.SummaryResponse, signal, {
     timeoutMs: API_ANALYTICAL_TIMEOUT_MS,
   });
 }
@@ -260,8 +261,8 @@ export async function preflightExport(
 ): Promise<void> {
   const values = new URLSearchParams(parameters);
   values.set("preflight", "true");
-  const result = await request<{release_id: string; status: string}>(
-    `${releasePath(releaseId, `datasets/${route}`)}?${values}`, signal, {retryBusy: false},
+  const result = await request(
+    `${releasePath(releaseId, `datasets/${route}`)}?${values}`, validate.ExportReady, signal, {retryBusy: false},
   );
   if (result.release_id !== releaseId || result.status !== "ready") {
     throw new ApiRequestError("The export release is not ready", "release_mismatch", 503);
@@ -273,17 +274,7 @@ export function datasetPreview(
   parameters: URLSearchParams,
   signal?: AbortSignal,
 ) {
-  return request<{
-    release_id: string;
-    record_level: "sentence" | "word" | "morpheme";
-    complete_fields: boolean;
-    estimated_rows: number;
-    selected_rows: number;
-    returned_rows: number;
-    truncated: boolean;
-    fields: string[];
-    items: Array<Record<string, string | number | null>>;
-  }>(`${releasePath(releaseId, "datasets/preview")}?${parameters}`, signal, {
+  return request(`${releasePath(releaseId, "datasets/preview")}?${parameters}`, validate.DatasetPreviewResult, signal, {
     timeoutMs: API_ANALYTICAL_TIMEOUT_MS,
   });
 }
