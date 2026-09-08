@@ -130,7 +130,10 @@ describe("translation progress", () => {
       .find((button) => button.textContent === "Translate");
     expect(translateButton).toBeDisabled();
     expect(container.querySelector(".model-privacy-note")).toHaveTextContent(
-      "Nothing is sent unless you check the box and press Translate",
+      "Sent only with consent",
+    );
+    expect(container.querySelector(".model-privacy-note")).toHaveTextContent(
+      "their retention has not been verified",
     );
     expect(container.querySelector<HTMLAnchorElement>('.model-privacy-note a')?.href).toBe(
       "https://huggingface.co/privacy",

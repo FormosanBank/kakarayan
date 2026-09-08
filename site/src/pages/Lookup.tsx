@@ -22,10 +22,10 @@ export function Lookup({
 
   function selectKind(nextKind: LookupKind) {
     if (nextKind === kind) return;
-    const nextParams = Object.fromEntries(params.entries());
-    nextParams.type = nextKind;
-    delete nextParams.mode;
-    delete nextParams.record;
+    const nextParams = new URLSearchParams(params);
+    nextParams.set("type", nextKind);
+    nextParams.delete("mode");
+    nextParams.delete("record");
     setParams(nextParams);
   }
 

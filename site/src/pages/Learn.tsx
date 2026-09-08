@@ -10,61 +10,55 @@ import {StudyDeck} from "../components/StudyDeck";
 import {Tabs} from "../components/Tabs";
 import {ResourceGate} from "../components/LoadingState";
 import {useI18n} from "../i18n";
-import {useNavigationPermission, useSearchParams} from "../routing";
+import {useSearchParams} from "../routing";
 import type {AppData, DictionaryEntry, SearchRecord} from "../types";
 
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
+const STUDIO_TABS: StudioTab[] = ["lookup", "deck", "practice", "translation", "orthography", "lessons"];
 
 export function Learn({data}: {data: AppData}) {
-  const {dialectName, languageName, t, tx} = useI18n();
-  const [params] = useSearchParams();
-  const mayLeave = useNavigationPermission();
+  const {dialectName, languageName, locale, t, tx} = useI18n();
+  const [params, setParams] = useSearchParams();
   const amis = data.languages.find((language) => language.name === "Amis");
   const requestedLanguage = params.get("language");
   const initialLanguage = data.languages.find((language) => language.id === requestedLanguage) ?? amis ?? data.languages[0];
-  const [languageId, setLanguageId] = useState(initialLanguage?.id ?? "");
+  const languageId = initialLanguage?.id ?? "";
   const language = data.languages.find((item) => item.id === languageId) ?? data.languages[0];
   const requestedDialect = params.get("dialect") ?? "";
-  const [dialect, setDialect] = useState(
-    initialLanguage?.dialects.includes(requestedDialect) ? requestedDialect : "",
-  );
-  const requestedTool = params.get("tool") as StudioTab | null;
-  const [tab, setTab] = useState<StudioTab>(
-    requestedTool && ["lookup", "deck", "practice", "translation", "orthography", "lessons"].includes(requestedTool)
-      ? requestedTool
-      : "lookup",
-  );
+  const dialect = initialLanguage?.dialects.includes(requestedDialect) ? requestedDialect : "";
+  const tab = STUDIO_TABS.find((value) => value === params.get("tool")) ?? "lookup";
   const [visited, setVisited] = useState(() => new Set<StudioTab>([tab]));
+  if (!visited.has(tab)) setVisited(new Set([...visited, tab]));
+  function updateScope(values: Record<string, string>) {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value); else next.delete(key);
+    }
+    return setParams(next);
+  }
   function changeTab(next: StudioTab) {
     if (next === tab) return true;
-    if (!mayLeave()) return false;
-    setVisited((previous) => new Set([...previous, next]));
-    setTab(next);
-    return true;
+    return updateScope({tool: next});
   }
   const requestedLookupKind = params.get("type");
-  const [lookupKind, setLookupKind] = useState<LookupKind>(
-    requestedLookupKind === "sentences" ? "sentences" : "dictionary",
-  );
+  const lookupKind: LookupKind = requestedLookupKind === "sentences" ? "sentences" : "dictionary";
   const [pendingSentenceQuery, setPendingSentenceQuery] = useState<string | null>(null);
   const [practiceTarget, setPracticeTarget] = useState("");
+  const notes = data.content.entries.filter((entry) => entry.target_language_id === languageId &&
+    entry.interface_language === locale && (!dialect || !entry.dialects.length || entry.dialects.includes(dialect)));
   function changeLanguage(nextId: string) {
-    if (!mayLeave()) return;
-    setLanguageId(nextId);
-    setDialect("");
+    if (!updateScope({language: nextId, dialect: "", corpus: ""})) return;
     setPendingSentenceQuery(null);
   }
 
   function selectLookupKind(nextKind: LookupKind) {
     setPendingSentenceQuery(null);
-    setLookupKind(nextKind);
+    updateScope({type: nextKind, mode: ""});
   }
 
   function viewSentences(entry: DictionaryEntry) {
-    if (entry.language_id !== languageId) changeLanguage(entry.language_id);
+    if (!updateScope({language: entry.language_id, type: "sentences", tool: "lookup", direction: "formosan", q: entry.headword, mode: "contains"})) return;
     setPendingSentenceQuery(entry.headword);
-    setLookupKind("sentences");
-    changeTab("lookup");
   }
 
   function practice(record: SearchRecord) {
@@ -94,7 +88,7 @@ export function Learn({data}: {data: AppData}) {
             <label className="field">
               {tx("Dialect", "方言")}
               <select value={dialect} onChange={(event) => {
-                if (mayLeave()) setDialect(event.target.value);
+                updateScope({dialect: event.target.value});
               }}>
                 <option value="">{tx("All dialects", "所有方言")}</option>
                 {language.dialects.map((value) => <option key={value} value={value}>{dialectName(value)}</option>)}
@@ -171,9 +165,9 @@ export function Learn({data}: {data: AppData}) {
         aria-labelledby="studio-tab-lessons" hidden={tab !== "lessons"}>
         <ResourceGate resource="content" state={data.resources.content}>
         {tab === "lessons" &&
-          (data.content.entries.length ? (
+          (notes.length ? (
             <div className="reviewed-content">
-              {data.content.entries.map((entry) => (
+              {notes.map((entry) => (
                 <article key={entry.id}>
                   <p className="eyebrow">
                     {entry.kind} · reviewed {entry.reviewed_at}

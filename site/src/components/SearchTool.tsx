@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useRef, useState, type FormEvent} from "react";
+import {useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent} from "react";
 
 import {concordance, dictionary, translationLanguages} from "../apiClient";
 import {apiErrorMessage, isAbortError} from "../apiErrors";
@@ -30,6 +30,11 @@ const REQUIREMENTS: TierRequirement[] = [
   "unclear",
 ];
 
+function scopeKey(params: URLSearchParams): string {
+  return JSON.stringify(["type", "q", "language", "corpus", "dialect", "direction", "target", "mode", "require"]
+    .map((key) => [key, params.getAll(key)]));
+}
+
 export function SearchTool({
   data,
   kind,
@@ -53,25 +58,28 @@ export function SearchTool({
 }) {
   const {dialectName, languageName, locale, number, t, tx} = useI18n();
   const [params, setParams] = useSearchParams();
+  const radioName = useId();
   const amis = data.languages.find((language) => language.name === "Amis");
   const [query, setQuery] = useState(initialQuery ?? params.get("q") ?? "");
   const [languageId, setLanguageId] = useState(
-    selectedLanguageId ?? params.get("language") ?? amis?.id ?? data.languages[0]?.id ?? "",
+    selectedLanguageId ?? data.languages.find((item) => item.id === params.get("language"))?.id ?? amis?.id ?? data.languages[0]?.id ?? "",
   );
-  const [corpusId, setCorpusId] = useState(params.get("corpus") ?? "");
-  const [dialect, setDialect] = useState(selectedDialect ?? params.get("dialect") ?? "");
+  const [corpusId, setCorpusId] = useState(data.corpora.find((item) => item.id === params.get("corpus") && item.languages.includes(languageId))?.id ?? "");
+  const [dialect, setDialect] = useState(selectedDialect ?? data.languages.find((item) => item.id === languageId)?.dialects.find((value) => value === params.get("dialect")) ?? "");
   const [direction, setDirection] = useState<SearchDirection>(
     !autoSearch && params.get("direction") === "translation" ? "translation" : "formosan",
   );
   const requestedMode = params.get("mode");
   const [match, setMatch] = useState<MatchMode>(
-    MATCH_MODES.includes(requestedMode as MatchMode)
-      ? (requestedMode as MatchMode)
-      : kind === "sentences" ? "contains" : "exact",
+    MATCH_MODES.find((mode) => mode === requestedMode) ?? (kind === "sentences" ? "contains" : "exact"),
   );
-  const [requirements, setRequirements] = useState<TierRequirement[]>([]);
+  const [requirements, setRequirements] = useState<TierRequirement[]>(
+    REQUIREMENTS.filter((value) => params.getAll("require").includes(value)),
+  );
   const [targets, setTargets] = useState<Array<{xml_lang: string; records: number}>>([]);
   const [targetsLoading, setTargetsLoading] = useState(true);
+  const [targetsError, setTargetsError] = useState("");
+  const [targetAttempt, setTargetAttempt] = useState(0);
   const [translationLanguage, setTranslationLanguage] = useState(params.get("target") ?? "eng");
   const [dictionaryEntries, setDictionaryEntries] = useState<DictionaryEntry[]>([]);
   const [sentences, setSentences] = useState<SentenceSummary[]>([]);
@@ -83,11 +91,12 @@ export function SearchTool({
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
   const initialSearchStarted = useRef(false);
+  const acceptedParams = useRef(scopeKey(params));
 
   const selectedLanguage = data.languages.find((language) => language.id === languageId);
   const selectedTranslationLanguage = translationLanguageName(translationLanguage, locale);
   const resultTranslationLanguage = translationLanguage;
-  const translationSearchReady = !targetsLoading && (
+  const translationSearchReady = !targetsLoading && !targetsError && (
     direction === "formosan" || targets.some((target) => target.xml_lang === translationLanguage)
   );
   const searchLanguageValue = direction === "formosan"
@@ -125,12 +134,32 @@ export function SearchTool({
   }, []);
 
   useEffect(() => {
+    const encoded = scopeKey(params);
+    if (acceptedParams.current === encoded) return;
+    acceptedParams.current = encoded;
+    resetResults();
+    const id = selectedLanguageId ?? data.languages.find((item) => item.id === params.get("language"))?.id ?? amis?.id ?? data.languages[0]?.id ?? "";
+    const language = data.languages.find((item) => item.id === id);
+    setLanguageId(id);
+    setCorpusId(data.corpora.find((item) => item.id === params.get("corpus") && item.languages.includes(id))?.id ?? "");
+    setDialect(selectedDialect ?? language?.dialects.find((value) => value === params.get("dialect")) ?? "");
+    setQuery(params.get("q") ?? "");
+    setDirection(params.get("direction") === "translation" ? "translation" : "formosan");
+    setTranslationLanguage(params.get("target") ?? "eng");
+    setMatch(MATCH_MODES.find((value) => value === params.get("mode")) ?? (kind === "sentences" ? "contains" : "exact"));
+    setRequirements(REQUIREMENTS.filter((value) => params.getAll("require").includes(value)));
+    setTargetsLoading(true);
+    setTargetsError("");
+  }, [params, data.languages, data.corpora, amis?.id, kind, selectedLanguageId, selectedDialect, resetResults]);
+
+  useEffect(() => {
     if (!languageId || !data.query.available) return;
     const next = new AbortController();
     translationLanguages(data.meta.release_id, languageId, corpusId, next.signal).then(
       (values) => {
         if (next.signal.aborted) return;
         setTargets(values);
+        setTargetsError("");
         setTargetsLoading(false);
         const available = new Set(values.map((item) => item.xml_lang));
         setTranslationLanguage((current) => {
@@ -140,16 +169,14 @@ export function SearchTool({
         });
         if (values.length === 0) setDirection("formosan");
       },
-      () => {
+      (cause: unknown) => {
         if (next.signal.aborted) return;
-        setTargets([]);
         setTargetsLoading(false);
-        setTranslationLanguage("");
-        setDirection("formosan");
+        setTargetsError(apiErrorMessage(cause, tx));
       },
     );
     return () => next.abort();
-  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale]);
+  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale, targetAttempt, tx]);
 
   useEffect(() => () => controller.current?.abort(), []);
 
@@ -194,7 +221,8 @@ export function SearchTool({
         }
         setSearched(true);
         if (!append) {
-          setParams({
+          const nextParams = new URLSearchParams({
+            ...(learner && {tool: "lookup"}),
             type: kind,
             q: query.trim(),
             language: languageId,
@@ -204,6 +232,9 @@ export function SearchTool({
             ...(corpusId && {corpus: corpusId}),
             ...(dialect && {dialect}),
           });
+          for (const requirement of requirements) nextParams.append("require", requirement);
+          acceptedParams.current = scopeKey(nextParams);
+          setParams(nextParams);
         }
       } catch (cause) {
         if (!isAbortError(cause)) {
@@ -219,7 +250,7 @@ export function SearchTool({
     [
       corpusId, cursor, data.meta.release_id, data.query.available, dialect, direction,
       kind, languageId, match, query, requirements, setParams, translationLanguage,
-      translationSearchReady, tx,
+      translationSearchReady, learner, tx,
     ],
   );
 
@@ -278,6 +309,10 @@ export function SearchTool({
         </div>
       )}
       <form className="search-form" onSubmit={submit}>
+        {targetsError && <div className="callout callout--error" role="alert">
+          {tx("Translation languages could not be loaded.", "無法載入翻譯語言。")}
+          <button type="button" onClick={() => setTargetAttempt((value) => value + 1)}>{tx("Retry", "重試")}</button>
+        </div>}
         <div className={`search-form__fields ${selectedLanguageId ? "search-form__fields--controlled" : ""}`}>
           {!selectedLanguageId && (
             <label className="field search-form__formosan-language">
@@ -305,6 +340,8 @@ export function SearchTool({
               <option value="formosan">
                 {selectedLanguage ? languageName(selectedLanguage) : tx("Formosan", "臺灣南島語")}
               </option>
+              {direction === "translation" && !targets.some((item) => item.xml_lang === translationLanguage) &&
+                <option value={`translation:${translationLanguage}`}>{selectedTranslationLanguage}</option>}
               {targets.map((target) => (
                 <option key={target.xml_lang} value={`translation:${target.xml_lang}`}>
                   {translationLanguageName(target.xml_lang, locale)}
@@ -324,7 +361,7 @@ export function SearchTool({
                 }}
               >
                 {targetsLoading && <option value={translationLanguage}>{tx("Loading…", "載入中…")}</option>}
-                {!targetsLoading && targets.length === 0 && <option value="">{tx("No translation", "沒有翻譯")}</option>}
+                {!targetsLoading && !targetsError && targets.length === 0 && <option value="">{tx("No translation", "沒有翻譯")}</option>}
                 {!targetsLoading && translationLanguage && !targets.some(
                   (target) => target.xml_lang === translationLanguage,
                 ) && (
@@ -379,7 +416,7 @@ export function SearchTool({
             </label>
             <fieldset className="mode-picker">
               <legend>{tx("Match", "比對方式")}</legend>
-              {MATCH_MODES.map((value) => <label key={value}><input type="radio" checked={match === value} onChange={() => {
+              {MATCH_MODES.map((value) => <label key={value}><input type="radio" name={radioName} checked={match === value} onChange={() => {
                 resetResults();
                 setMatch(value);
               }} /><span>{t(`search.${value}`)}</span></label>)}

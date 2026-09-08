@@ -148,7 +148,7 @@ export function NavLink({to, className, children, ...props}: LinkProps) {
 
 export function useSearchParams(): [
   URLSearchParams,
-  (value: Record<string, string>) => void,
+  (value: Record<string, string> | URLSearchParams) => boolean,
 ] {
   const location = useContext(LocationContext);
   const guard = useContext(NavigationGuardContext);
@@ -156,11 +156,14 @@ export function useSearchParams(): [
     () => new URLSearchParams(location.search),
     [location.search],
   );
-  const setSearch = (value: Record<string, string>) => {
+  const setSearch = useCallback((value: Record<string, string> | URLSearchParams) => {
     const next = new URLSearchParams(value);
-    if (!guard.request(true)) return;
-    pushRoute(routeHref(`${location.path}${next.size ? `?${next}` : ""}`));
-  };
+    const href = routeHref(`${location.path}${next.size ? `?${next}` : ""}`);
+    if (currentBrowserUrl() === href) return true;
+    if (!guard.request(true)) return false;
+    pushRoute(href);
+    return true;
+  }, [guard, location.path]);
   return [search, setSearch];
 }
 

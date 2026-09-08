@@ -524,6 +524,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record_level: RecordLevel,
         complete_fields: bool,
         max_rows: int,
+        selection_rows: int,
     ) -> dict:
         return release_store(request, release_id).dataset(
             language_id=language_id,
@@ -538,6 +539,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             record_level=record_level,
             complete_fields=complete_fields,
             max_rows=max_rows,
+            selection_rows=selection_rows,
         )
 
     @app.get("/v1/releases/{release_id}/datasets/preview", tags=["datasets"])
@@ -557,6 +559,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
         max_rows: Annotated[int, Query(ge=1, le=DATASET_PREVIEW_MAX_ROWS)] = 12,
+        selection_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
     ) -> dict:
         _cache(response)
         return await run_query(
@@ -576,6 +579,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 record_level,
                 complete_fields,
                 max_rows,
+                selection_rows,
             ),
             timeout_seconds=configured.dataset_preview_timeout_seconds,
             workload="analytical",

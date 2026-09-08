@@ -16,15 +16,17 @@ import {
   type DatasetFieldsByLevel,
   type DatasetLevel,
 } from "../datasetSelection";
-import {createDatasetRecipe, type DatasetFormat} from "../datasetRecipe";
+import {createDatasetRecipe, datasetScopeFromUrl, datasetScopeToUrl, type DatasetFormat} from "../datasetRecipe";
 import {useI18n} from "../i18n";
 import {Link, useSearchParams} from "../routing";
 import {translationLanguageName} from "../translationLanguages";
 import type {AppData, MatchMode, SearchDirection} from "../types";
 import {DatasetPreview} from "./DatasetPreview";
+import {Tabs} from "./Tabs";
 
 interface PreviewState {
   signature: string;
+  status: "idle" | "loading" | "ready" | "error" | "cancelled";
   values: Partial<Record<DatasetLevel, DatasetPreviewResult>>;
   pending: DatasetLevel[];
   errors: Partial<Record<DatasetLevel, string>>;
@@ -49,37 +51,31 @@ function startDownload(url: string, filename: string) {
   anchor.remove();
 }
 
-function initialFields(): DatasetFieldsByLevel {
-  return {
-    sentence: [...DEFAULT_DATASET_FIELDS.sentence],
-    word: [...DEFAULT_DATASET_FIELDS.word],
-    morpheme: [...DEFAULT_DATASET_FIELDS.morpheme],
-  };
-}
-
-export function DatasetBuilder({data}: {data: AppData}) {
+export function DatasetBuilder({data, active = true}: {data: AppData; active?: boolean}) {
   const {languageName, locale, number, tx} = useI18n();
-  const [urlParams] = useSearchParams();
-  const requestedLanguage = urlParams.get("language") ?? "";
-  const [languageId, setLanguageId] = useState(
-    data.languages.some((item) => item.id === requestedLanguage) ? requestedLanguage : "",
-  );
-  const [corpusId, setCorpusId] = useState(urlParams.get("corpus") ?? "");
-  const [dialect, setDialect] = useState("");
-  const [query, setQuery] = useState("");
-  const [direction, setDirection] = useState<SearchDirection>("formosan");
-  const [translationLanguage, setTranslationLanguage] = useState("");
+  const [urlParams, setUrlParams] = useSearchParams();
+  const urlScope = useMemo(() => datasetScopeFromUrl(urlParams, data), [urlParams, data]);
+  const acceptedScope = useRef(datasetScopeToUrl(urlScope).toString());
+  const currentView = useRef(urlParams.get("view") ?? "builder");
+  const [languageId, setLanguageId] = useState(urlScope.languageId);
+  const [corpusId, setCorpusId] = useState(urlScope.corpusId);
+  const [dialect, setDialect] = useState(urlScope.dialect);
+  const [query, setQuery] = useState(urlScope.query);
+  const [direction, setDirection] = useState<SearchDirection>(urlScope.direction);
+  const [translationLanguage, setTranslationLanguage] = useState(urlScope.translationLanguage);
   const [translationOptions, setTranslationOptions] = useState<
     Array<{xml_lang: string; records: number}>
   >([]);
-  const [match, setMatch] = useState<MatchMode>("exact");
-  const [levels, setLevels] = useState<DatasetLevel[]>(["sentence"]);
+  const [match, setMatch] = useState<MatchMode>(urlScope.match);
+  const [levels, setLevels] = useState<DatasetLevel[]>(urlScope.recordLevels);
   const [activeColumnLevel, setActiveColumnLevel] = useState<DatasetLevel>("sentence");
-  const [fields, setFields] = useState<DatasetFieldsByLevel>(initialFields);
-  const [maxRows, setMaxRows] = useState(1000);
-  const [format, setFormat] = useState<DatasetFormat>("csv");
+  const [fields, setFields] = useState<DatasetFieldsByLevel>(urlScope.fields);
+  const [maxRows, setMaxRows] = useState(urlScope.maxRows);
+  const [format, setFormat] = useState<DatasetFormat>(urlScope.format);
+  const [completeFields, setCompleteFields] = useState(urlScope.completeFields);
   const [previewState, setPreviewState] = useState<PreviewState>({
     signature: "",
+    status: "idle",
     values: {},
     pending: [],
     errors: {},
@@ -87,8 +83,35 @@ export function DatasetBuilder({data}: {data: AppData}) {
   const [error, setError] = useState("");
   const [previewAttempt, setPreviewAttempt] = useState(0);
   const previewController = useRef<AbortController | null>(null);
+  const previewTimer = useRef<number | null>(null);
   const previewSnapshot = useRef(previewState);
   const retryLevels = useRef<DatasetLevel[] | null>(null);
+  const [facetError, setFacetError] = useState("");
+  const [facetAttempt, setFacetAttempt] = useState(0);
+  useEffect(() => {
+    currentView.current = urlParams.get("view") ?? "builder";
+    const key = datasetScopeToUrl(urlScope).toString();
+    if (acceptedScope.current === key) return;
+    acceptedScope.current = key;
+    setLanguageId(urlScope.languageId); setCorpusId(urlScope.corpusId); setDialect(urlScope.dialect);
+    setQuery(urlScope.query); setDirection(urlScope.direction); setTranslationLanguage(urlScope.translationLanguage);
+    setMatch(urlScope.match); setLevels(urlScope.recordLevels); setFields(urlScope.fields);
+    setMaxRows(urlScope.maxRows); setFormat(urlScope.format); setCompleteFields(urlScope.completeFields);
+  }, [urlScope, urlParams]);
+  const scope = useMemo(() => ({releaseId: data.meta.release_id, languageId, corpusId, dialect, query,
+    direction, translationLanguage, match, recordLevels: levels, fields, maxRows, format, completeFields}),
+  [data.meta.release_id, languageId, corpusId, dialect, query, direction, translationLanguage, match, levels, fields, maxRows, format, completeFields]);
+  // URL persistence is independent of preview requests, including format-only changes.
+  const pendingScope = useRef(scope);
+  useEffect(() => { pendingScope.current = scope; }, [scope]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const value = pendingScope.current;
+      acceptedScope.current = datasetScopeToUrl(value).toString();
+      setUrlParams(datasetScopeToUrl(value, currentView.current));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [scope, setUrlParams]);
 
   const corpora = useMemo(
     () => data.corpora.filter((corpus) => !languageId || corpus.languages.includes(languageId)),
@@ -133,6 +156,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
     translationLanguage: direction === "translation" ? translationLanguage : "",
     match,
     levels: levels.map((level) => [level, fields[level]]),
+    maxRows,
+    completeFields,
   }), [
     corpusId,
     data.meta.release_id,
@@ -144,9 +169,11 @@ export function DatasetBuilder({data}: {data: AppData}) {
     match,
     query,
     translationLanguage,
+    maxRows,
+    completeFields,
   ]);
   const canPreview = Boolean(
-    languageId && selectionReady && translationSearchReady && data.query.available,
+    active && languageId && selectionReady && translationSearchReady && !facetError && data.query.available,
   );
   const previewIsCurrent = previewState.signature === previewSignature;
   const previews = previewIsCurrent ? previewState.values : {};
@@ -160,13 +187,12 @@ export function DatasetBuilder({data}: {data: AppData}) {
     level: DatasetLevel,
     selectedFields: DatasetField[],
     limit: number,
-    includeFormat = false,
   ): URLSearchParams => {
     const values = new URLSearchParams({
       language_id: languageId,
       max_rows: String(limit),
       record_level: level,
-      complete_fields: "true",
+      complete_fields: String(completeFields),
     });
     if (corpusId) values.set("corpus_id", corpusId);
     if (dialect) values.set("dialect", dialect);
@@ -177,9 +203,8 @@ export function DatasetBuilder({data}: {data: AppData}) {
     }
     values.set("match", match);
     for (const field of selectedFields) values.append("field", field);
-    if (includeFormat) values.set("format", format);
     return values;
-  }, [corpusId, dialect, direction, format, languageId, match, query, translationLanguage]);
+  }, [corpusId, dialect, direction, completeFields, languageId, match, query, translationLanguage]);
 
   useEffect(() => {
     if (!languageId || !data.query.available) return;
@@ -188,6 +213,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
       (options) => {
         if (controller.signal.aborted) return;
         setError("");
+        setFacetError("");
         setTranslationOptions(options);
         setTranslationLanguage((current) => {
           if (options.some((option) => option.xml_lang === current)) return current;
@@ -202,26 +228,24 @@ export function DatasetBuilder({data}: {data: AppData}) {
       },
       (cause: unknown) => {
         if (controller.signal.aborted) return;
-        setError(cause instanceof Error ? cause.message : String(cause));
-        setTranslationOptions([]);
-        setDirection("formosan");
+        setFacetError(apiErrorMessage(cause, tx));
       },
     );
     return () => controller.abort();
-  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale]);
+  }, [corpusId, data.meta.release_id, data.query.available, languageId, locale, facetAttempt, tx]);
 
   useEffect(() => {
     previewSnapshot.current = previewState;
   }, [previewState]);
 
   useEffect(() => {
-    if (!canPreview) {
-      return;
-    }
     previewController.current?.abort();
+    if (!canPreview) return;
+    if (previewSnapshot.current.signature === previewSignature && previewSnapshot.current.status === "ready" && !retryLevels.current) return;
     const next = new AbortController();
     previewController.current = next;
     const timer = window.setTimeout(() => {
+      if (next.signal.aborted) return;
       const requestedRetry = retryLevels.current;
       retryLevels.current = null;
       const snapshot = previewSnapshot.current;
@@ -233,6 +257,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
       for (const level of requestedLevels) delete retainedErrors[level];
       setPreviewState({
         signature: previewSignature,
+        status: "loading",
         values: preserveCompleted ? snapshot.values : {},
         pending: requestedLevels,
         errors: retainedErrors,
@@ -240,9 +265,11 @@ export function DatasetBuilder({data}: {data: AppData}) {
       const loadPreviews = async () => {
         for (const level of requestedLevels) {
           try {
+            const values = parameters(level, fields[level], Math.min(12, maxRows));
+            values.set("selection_rows", String(maxRows));
             const result = await datasetPreview(
               data.meta.release_id,
-              parameters(level, fields[level], 12),
+              values,
               next.signal,
             );
             if (next.signal.aborted) {
@@ -272,9 +299,12 @@ export function DatasetBuilder({data}: {data: AppData}) {
               : current);
           }
         }
+        if (!next.signal.aborted) setPreviewState((current) => current.signature === previewSignature
+          ? {...current, status: Object.keys(current.errors).length ? "error" : "ready"} : current);
       };
       void loadPreviews();
     }, 250);
+    previewTimer.current = timer;
     return () => {
       window.clearTimeout(timer);
       next.abort();
@@ -285,16 +315,17 @@ export function DatasetBuilder({data}: {data: AppData}) {
     fields,
     levels,
     parameters,
+    maxRows,
     previewAttempt,
     previewSignature,
     tx,
   ]);
 
   function cancelPreview() {
+    if (previewTimer.current !== null) window.clearTimeout(previewTimer.current);
     previewController.current?.abort();
-    setPreviewState((current) => current.signature === previewSignature
-      ? {...current, pending: []}
-      : current);
+    setPreviewState((current) => ({signature: previewSignature, status: "cancelled", pending: [],
+      values: current.signature === previewSignature ? current.values : {}, errors: {}}));
   }
 
   function retryPreview(level?: DatasetLevel) {
@@ -340,13 +371,15 @@ export function DatasetBuilder({data}: {data: AppData}) {
     if (levels.length === 1) {
       const level = levels[0];
       if (!level) return;
-      values = parameters(level, fields[level], maxRows, true);
+      values = parameters(level, fields[level], maxRows);
+      values.set("format", format);
       filename = `kakarayan-${data.meta.release_id}-${level}s.${format}`;
     } else {
       route = "export-package";
       const firstLevel = levels.at(0);
       if (!firstLevel) return;
-      values = parameters(firstLevel, [], maxRows, true);
+      values = parameters(firstLevel, [], maxRows);
+      values.set("format", format);
       values.delete("record_level");
       values.delete("field");
       for (const level of levels) {
@@ -372,6 +405,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
       maxRows,
       fields,
       format,
+      completeFields,
     });
     downloadBlob(
       new Blob([`${JSON.stringify(recipe, null, 2)}\n`], {type: "application/json"}),
@@ -384,7 +418,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
     0,
   );
   const exportRows = levels.reduce(
-    (total, level) => total + Math.min(previews[level]?.estimated_rows ?? 0, maxRows),
+    (total, level) => total + (previews[level]?.selected_rows ?? 0),
     0,
   );
   const previewComplete = levels.length > 0 && levels.every((level) => previews[level]);
@@ -466,30 +500,19 @@ export function DatasetBuilder({data}: {data: AppData}) {
           <div className="builder__column-heading">
             <h2>{tx("Columns", "欄位")}</h2>
             <p>{tx(
-              "Rows include every selected field. TRANSL values expand into language-specific columns.",
-              "每列包含所有選定欄位；TRANSL 值會展開為各語言專屬欄位。",
+              "TRANSL values expand into language-specific columns.",
+              "TRANSL 值會展開為各語言專屬欄位。",
             )}</p>
+            <label className="checkbox-row"><input type="checkbox" checked={completeFields} onChange={(event) => setCompleteFields(event.target.checked)} />
+              {tx("Require selected tiers on each S / W / M record", "每個 S / W / M 元素須具有選定層級")}</label>
           </div>
           {levels.length > 0 && (
             <>
-              <div className="builder__column-tabs" role="tablist" aria-label={tx("Columns by XML level", "依 XML 層級顯示欄位")}>
-                {levels.map((level) => {
-                  const info = DATASET_LEVEL_INFO.find(([value]) => value === level) ?? DATASET_LEVEL_INFO[0];
-                  return (
-                    <button
-                      aria-selected={columnLevel === level}
-                      key={level}
-                      onClick={() => setActiveColumnLevel(level)}
-                      role="tab"
-                      type="button"
-                    >
-                      <code>{info[1]}</code> {tx(info[2], info[3])}
-                      <span>{fields[level].length}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <section className="builder__level-columns">
+              <Tabs items={levels.map((level) => { const info = DATASET_LEVEL_INFO.find(([value]) => value === level) ?? DATASET_LEVEL_INFO[0];
+                return [level, `${info[1]} ${tx(info[2], info[3])} (${fields[level].length})`]; })}
+                value={columnLevel} onChange={setActiveColumnLevel} prefix="columns" panelId="columns-panel"
+                className="builder__column-tabs" label={tx("Columns by XML level", "依 XML 層級顯示欄位")} />
+              <section className="builder__level-columns" id="columns-panel" role="tabpanel" aria-labelledby={`columns-tab-${columnLevel}`}>
                 <header>
                   <h3><code>{columnInfo[1]}</code> {tx(columnInfo[2], columnInfo[3])}</h3>
                   <div className="field-actions">
@@ -526,7 +549,7 @@ export function DatasetBuilder({data}: {data: AppData}) {
               return <div key={level}><dt><code>{info[1]}</code> {tx(info[2], info[3])}</dt><dd>{languageId ? status : "—"}</dd></div>;
             })}
             <div><dt>{tx("Matching rows", "相符列數")}</dt><dd>{languageId ? (previewComplete ? number(estimatedRows) : (previewBusy ? "…" : (Object.keys(previewErrors).length > 0 ? tx("Incomplete", "未完成") : "—"))) : "—"}</dd></div>
-            <div><dt>{tx("Rows downloaded", "下載列數")}</dt><dd>{languageId ? (previewComplete ? number(exportRows) : (previewBusy ? "…" : (Object.keys(previewErrors).length > 0 ? tx("Incomplete", "未完成") : "—"))) : "—"}</dd></div>
+            <div><dt>{tx("Rows to export", "將匯出的列數")}</dt><dd>{languageId ? (previewComplete ? number(exportRows) : (previewBusy ? "…" : (Object.keys(previewErrors).length > 0 ? tx("Incomplete", "未完成") : "—"))) : "—"}</dd></div>
           </dl>
           <label className="field">{tx("Maximum per level", "每層級上限")}<select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))}>{[1000, 10_000, 25_000, 50_000, 100_000].map((value) => <option key={value} value={value}>{number(value)}</option>)}</select></label>
           <label className="field">{tx("File type", "檔案類型")}<select value={format} onChange={(event) => setFormat(event.target.value as DatasetFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option><option value="jsonl">JSON Lines</option></select></label>
@@ -555,6 +578,9 @@ export function DatasetBuilder({data}: {data: AppData}) {
         </aside>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
+      {facetError && <div className="callout callout--error" role="alert">{tx("Translation languages could not be loaded.", "無法載入翻譯語言。")}
+        <button onClick={() => setFacetAttempt((value) => value + 1)}>{tx("Retry", "重試")}</button></div>}
+      {previewIsCurrent && previewState.status === "cancelled" && <p role="status">{tx("Preview cancelled", "已取消預覽")}</p>}
       <DatasetPreview
         errors={previewErrors}
         fields={fields}

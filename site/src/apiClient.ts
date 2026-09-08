@@ -258,6 +258,7 @@ export function datasetPreview(
     record_level: "sentence" | "word" | "morpheme";
     complete_fields: boolean;
     estimated_rows: number;
+    selected_rows: number;
     returned_rows: number;
     truncated: boolean;
     fields: string[];

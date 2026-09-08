@@ -1,7 +1,7 @@
 import type {KeyboardEvent} from "react";
 
 export function Tabs<T extends string>({
-  items, value, onChange, label, prefix, className,
+  items, value, onChange, label, prefix, className, activation = "automatic", panelId,
 }: {
   items: ReadonlyArray<readonly [T, string]>;
   value: T;
@@ -9,6 +9,8 @@ export function Tabs<T extends string>({
   label: string;
   prefix: string;
   className: string;
+  activation?: "automatic" | "manual";
+  panelId?: string;
 }) {
   function move(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number;
@@ -19,13 +21,13 @@ export function Tabs<T extends string>({
     else return;
     event.preventDefault();
     const next = items[nextIndex];
-    if (next && onChange(next[0]) !== false) {
+    if (next && (activation === "manual" || onChange(next[0]) !== false)) {
       document.getElementById(`${prefix}-tab-${next[0]}`)?.focus();
     }
   }
   return <div className={className} role="tablist" aria-label={label}>
     {items.map(([id, text], index) => <button key={id} type="button" role="tab"
-      id={`${prefix}-tab-${id}`} aria-controls={`${prefix}-${id}`}
+      id={`${prefix}-tab-${id}`} aria-controls={panelId ?? `${prefix}-${id}`}
       aria-selected={value === id} tabIndex={value === id ? 0 : -1}
       onClick={() => onChange(id)} onKeyDown={(event) => move(event, index)}>
       <span>{text}</span>

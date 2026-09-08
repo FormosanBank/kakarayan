@@ -393,7 +393,9 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         ("field", "translations"),
         ("max_rows", "1"),
     ]
-    preview = client.get(release_path(client, "datasets/preview"), params=params)
+    preview = client.get(
+        release_path(client, "datasets/preview"), params=[*params, ("selection_rows", "1")]
+    )
     assert preview.status_code == 200
     assert preview.json()["estimated_rows"] == 2
     assert preview.json()["returned_rows"] == 1
@@ -408,6 +410,15 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert exported.status_code == 200
     assert exported.headers["x-kakarayan-row-count"] == "1"
     assert exported.text.startswith("id\tstandard\ttranslation_eng_1\n")
+
+    # A one-row preview describes all columns in the finite two-row export.
+    expanded = client.get(
+        release_path(client, "datasets/preview"), params=[*params, ("selection_rows", "2")]
+    ).json()
+    assert expanded["returned_rows"] == 1
+    assert expanded["selected_rows"] == 2
+    assert expanded["fields"] == ["id", "standard", "translation_eng_1", "translation_zho_1"]
+    assert expanded["items"][0]["translation_zho_1"] == ""
 
     larger_export = client.get(
         release_path(client, "datasets/export"),

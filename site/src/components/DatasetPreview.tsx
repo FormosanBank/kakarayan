@@ -9,6 +9,7 @@ import {
 } from "../datasetSelection";
 import {useI18n} from "../i18n";
 import {LoadingState} from "./LoadingState";
+import {Tabs} from "./Tabs";
 
 const levelInfo = new Map(DATASET_LEVEL_INFO.map((item) => [item[0], item]));
 
@@ -73,24 +74,13 @@ export function DatasetPreview({
           </div>
         </div>
         {levels.length > 1 && (
-          <div className="builder__preview-tabs" role="tablist" aria-label={tx("XML level preview", "XML 層級預覽")}>
-            {levels.map((level) => {
-              const item = levelInfo.get(level) ?? DATASET_LEVEL_INFO[0];
-              return (
-                <button
-                  aria-selected={displayLevel === level}
-                  key={level}
-                  onClick={() => setActiveLevel(level)}
-                  role="tab"
-                  type="button"
-                >
-                  <code>{item[1]}</code> {tx(item[2], item[3])}
-                  <span>{previews[level]?.estimated_rows ?? (loadingLevels.includes(level) ? "…" : (errors[level] ? tx("Error", "錯誤") : "—"))}</span>
-                </button>
-              );
-            })}
-          </div>
+          <Tabs items={levels.map((level) => { const item = levelInfo.get(level) ?? DATASET_LEVEL_INFO[0];
+            return [level, `${item[1]} ${tx(item[2], item[3])}`]; })}
+            value={displayLevel} onChange={setActiveLevel} prefix="preview" panelId="preview-panel"
+            className="builder__preview-tabs" label={tx("XML level preview", "XML 層級預覽")} />
         )}
+        <div id="preview-panel" role={levels.length > 1 ? "tabpanel" : undefined}
+          aria-labelledby={levels.length > 1 ? `preview-tab-${displayLevel}` : undefined}>
         {levels.length === 0 && (
           <div className="empty-state">{tx("Select an XML level.", "請選擇 XML 層級。")}</div>
         )}
@@ -118,8 +108,8 @@ export function DatasetPreview({
         {languageSelected && !activeLoading && !activeError && activeFields.length > 0 && active?.items.length === 0 && (
           <div className="empty-state">
             {tx(
-              "No complete rows match these filters and columns.",
-              "沒有同時符合篩選條件及完整欄位的資料列。",
+              "No rows match this selection.",
+              "沒有符合此選擇的資料列。",
             )}
           </div>
         )}
@@ -141,6 +131,7 @@ export function DatasetPreview({
             </table>
           </div>
         )}
+        </div>
       </div>
       {levels.length > 0 && activeFields.length > 0 && (
         <details className="builder__schema">

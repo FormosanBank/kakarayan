@@ -63,7 +63,7 @@
   display: block;
   overflow: hidden;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -78,7 +78,7 @@
 
 .availability {
   color: var(--danger);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -109,7 +109,7 @@
   border-radius: 999px;
   color: var(--body);
   background: var(--surface);
-  font: 500 10px/1 var(--font-mono);
+  font: 500 12px/1 var(--font-mono);
 }
 
 .artifact-card__actions {
@@ -153,7 +153,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .artifact-facts {
@@ -325,7 +325,7 @@
 .api-explorer__release {
   flex: 0 0 auto;
   color: var(--muted);
-  font: 500 11px/1.4 var(--font-mono);
+  font: 500 12px/1.4 var(--font-mono);
 }
 
 .api-explorer__release span {
@@ -369,7 +369,7 @@
 
 .api-pane-heading > span {
   color: var(--muted);
-  font: 500 10px/1.4 var(--font-mono);
+  font: 500 12px/1.4 var(--font-mono);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -442,13 +442,13 @@
 
 .api-request-preview__route span {
   color: var(--muted);
-  font: 600 10px/1.5 var(--font-mono);
+  font: 600 12px/1.5 var(--font-mono);
 }
 
 .api-request-preview__route code {
   min-width: 0;
   overflow-wrap: anywhere;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .api-request-preview dl {
@@ -461,7 +461,7 @@
   grid-template-columns: 128px minmax(0, 1fr);
   gap: 10px;
   padding: 3px 0;
-  font: 400 10px/1.5 var(--font-mono);
+  font: 400 12px/1.5 var(--font-mono);
 }
 
 .api-request-preview dt {
@@ -774,7 +774,7 @@
 
 .model-coverage dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .model-coverage dd {
@@ -844,7 +844,7 @@
 
 .model-grid dd {
   margin: 0;
-  font: 500 11px/1.4 var(--font-mono);
+  font: 500 12px/1.4 var(--font-mono);
   text-align: right;
 }
 

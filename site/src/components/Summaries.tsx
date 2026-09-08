@@ -5,6 +5,7 @@ import {apiErrorMessage, isAbortError} from "../apiErrors";
 import {useI18n} from "../i18n";
 import type {AppData} from "../types";
 import {LoadingState} from "./LoadingState";
+import {Tabs} from "./Tabs";
 
 type SummaryResult = Awaited<ReturnType<typeof summaries>>;
 type TableKind = "source" | "normalized" | "translation" | "distribution";
@@ -20,7 +21,7 @@ function rows(result: SummaryResult, kind: TableKind) {
 }
 
 function download(values: Array<{value: string; count: number}>, kind: TableKind) {
-  const csv = `value,count\n${values.map(({value, count}) => `"${value.replaceAll('"', '""')}",${count}`).join("\n")}\n`;
+  const csv = `value,count\n${values.map(({value, count}) => `"${(/^[=+@\-\t\r]/u.test(value) ? `'${value}` : value).replaceAll('"', '""')}",${count}`).join("\n")}\n`;
   const url = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -54,7 +55,8 @@ export function Summaries({data}: {data: AppData}) {
     setError("");
     setResult(null);
     try {
-      setResult(await summaries(data.meta.release_id, languageId, corpusId, next.signal));
+      const value = await summaries(data.meta.release_id, languageId, corpusId, next.signal);
+      if (!next.signal.aborted && controller.current === next) setResult(value);
     } catch (cause) {
       if (!isAbortError(cause)) {
         setError(apiErrorMessage(cause, tx));
@@ -78,14 +80,14 @@ export function Summaries({data}: {data: AppData}) {
         <div className="form-grid">
           <label className="field">
             {tx("Language", "語言")}
-            <select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setResult(null); }}>
+            <select value={languageId} onChange={(event) => { controller.current?.abort(); setLanguageId(event.target.value); setCorpusId(""); setResult(null); }}>
               <option value="">{tx("Choose…", "請選擇…")}</option>
               {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
             </select>
           </label>
           <label className="field">
             {tx("Corpus", "語料庫")}
-            <select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setResult(null); }}>
+            <select value={corpusId} disabled={!languageId} onChange={(event) => { controller.current?.abort(); setCorpusId(event.target.value); setResult(null); }}>
               <option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>
               {corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}
             </select>
@@ -125,21 +127,11 @@ export function Summaries({data}: {data: AppData}) {
             <div><strong>{number(result.source_types)}</strong><span>{tx("source forms", "來源形式")}</span></div>
             <div><strong>{number(result.normalized_types)}</strong><span>{tx("normalized forms", "正規化形式")}</span></div>
           </div>
-          <div className="summary-tabs" role="tablist" aria-label={tx("Summary table", "摘要表格")}>
-            {TABLE_KINDS.map((value) => (
-              <button
-                key={value}
-                role="tab"
-                aria-controls="summary-table"
-                aria-selected={kind === value}
-                onClick={() => setKind(value)}
-              >
-                {tableLabel(value)}
-              </button>
-            ))}
-          </div>
+          <Tabs items={TABLE_KINDS.map((value) => [value, tableLabel(value)])} value={kind}
+            onChange={setKind} prefix="summary" panelId="summary-panel" className="summary-tabs"
+            label={tx("Summary table", "摘要表格")} />
           <div className="summary-export"><button onClick={() => download(currentRows, kind)}>CSV</button></div>
-          <div className="table-scroll" tabIndex={0}>
+          <div className="table-scroll" tabIndex={0} role="tabpanel" id="summary-panel" aria-labelledby={`summary-tab-${kind}`}>
             <table className="summary-table" id="summary-table">
               <colgroup><col /><col className="summary-table__count" /></colgroup>
               <thead><tr><th scope="col">{tableLabel(kind)}</th><th scope="col">{tx("Count", "數量")}</th></tr></thead><tbody>

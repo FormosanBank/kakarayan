@@ -1530,6 +1530,7 @@ class CorpusStore:
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
         max_rows: int,
+        schema_rows: int | None = None,
     ) -> DatasetStream:
         budget = _ACTIVE_QUERY_BUDGET.get()
         query = self._dataset_query(
@@ -1553,7 +1554,7 @@ class CorpusStore:
                 ).fetchone()[0]
             )
             translation_columns = (
-                discover_translation_columns(connection, query, max_rows)
+                discover_translation_columns(connection, query, schema_rows or max_rows)
                 if "translations" in query.fields
                 else ()
             )
@@ -1597,6 +1598,7 @@ class CorpusStore:
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
         max_rows: int,
+        selection_rows: int | None = None,
     ) -> dict[str, Any]:
         stream = self.stream_dataset(
             language_id=language_id,
@@ -1610,13 +1612,15 @@ class CorpusStore:
             fields=fields,
             record_level=record_level,
             complete_fields=complete_fields,
-            max_rows=max_rows,
+            max_rows=min(max_rows, selection_rows or max_rows),
+            schema_rows=selection_rows,
         )
         return {
             "release_id": stream.release_id,
             "record_level": stream.record_level,
             "complete_fields": stream.complete_fields,
             "estimated_rows": stream.estimated_rows,
+            "selected_rows": min(stream.estimated_rows, selection_rows or max_rows),
             "returned_rows": stream.returned_rows,
             "truncated": stream.truncated,
             "fields": list(stream.fields),
