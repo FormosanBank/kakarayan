@@ -36,6 +36,30 @@ def normalize_text(value: str | None) -> str:
     return _EDGE_RE.sub("", collapsed).casefold()
 
 
+def match_snippet(text: str, query: str, maximum: int) -> tuple[str, bool]:
+    """Keep a bounded source-spelling window around a normalized match."""
+    if len(text) <= maximum:
+        return text, False
+    needle = normalize_text(query)
+    normalized = normalize_text(text)
+    match_at = normalized.find(needle) if needle else -1
+    if match_at < 0:
+        return text[: maximum - 1] + "…", True
+
+    # Prefix lengths locate source offsets even when casefold/NFC expands or
+    # contracts characters. Context covers a partially composed boundary.
+    low, high = 0, len(text)
+    while low < high:
+        middle = (low + high) // 2
+        if len(normalize_text(text[:middle])) < match_at:
+            low = middle + 1
+        else:
+            high = middle
+    start = max(0, low - min(40, (maximum - len(needle)) // 2))
+    end = min(len(text), start + maximum - 2)
+    return ("…" if start else "") + text[start:end] + ("…" if end < len(text) else ""), True
+
+
 def tokenize(value: str | None) -> list[str]:
     """Return whitespace chunks containing at least one letter or number."""
     if not value:

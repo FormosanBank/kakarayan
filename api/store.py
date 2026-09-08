@@ -27,7 +27,7 @@ from api.dataset_fields import (
 )
 from api.errors import ApiError
 from api.release import ReleaseState, readonly_connection
-from api.search import MatchMode, normalize_surface, normalize_text
+from api.search import MatchMode, match_snippet, normalize_surface, normalize_text
 
 SearchDirection = Literal["formosan", "translation"]
 FrequencySort = Literal["count", "form"]
@@ -579,6 +579,7 @@ class CorpusStore:
         rows: Sequence[dict[str, Any]],
         match_evidence: Mapping[str, Sequence[dict[str, Any]]] | None = None,
         match_evidence_truncated: set[str] | None = None,
+        query: str = "",
     ) -> list[dict[str, Any]]:
         if not rows:
             return []
@@ -613,15 +614,15 @@ class CorpusStore:
         for row in rows:
             identifier = str(row["id"])
             standard, original = CorpusStore._forms_by_kind(forms[identifier])
-            standard, standard_truncated = _bounded_text(standard, SUMMARY_FORM_MAX_CHARS)
-            original, original_truncated = _bounded_text(original, SUMMARY_FORM_MAX_CHARS)
+            standard, standard_truncated = match_snippet(standard, query, SUMMARY_FORM_MAX_CHARS)
+            original, original_truncated = match_snippet(original, query, SUMMARY_FORM_MAX_CHARS)
             sentence_translations = translations[identifier]
             summary_translations = []
             translation_truncated = len(sentence_translations) > SUMMARY_TRANSLATION_LIMIT
             for item in sentence_translations[:SUMMARY_TRANSLATION_LIMIT]:
                 summary = dict(item)
-                summary["text"], shortened = _bounded_text(
-                    item["text"], SUMMARY_TRANSLATION_MAX_CHARS
+                summary["text"], shortened = match_snippet(
+                    str(item["text"]), query, SUMMARY_TRANSLATION_MAX_CHARS
                 )
                 translation_truncated = translation_truncated or shortened
                 summary_translations.append(summary)
@@ -772,6 +773,7 @@ class CorpusStore:
         dialect: str | None,
         translation_language: str | None,
         matched_rows: Sequence[Mapping[str, Any]],
+        query: str,
     ) -> dict[str, Any]:
         clauses, parameters = self._scope(language_id, corpus_id, dialect)
         rows = [
@@ -899,11 +901,11 @@ class CorpusStore:
                     sentence_ids,
                 )
             ]
-            examples = self._sentence_summaries(connection, example_rows)
+            examples = self._sentence_summaries(connection, example_rows, query=query)
         meanings: list[dict[str, str]] = []
         meanings_truncated = len(meaning_rows) > DICTIONARY_MEANING_LIMIT
         for row in meaning_rows[:DICTIONARY_MEANING_LIMIT]:
-            text, shortened = _bounded_text(row["text"], DICTIONARY_VALUE_MAX_CHARS)
+            text, shortened = match_snippet(str(row["text"]), query, DICTIONARY_VALUE_MAX_CHARS)
             meanings.append({"text": text, "xml_lang": str(row["xml_lang"])})
             meanings_truncated = meanings_truncated or shortened
         evidence_truncated = evidence_truncated or meanings_truncated
@@ -1031,6 +1033,7 @@ class CorpusStore:
                     dialect=dialect,
                     translation_language=translation_language,
                     matched_rows=reverse_evidence.get(headword, ()),
+                    query=normalized,
                 )
                 items.append(
                     {
@@ -1176,6 +1179,7 @@ class CorpusStore:
                 visible_rows,
                 match_evidence,
                 evidence_truncated,
+                normalized,
             )
         has_more = len(rows) > limit
         next_cursor = None
@@ -1263,7 +1267,9 @@ class CorpusStore:
         for raw in rows:
             row = dict(raw)
             sentence_id = str(row["sentence_id"])
-            text, shortened = _bounded_text(row["text"], SUMMARY_TRANSLATION_MAX_CHARS)
+            text, shortened = match_snippet(
+                str(row["text"]), normalized, SUMMARY_TRANSLATION_MAX_CHARS
+            )
             evidence[sentence_id].append(
                 {
                     "tier": str(row["tier"]),

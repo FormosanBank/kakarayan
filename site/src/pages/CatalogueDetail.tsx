@@ -117,7 +117,7 @@ export function LanguageDetail({
               </div>
               <dl className="detail-counts">
                 <div>
-                  <dt>{tx("Searchable sentences in this language", "此語言的可搜尋句子")}</dt>
+                  <dt>{tx("Sentences in this language", "此語言的句子")}</dt>
                   <dd>{number(corpus.language_counts[language.id]?.sentences ?? 0)}</dd>
                 </div>
               </dl>
