@@ -1,6 +1,7 @@
 import {createContext, useCallback, useEffect, useState, type Dispatch, type SetStateAction} from "react";
 
 import {apiBaseUrl, checkApiRelease} from "./apiClient";
+import contract from "../../api/contract.json";
 import type {AppData, ApiEnvelope, Corpus, Language, Meta, OptionalResource, RightsCatalog} from "./types";
 
 const base = import.meta.env.BASE_URL;
@@ -39,6 +40,7 @@ async function json<T>(url: string, signal?: AbortSignal, timeoutMs = 8_000): Pr
 async function apiEnvelope<T>(url: string, signal?: AbortSignal, timeoutMs?: number): Promise<ApiEnvelope<T>> {
   const envelope = await json<ApiEnvelope<T>>(url, signal, timeoutMs);
   if (!envelope || typeof envelope !== "object" || envelope.api_version !== "v1" ||
+    envelope.read_model_version !== contract.read_model_version ||
     !envelope.release_id || !envelope.source?.commit || !envelope.kakarayan?.commit || !("data" in envelope)) {
     throw new Error(`Invalid static API envelope: ${url}`);
   }

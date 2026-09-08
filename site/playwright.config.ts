@@ -1,6 +1,7 @@
 import {defineConfig, devices} from "@playwright/test";
 
 const remoteApi = process.env.PLAYWRIGHT_API_MODE === "remote";
+const deployedSite = process.env.KAKARAYAN_SITE_URL;
 const siteServer = {
   command: "npm run preview -- --host 127.0.0.1 --port 4173",
   url: "http://127.0.0.1:4173/kakarayan/",
@@ -22,12 +23,13 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
-  reporter: process.env.CI ? "github" : "list",
+  reporter: process.env.CI ? [["github"], ["html", {open: "never"}]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173/kakarayan/",
+    baseURL: deployedSite ?? "http://127.0.0.1:4173/kakarayan/",
     trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
-  webServer: webServers,
+  webServer: deployedSite ? undefined : webServers,
   projects: [
     {
       name: "desktop-chromium",

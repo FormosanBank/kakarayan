@@ -22,6 +22,7 @@ from typing import Any, TextIO, cast
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
+from api.contracts import READ_MODEL_VERSION
 from publisher import API_VERSION, APPLICATION_VERSION, PUBLIC_DOWNLOAD_PATHS, SCHEMA_VERSION
 from publisher.archive import directory_entries, write_zip
 from publisher.audio_sources import load_audio_sources
@@ -123,6 +124,7 @@ def _api_envelope(
     return {
         "schema_version": SCHEMA_VERSION,
         "api_version": API_VERSION,
+        "read_model_version": READ_MODEL_VERSION,
         "endpoint": endpoint,
         "generated_at": generated_at,
         "kakarayan": {
@@ -1194,6 +1196,7 @@ def build_release(
     artifacts.sort(key=lambda artifact: str(artifact["path"]))
     manifest = {
         "schema_version": SCHEMA_VERSION,
+        "read_model_version": READ_MODEL_VERSION,
         "release_id": release_id,
         "generated_at": generated_at,
         "kakarayan": {

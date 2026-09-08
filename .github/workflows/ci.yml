@@ -52,12 +52,41 @@ jobs:
         run: uv run pip-audit --local --progress-spinner=off
 
       - name: Build the query API container
-        run: docker build --file api/Dockerfile .
+        run: |
+          docker build --file api/Dockerfile --build-arg KAKARAYAN_COMMIT="$GITHUB_SHA" --tag "kakarayan-api:$GITHUB_SHA" .
+          uv run python -m publisher.fixture_cli --output build/container-fixture
+          docker run -d --name query-image-test -p 127.0.0.1:8001:7860 \
+            -v "$PWD/build/container-fixture:/data:ro" \
+            -e KAKARAYAN_DB_PATH=/data/formosanbank.sqlite \
+            -e KAKARAYAN_RELEASE_MANIFEST_PATH=/data/release-manifest.json \
+            "kakarayan-api:$GITHUB_SHA"
+          trap 'docker logs query-image-test; docker rm -f query-image-test' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8001/readyz > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8001/readyz
+          mkdir -p build/ci-image
+          docker save "kakarayan-api:$GITHUB_SHA" | gzip -1 > build/ci-image/api-image.tar.gz
+          docker inspect "kakarayan-api:$GITHUB_SHA" --format '{{.Id}}' > build/ci-image/image-id.txt
+          cd build/ci-image
+          sha256sum api-image.tar.gz image-id.txt > SHA256SUMS
+
+      - name: Retain the tested API image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: api-image-${{ github.sha }}
+          path: build/ci-image/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
 
       - name: Validate the Lightsail service definition
         env:
           KAKARAYAN_HOSTNAME: 203-0-113-10.sslip.io
           KAKARAYAN_CORS_ORIGINS: https://formosanbank.github.io
+          KAKARAYAN_API_IMAGE: kakarayan-api:test
         run: docker compose --file deploy/lightsail/compose.yaml config --quiet
 
   site:
@@ -66,6 +95,7 @@ jobs:
     timeout-minutes: 30
     env:
       VITE_KAKARAYAN_API_URL: http://127.0.0.1:8000
+      KAKARAYAN_PERFORMANCE: ${{ github.event_name == 'schedule' && '1' || '0' }}
     steps:
       - name: Check out Kakarayan
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -129,6 +159,17 @@ jobs:
           else
             npm --prefix site run test:e2e -- --project=desktop-chromium
           fi
+
+      - name: Retain browser reports and failure traces
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: browser-evidence-${{ github.run_id }}
+          path: |
+            site/playwright-report/
+            site/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
 
   dependency-review:
     name: Dependency review

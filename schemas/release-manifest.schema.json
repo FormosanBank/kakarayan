@@ -5,6 +5,7 @@
   "type": "object",
   "required": [
     "schema_version",
+    "read_model_version",
     "release_id",
     "generated_at",
     "kakarayan",
@@ -15,6 +16,7 @@
   ],
   "properties": {
     "schema_version": {"const": "1.0.0"},
+    "read_model_version": {"const": 2},
     "release_id": {"type": "string", "pattern": "^fb-[0-9]{8}-[0-9a-f]{7,12}$"},
     "generated_at": {"type": "string", "format": "date-time"},
     "kakarayan": {"$ref": "static-api.schema.json#/$defs/application"},

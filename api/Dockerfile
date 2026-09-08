@@ -12,6 +12,9 @@ RUN groupadd --gid 10001 kakarayan \
     && chown -R kakarayan:kakarayan /app /data
 
 WORKDIR /app
+ARG KAKARAYAN_COMMIT
+LABEL org.opencontainers.image.revision=$KAKARAYAN_COMMIT
+ENV KAKARAYAN_IMAGE_COMMIT=$KAKARAYAN_COMMIT
 COPY pyproject.toml uv.lock ./
 RUN pip install --no-cache-dir uv==0.11.31 \
     && uv sync --locked --no-dev --no-group publisher --no-install-project

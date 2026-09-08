@@ -16,6 +16,7 @@ export type Counts = Partial<
 export interface Meta {
   schema_version: string;
   api_version: "v1";
+  read_model_version: number;
   endpoint: "meta";
   release_id: string;
   generated_at: string;
@@ -28,6 +29,7 @@ export interface Meta {
 export interface ApiEnvelope<T> {
   schema_version: string;
   api_version: "v1";
+  read_model_version: number;
   endpoint: string;
   release_id: string;
   generated_at: string;

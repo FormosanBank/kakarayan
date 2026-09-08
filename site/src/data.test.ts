@@ -11,6 +11,7 @@ function envelope(endpoint: string, data: unknown, release = releaseId) {
   return {
     schema_version: "1.0.0",
     api_version: "v1",
+    read_model_version: 2,
     endpoint,
     release_id: release,
     generated_at: "2024-01-02T03:04:05Z",
@@ -81,7 +82,7 @@ it("recovers optional resources and readiness without unmounting local work", as
   let failed = true;
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.endsWith("/readyz")) return Response.json({status: "ready", release_id: failed ? "other-release" : releaseId});
+    if (url.endsWith("/readyz")) return Response.json({status: "ready", read_model_version: 2, release_id: failed ? "other-release" : releaseId});
     const endpoint = /\/([^/]+)\.json$/u.exec(url)?.[1] ?? "";
     if (endpoint === "models" && failed) return new Response("unavailable", {status: 503});
     return Response.json(envelope(endpoint, endpointData[endpoint]));

@@ -1,91 +1,57 @@
 name: Deploy GitHub Pages
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/deploy-pages.yml"
-      - "content/**"
-      - "LICENSE"
-      - "LICENSE.md"
-      - "publisher/assemble_site.py"
-      - "publisher/extract_metadata.py"
-      - "publisher/verify_site.py"
-      - "schemas/**"
-      - "site/**"
   workflow_dispatch:
     inputs:
       release_id:
-        description: Published Kakarayan data release ID; blank uses the latest compatible release
-        required: false
-        default: ""
+        description: Approved published data release ID already active on the API
+        required: true
         type: string
 
 concurrency:
   group: github-pages-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   resolve:
-    name: Resolve published release metadata
+    name: Require tested main and an approved release
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
+      actions: read
     outputs:
       available: ${{ steps.release.outputs.available }}
       tag: ${{ steps.release.outputs.tag }}
       release_id: ${{ steps.release.outputs.release_id }}
     env:
       GH_TOKEN: ${{ github.token }}
-      REQUESTED_RELEASE: ${{ inputs.release_id || '' }}
+      REQUESTED_RELEASE: ${{ inputs.release_id }}
     steps:
-      - name: Select a compatible published data release
+      - name: Check out the dispatched commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.13"
+      - name: Verify main CI and published identity
         id: release
-        shell: bash
         run: |
-          if [[ -n "$REQUESTED_RELEASE" ]]; then
-            if [[ ! "$REQUESTED_RELEASE" =~ ^fb-[0-9]{8}-[0-9a-f]{7,12}$ ]]; then
-              echo "Invalid Kakarayan data release ID."
-              exit 1
-            fi
-            TAG="data-$REQUESTED_RELEASE"
-          else
-            TAG="$(
-              gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '
-                [
-                  .[]
-                  | select(.draft == false and .prerelease == false)
-                  | select(.tag_name | startswith("data-"))
-                  | select(any(.assets[]; .name == "site-metadata.zip"))
-                ]
-                | sort_by(.published_at)
-                | last
-                | .tag_name // ""
-              '
-            )"
+          python -m publisher.github_release --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA"
+          if [[ ! "$REQUESTED_RELEASE" =~ ^fb-[0-9]{8}-[0-9a-f]{7,12}$ ]]; then
+            echo "An exact approved release ID is required."
+            exit 1
           fi
-          if [[ -z "$TAG" ]]; then
-            echo "::warning::No published data release contains site-metadata.zip yet."
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          TAG="data-$REQUESTED_RELEASE"
           gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
-          if [[ "$(jq -r .draft "$RUNNER_TEMP/release.json")" != "false" ]] \
-            || [[ "$(jq -r .prerelease "$RUNNER_TEMP/release.json")" != "false" ]]; then
-            echo "The selected data release must be published and non-prerelease."
-            exit 1
-          fi
-          if [[ "$(jq '[.assets[].name == "site-metadata.zip"] | any' "$RUNNER_TEMP/release.json")" != "true" ]]; then
-            echo "$TAG does not contain site-metadata.zip."
-            exit 1
-          fi
-          RELEASE_ID="${TAG#data-}"
+          jq -e '.draft == false and .prerelease == false and any(.assets[]; .name == "site-metadata.zip")' "$RUNNER_TEMP/release.json"
           echo "available=true" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-          echo "Selected $TAG"
+          echo "release_id=$REQUESTED_RELEASE" >> "$GITHUB_OUTPUT"
 
   build:
     name: Assemble and validate the production site
@@ -108,6 +74,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
 
       - name: Require approved deployment configuration
         shell: bash
@@ -172,6 +139,8 @@ jobs:
             echo "The query service is not serving $RELEASE_ID. Deploy it before Pages."
             exit 1
           fi
+          jq -e --argjson model "$(jq .read_model_version api/contract.json)" \
+            '.status == "ready" and .read_model_version == $model' <<<"$READY"
 
       - name: Build and verify the production site
         run: |
@@ -218,3 +187,45 @@ jobs:
       - name: Deploy the validated artifact
         id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128
+
+  verify-live:
+    name: Verify the public cutover
+    needs: [resolve, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      KAKARAYAN_SITE_URL: https://formosanbank.github.io/kakarayan/
+      PLAYWRIGHT_API_MODE: remote
+      VITE_KAKARAYAN_API_URL: ${{ vars.KAKARAYAN_API_URL }}
+      RELEASE_ID: ${{ needs.resolve.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci --prefix site
+      - run: npx playwright install --with-deps chromium
+        working-directory: site
+      - name: Verify published metadata and API identity
+        run: |
+          curl --fail --silent --show-error --max-time 20 "${KAKARAYAN_SITE_URL}api/v1/meta.json" | jq -e --arg release "$RELEASE_ID" '.release_id == $release'
+          curl --fail --silent --show-error --max-time 20 "$VITE_KAKARAYAN_API_URL/readyz" | jq -e --arg release "$RELEASE_ID" '.status == "ready" and .release_id == $release'
+      - name: Exercise the actual public site
+        run: npm --prefix site run test:e2e -- --project=desktop-chromium --grep @production-smoke
+      - name: Retain cutover evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pages-cutover-${{ github.run_id }}
+          path: |
+            site/playwright-report/
+            site/test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -3,7 +3,7 @@ import type {AppData} from "../types";
 export function appFixture(): AppData {
   return {
     meta: {
-      schema_version: "1.0.0", api_version: "v1", endpoint: "meta", release_id: "fixture-release",
+      schema_version: "1.0.0", api_version: "v1", read_model_version: 2, endpoint: "meta", release_id: "fixture-release",
       generated_at: "2026-01-01T00:00:00.000Z", canonical_url: "https://example.test/meta.json",
       kakarayan: {repository: "FormosanBank/kakarayan", version: "0.2.0", commit: "a".repeat(40)},
       source: {repository: "FormosanBank/FormosanBank", commit: "b".repeat(40)},

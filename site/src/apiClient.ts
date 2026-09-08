@@ -1,3 +1,4 @@
+import contract from "../../api/contract.json";
 import type {
   DictionaryEntry,
   MatchMode,
@@ -132,11 +133,14 @@ export async function checkApiRelease(
   });
   try {
     const ready = await Promise.race([
-      request<{status: string; release_id: string}>("/readyz", controller.signal),
+      request<{status: string; release_id: string; read_model_version: number}>("/readyz", controller.signal),
       timeout,
     ]);
     if (ready.release_id !== releaseId) {
       throw new Error(`Release mismatch: site ${releaseId}, query service ${ready.release_id}`);
+    }
+    if (ready.status !== "ready" || ready.read_model_version !== contract.read_model_version) {
+      throw new Error("The query API uses an incompatible read model");
     }
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);

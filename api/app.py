@@ -19,6 +19,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
+from api.contracts import READ_MODEL_VERSION
 from api.dataset_fields import DatasetField, RecordLevel, default_dataset_fields
 from api.errors import ApiError, api_error_handler, validation_error_handler
 from api.exports import dataset_chunks, zip_chunks
@@ -313,11 +314,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "alive"}
 
     @app.get("/readyz", tags=["service"])
-    def ready(request: Request, response: Response) -> dict[str, str]:
+    def ready(request: Request, response: Response) -> dict[str, str | int]:
         current = store(request)
         current.check_ready()
         response.headers["Cache-Control"] = "no-store"
-        return {"status": "ready", "release_id": current.release_id}
+        return {
+            "status": "ready",
+            "release_id": current.release_id,
+            "read_model_version": READ_MODEL_VERSION,
+        }
 
     @app.get("/v1/meta", tags=["catalogue"])
     def meta(request: Request, response: Response) -> dict:

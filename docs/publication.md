@@ -17,21 +17,23 @@ An administrator configures these once:
 
 1. Set **Settings > Pages > Build and deployment > Source** to **GitHub Actions**.
 2. Create the `data-release` environment and require the intended maintainer approval.
-3. Keep the `github-pages` environment restricted to `main`.
+3. Restrict both environments to `main` and configure the intended required reviewers.
 4. Deploy the query API on the Tokyo Lightsail host using [lightsail.md](lightsail.md).
 5. After the selected API is ready, set repository variable `KAKARAYAN_API_URL` to its
    public HTTPS base URL.
 6. Enable the dependency graph when an administrator is available. It improves dependency
    review but is not a runtime deployment requirement.
 
-The software license must remain present as `LICENSE` or `LICENSE.md`.
+The software license must remain present as `LICENSE` or `LICENSE.md`. Environment
+reviewers are repository settings, not supplied by these workflow files. An administrator
+must verify them; a branch restriction alone is not a human approval gate.
 
 ## Pull request checks
 
 `.github/workflows/ci.yml` runs:
 
 - Python formatting, lint, typing, API and publisher tests, and dependency audit;
-- a generic API Docker image build;
+- an API Docker image build and fixture readiness test, retained by exact commit after main CI;
 - frontend audit, lint, typing, unit tests, production build, and site verification;
 - one Chromium contract and accessibility journey;
 - pull-request dependency review when repository metadata is available.
@@ -58,8 +60,11 @@ Indexed searches retain a 300 ms loopback p95 budget. The one-character Chinese 
 case has a 400 ms budget because trigram indexes require at least three characters. A real
 run transfers the already verified output to the protected `data-release` job and creates
 `data-<release-id>` as a draft GitHub release. The release ID includes both the source and
-Kakarayan publisher revisions, and a real run refuses an existing immutable release tag
-before starting the expensive corpus build.
+Kakarayan publisher revisions. Real publication requires successful CI for the exact
+main commit and pins the draft tag to it. A matching partial draft can resume: every
+existing asset must have the expected name, size, and SHA-256 digest. Only missing
+assets are uploaded. Published releases, differing identities, and unverifiable assets
+are rejected without overwriting anything.
 
 Inspect the draft before publication:
 
@@ -77,7 +82,7 @@ never be reused for different bytes.
 ## Deploy the query API
 
 For the supported Tokyo Lightsail deployment, follow
-[the Lightsail runbook](lightsail.md). It builds the same generic API image, activates
+[the Lightsail runbook](lightsail.md). It loads the CI-tested image by commit and digest, activates
 the published release into a host-mounted data directory, and puts Caddy HTTPS in front
 of the service. Continue with Pages only after `/readyz` reports the selected release.
 
@@ -91,8 +96,10 @@ returns the selected release ID.
 
 ## Deploy Pages
 
-Dispatch **Deploy GitHub Pages** with the same release ID. A relevant push to `main` also
-attempts deployment using the newest current-schema release.
+Dispatch **Deploy GitHub Pages** from `main` with the same explicit release ID after
+that frontend commit passes CI. There is no automatic push deployment and no selection
+of a guessed "latest compatible" release. Frontend-only updates can use the ready API's
+existing approved release when the read-model contract still matches.
 
 The workflow:
 
@@ -100,11 +107,12 @@ The workflow:
 2. Downloads only its manifest and static metadata package.
 3. Verifies the package checksum, safe ZIP paths, size limits, schemas, and release IDs.
 4. Assembles `site/public/api` plus curated download metadata.
-5. Requires the configured API `/readyz` to match the selected release.
+5. Requires the API release and read-model version to match the selected metadata and frontend contract.
 6. Builds and verifies the site under a 10 MiB total and 2 MiB per-file budget.
 7. Runs focused production lookup, dataset, locale, accessibility, and degradation smoke
    checks. The full fixture-backed browser suite remains in CI.
 8. Uploads and deploys the exact verified Pages artifact.
+9. Tests the actual public Pages deployment, API identity, and browser journeys after cutover.
 
 Pages contains no corpus index, record shard, query database, or prepared bulk dataset.
 

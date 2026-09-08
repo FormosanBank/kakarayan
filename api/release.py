@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from api.config import Settings
+from api.contracts import READ_MODEL_VERSION
 
 _MANIFEST_LIMIT = 10_000_000
 _SUPPORTED_SCHEMA_VERSION = "1.0.0"
@@ -91,6 +92,8 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         raise ReleaseError("Active release manifest must be a JSON object")
     if manifest.get("schema_version") != _SUPPORTED_SCHEMA_VERSION:
         raise ReleaseError("Active release manifest schema is unsupported")
+    if manifest.get("read_model_version") != READ_MODEL_VERSION:
+        raise ReleaseError("Active release read model is incompatible with this API image")
     if not isinstance(manifest.get("release_id"), str):
         raise ReleaseError("Active release manifest has no release ID")
     return manifest
@@ -119,6 +122,8 @@ def _fast_database_check(path: Path) -> dict[str, Any]:
     meta = metadata.get("meta")
     if not isinstance(meta, dict) or meta.get("schema_version") != _SUPPORTED_SCHEMA_VERSION:
         raise ReleaseError("SQLite metadata schema is unsupported")
+    if meta.get("read_model_version") != READ_MODEL_VERSION:
+        raise ReleaseError("SQLite read model is incompatible with this API image")
     return metadata
 
 

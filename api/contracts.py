@@ -1,6 +1,19 @@
 """Validated response shapes shared by cached data and HTTP routes."""
 
+from pathlib import Path
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class RuntimeContract(BaseModel):
+    api_version: Literal["v1"]
+    read_model_version: int = Field(ge=1)
+
+
+READ_MODEL_VERSION = RuntimeContract.model_validate_json(
+    Path(__file__).with_name("contract.json").read_bytes()
+).read_model_version
 
 
 class CountValue(BaseModel):
