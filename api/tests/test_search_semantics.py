@@ -50,6 +50,11 @@ def test_snippets_keep_late_matches_and_original_spelling() -> None:
         assert truncated and len(snippet) <= 320
         assert source in snippet
         assert snippet.strip("…") in text
+    query = "distinct beginning " + "long phrase " * 60
+    text = "Introduction. " * 60 + query + " ending."
+    snippet, truncated = match_snippet(text, query, 320)
+    assert truncated and len(snippet) <= 320
+    assert "distinct beginning" in snippet
 
 
 def test_api_matches_golden_semantics(client: TestClient) -> None:

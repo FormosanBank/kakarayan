@@ -55,7 +55,8 @@ def match_snippet(text: str, query: str, maximum: int) -> tuple[str, bool]:
             low = middle + 1
         else:
             high = middle
-    start = max(0, low - min(40, (maximum - len(needle)) // 2))
+    context = max(2, min(40, (maximum - len(needle)) // 2))
+    start = max(0, low - context)
     end = min(len(text), start + maximum - 2)
     return ("…" if start else "") + text[start:end] + ("…" if end < len(text) else ""), True
 
