@@ -4,9 +4,9 @@ import {transcribe, type ServiceStage} from "../modelServices";
 import {useI18n} from "../i18n";
 import {wordError} from "../recorderMetrics";
 import {NavigationBlocker} from "../routing";
-import type {ModelCatalog} from "../types";
+import type {ModelCatalog, ResourceState} from "../types";
 import {StatusBadge} from "./Layout";
-import {LoadingState} from "./LoadingState";
+import {LoadingState, ResourceGate} from "./LoadingState";
 
 const ASR_LANGUAGES = [
   "Amis",
@@ -38,11 +38,13 @@ export function Recorder({
   selectedLanguage,
   referenceText = "",
   onReferenceChange,
+  modelResource,
 }: {
   catalog: ModelCatalog;
   selectedLanguage: string;
   referenceText?: string;
   onReferenceChange?: (text: string) => void;
+  modelResource?: ResourceState;
 }) {
   const {number, tx} = useI18n();
   const recorder = useRef<MediaRecorder | null>(null);
@@ -402,6 +404,7 @@ export function Recorder({
       </div>
       {audio && (
         <div className="asr-panel">
+          {modelResource && <ResourceGate resource="models" state={modelResource} />}
           <div className="tool-heading">
             <h4>{tx("Automatic transcript", "自動轉錄")}</h4>
             <StatusBadge value={service?.status ?? "unavailable"} />
@@ -460,8 +463,8 @@ export function Recorder({
           </label>
           <p className="model-privacy-note">
             {tx(
-              "Nothing is uploaded unless you check the box and press Transcribe. Kakarayan does not retain the upload; Hugging Face processing and logging policies apply.",
-              "除非勾選並按下「轉錄」，否則不會上傳任何內容。Kakarayan 不保留上傳資料；資料處理與記錄依 Hugging Face 政策辦理。",
+              "Uploaded only with consent. Kakarayan does not store your audio. The Space and Hugging Face may keep logs; their retention has not been verified.",
+              "僅在同意後上傳。Kakarayan 不儲存音訊。Space 與 Hugging Face 可能保留記錄；其保存期限尚未確認。",
             )}{" "}
             <a href="https://huggingface.co/privacy">{tx("Privacy policy", "隱私權政策")}</a>
           </p>

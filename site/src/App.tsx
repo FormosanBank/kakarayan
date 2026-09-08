@@ -1,9 +1,11 @@
-import {useEffect} from "react";
+import {Component, useEffect, useRef, useState, type PropsWithChildren} from "react";
 
 import {Layout} from "./components/Layout";
 import {Diagnostics} from "./components/Diagnostics";
 import {LoadingState} from "./components/LoadingState";
-import {useAppData} from "./data";
+import {ResourceRetryContext, useAppData} from "./data";
+import {StudyDeck} from "./components/StudyDeck";
+import {GITBOOK_BASE_URL} from "./gitbook";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
 import {CorpusDetail, LanguageDetail} from "./pages/CatalogueDetail";
@@ -19,6 +21,10 @@ import {Research} from "./pages/Research";
 import {routeHref} from "./routePaths";
 import {Link, RoutingProvider, useRoutePath} from "./routing";
 
+function decodedId(value: string): string {
+  try { return decodeURIComponent(value); } catch { return ""; }
+}
+
 function Loading() {
   const {t} = useI18n();
   return (
@@ -30,6 +36,7 @@ function Loading() {
 
 function Unavailable({error, retry}: {error: Error; retry: () => void}) {
   const {t, tx} = useI18n();
+  const [showDeck, setShowDeck] = useState(false);
   return (
     <main className="boot-state boot-state--error">
       <div className="boot-mark">K</div>
@@ -49,7 +56,14 @@ function Unavailable({error, retry}: {error: Error; retry: () => void}) {
         <a className="button button--quiet" href="https://github.com/FormosanBank/FormosanBank">
           {tx("Open canonical public XML", "開啟權威公開 XML")}
         </a>
+        <button className="button button--quiet" onClick={() => setShowDeck((value) => !value)}>
+          {tx("Local study deck", "本機學習牌組")}
+        </button>
+        <a className="button button--quiet" href={GITBOOK_BASE_URL}>
+          {tx("Docs", "文件")}
+        </a>
       </div>
+      {showDeck && <StudyDeck currentRelease="" languageId="" dialect="" />}
     </main>
   );
 }
@@ -75,20 +89,27 @@ function NotFound() {
 
 export function App() {
   const state = useAppData();
+  const {t} = useI18n();
+  const releaseId = state.data?.meta.release_id;
   useEffect(() => {
-    if (!state.data || !("serviceWorker" in navigator)) return;
+    if (!releaseId || !("serviceWorker" in navigator)) return;
     const buildId = import.meta.env.VITE_KAKARAYAN_BUILD_ID ?? "development";
-    const cacheVersion = `${state.data.meta.release_id}-${buildId}`;
+    const cacheVersion = `${releaseId}-${buildId}`;
     const url = `${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(cacheVersion)}`;
     navigator.serviceWorker.register(url).catch(() => {
       // Offline support is additive. The core site remains usable without registration.
     });
-  }, [state.data]);
+  }, [releaseId]);
   if (state.loading) return <Loading />;
-  if (!state.data || state.error) {
+  if (!state.data) {
     return <Unavailable error={state.error ?? new Error("No release data")} retry={state.reload} />;
   }
-  return <RoutedApp data={state.data} />;
+  return <ResourceRetryContext.Provider value={state.retryResource}>
+    {state.error && <div className="callout callout--warning" role="status">
+      {state.error.message} <button onClick={state.reload}>{t("common.retry")}</button>
+    </div>}
+    <RoutedApp data={state.data} />
+  </ResourceRetryContext.Provider>;
 }
 
 function RoutedApp({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
@@ -101,14 +122,15 @@ function RoutedApp({data}: {data: NonNullable<ReturnType<typeof useAppData>["dat
 
 function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
   const path = useRoutePath();
+  const previousPath = useRef(path);
   const {locale, t, tx} = useI18n();
   const detailName = path.startsWith("/languages/")
     ? data.languages.find(
-        (item) => item.id === decodeURIComponent(path.slice("/languages/".length)),
+        (item) => item.id === decodedId(path.slice("/languages/".length)),
       )?.name
     : path.startsWith("/corpora/")
       ? data.corpora.find(
-          (item) => item.id === decodeURIComponent(path.slice("/corpora/".length)),
+          (item) => item.id === decodedId(path.slice("/corpora/".length)),
         )?.name
       : undefined;
   const routeTitle =
@@ -168,15 +190,17 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
   }, [locale, path, routeDescription, routeTitle]);
   useEffect(() => {
     window.scrollTo(0, 0);
+    if (previousPath.current !== path) document.getElementById("main")?.focus();
+    previousPath.current = path;
   }, [path]);
   const page = (() => {
     if (path.startsWith("/languages/")) {
-      const id = decodeURIComponent(path.slice("/languages/".length));
+      const id = decodedId(path.slice("/languages/".length));
       const language = data.languages.find((item) => item.id === id);
       return language ? <LanguageDetail data={data} language={language} /> : <NotFound />;
     }
     if (path.startsWith("/corpora/")) {
-      const id = decodeURIComponent(path.slice("/corpora/".length));
+      const id = decodedId(path.slice("/corpora/".length));
       const corpus = data.corpora.find((item) => item.id === id);
       return corpus ? <CorpusDetail data={data} corpus={corpus} /> : <NotFound />;
     }
@@ -211,5 +235,26 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
         return <NotFound />;
     }
   })();
-  return <Layout data={data}>{page}</Layout>;
+  return <Layout data={data}><PageBoundary key={path}>{page}</PageBoundary></Layout>;
+}
+
+class PageBoundary extends Component<PropsWithChildren, {failed: boolean}> {
+  state = {failed: false};
+  static getDerivedStateFromError() { return {failed: true}; }
+  render() {
+    return this.state.failed
+      ? <PageFailure retry={() => this.setState({failed: false})} />
+      : this.props.children;
+  }
+}
+
+function PageFailure({retry}: {retry: () => void}) {
+  const {tx} = useI18n();
+  return <section className="page-wrap" role="alert">
+    <h1>{tx("This tool could not be displayed", "無法顯示此工具")}</h1>
+    <div className="button-row">
+      <button className="button button--primary" onClick={retry}>{tx("Retry", "重試")}</button>
+      <Link className="button button--quiet" to="/">{tx("Home", "首頁")}</Link>
+    </div>
+  </section>;
 }

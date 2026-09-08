@@ -270,7 +270,8 @@ export function SearchTool({
   const replacingResults = busy && loadingMode === "replace";
   return (
     <section className={`search-tool search-tool--${kind} ${learner ? "search-tool--learner" : ""}`}>
-      {!data.query.available && (
+      {!data.query.available && !data.query.error && <LoadingState compact label={tx("Connecting to corpus API", "正在連線至語料 API")} />}
+      {!data.query.available && data.query.error && (
         <div className="callout callout--error">
           <p>{tx("Corpus search is temporarily unavailable.", "語料搜尋暫時無法使用。")}</p>
           <Diagnostics releaseId={data.meta.release_id} error={new Error(data.query.error)} />

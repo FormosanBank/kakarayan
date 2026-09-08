@@ -337,4 +337,8 @@ export interface AppData {
   orthography: OrthographyCatalog;
   content: LearningContentCatalog;
   query: QueryAvailability;
+  resources: Record<OptionalResource, ResourceState>;
 }
+
+export type OptionalResource = "models" | "orthography" | "content";
+export type ResourceState = {status: "loading" | "ready" | "error"; error: string};

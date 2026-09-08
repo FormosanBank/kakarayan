@@ -8,6 +8,7 @@ import {Recorder} from "../components/Recorder";
 import {SearchTool, type LookupKind} from "../components/SearchTool";
 import {StudyDeck} from "../components/StudyDeck";
 import {Tabs} from "../components/Tabs";
+import {ResourceGate} from "../components/LoadingState";
 import {useI18n} from "../i18n";
 import {useNavigationPermission, useSearchParams} from "../routing";
 import type {AppData, DictionaryEntry, SearchRecord} from "../types";
@@ -136,11 +137,12 @@ export function Learn({data}: {data: AppData}) {
         aria-labelledby="studio-tab-practice" hidden={tab !== "practice"}>
         {tab === "practice" && <Recorder key={`${languageId}-${dialect}`} catalog={data.models}
           selectedLanguage={language?.name ?? "Amis"} referenceText={practiceTarget}
-          onReferenceChange={setPracticeTarget} />}
+          onReferenceChange={setPracticeTarget} modelResource={data.resources.models} />}
       </div>
       <div className="studio-panel" id="studio-translation" role="tabpanel"
         aria-labelledby="studio-tab-translation" hidden={tab !== "translation"}>
         {visited.has("translation") && (
+          <ResourceGate resource="models" state={data.resources.models}>
           <TranslationTool
             catalog={data.models}
             languages={data.languages}
@@ -148,11 +150,13 @@ export function Learn({data}: {data: AppData}) {
             selectedDialect={dialect}
             active={tab === "translation"}
           />
+          </ResourceGate>
         )}
       </div>
       <div className="studio-panel" id="studio-orthography" role="tabpanel"
         aria-labelledby="studio-tab-orthography" hidden={tab !== "orthography"}>
         {visited.has("orthography") && (
+          <ResourceGate resource="orthography" state={data.resources.orthography}>
           <OrthographyTool
             key={`${languageId}-${dialect}`}
             catalog={data.orthography}
@@ -160,10 +164,12 @@ export function Learn({data}: {data: AppData}) {
             languageName={language?.name ?? "Amis"}
             selectedDialect={dialect}
           />
+          </ResourceGate>
         )}
       </div>
       <div className="studio-panel" id="studio-lessons" role="tabpanel"
         aria-labelledby="studio-tab-lessons" hidden={tab !== "lessons"}>
+        <ResourceGate resource="content" state={data.resources.content}>
         {tab === "lessons" &&
           (data.content.entries.length ? (
             <div className="reviewed-content">
@@ -203,6 +209,7 @@ export function Learn({data}: {data: AppData}) {
               </a>
             </div>
           ))}
+        </ResourceGate>
       </div>
     </div>
   );

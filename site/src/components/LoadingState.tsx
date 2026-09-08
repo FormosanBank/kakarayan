@@ -1,5 +1,18 @@
 type LoadingKind = "panel" | "results" | "table" | "code" | "document" | "page";
 
+export function ResourceGate({resource, state, children}: {
+  resource: OptionalResource; state: ResourceState; children?: ReactNode;
+}) {
+  const retry = useContext(ResourceRetryContext);
+  const {tx} = useI18n();
+  if (state.status === "ready") return children;
+  if (state.status === "loading") return <LoadingState compact label={tx("Loading resources", "正在載入資源")} />;
+  return <div className="callout callout--error" role="status">
+    <p>{tx("These resources could not be loaded.", "無法載入這些資源。")}</p>
+    <button className="button button--quiet" onClick={() => retry(resource)}>{tx("Retry", "重試")}</button>
+  </div>;
+}
+
 function ResultsSkeleton() {
   return (
     <div className="loading-state__results" aria-hidden="true">
@@ -88,3 +101,8 @@ export function LoadingState({
     </section>
   );
 }
+import {useContext, type ReactNode} from "react";
+
+import {ResourceRetryContext} from "../data";
+import {useI18n} from "../i18n";
+import type {OptionalResource, ResourceState} from "../types";

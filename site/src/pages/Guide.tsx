@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useEffect, useState} from "react";
 
 import {PageIntro} from "../components/Layout";
 import {LoadingState} from "../components/LoadingState";
@@ -28,7 +28,13 @@ export function Guide({data}: {data: AppData}) {
   const pageUrl = gitBookPageUrl(selectedPage, locale);
   const canEmbed = window.location.protocol === "https:";
   const [loadedUrl, setLoadedUrl] = useState("");
-  const frameLoading = canEmbed && loadedUrl !== pageUrl;
+  const [failedUrl, setFailedUrl] = useState("");
+  const frameLoading = canEmbed && loadedUrl !== pageUrl && failedUrl !== pageUrl;
+  useEffect(() => {
+    if (!frameLoading) return;
+    const timer = window.setTimeout(() => setFailedUrl(pageUrl), 10_000);
+    return () => window.clearTimeout(timer);
+  }, [frameLoading, pageUrl]);
 
   return (
     <div className="page-wrap page-wrap--wide guide-page">
@@ -36,11 +42,12 @@ export function Guide({data}: {data: AppData}) {
       <section className="guide-browser" aria-labelledby="guide-reader-title">
         <header className="guide-browser__bar">
           <h2 id="guide-reader-title">{selectedLabel}</h2>
+          {locale === "zh-Hant" && !("zh" in selectedPage && selectedPage.zh) && <small>英文文件</small>}
           <a href={pageUrl} target="_blank" rel="noreferrer">
             {tx("Open in GitBook ↗", "在 GitBook 開啟 ↗")}
           </a>
         </header>
-        {canEmbed ? (
+        {canEmbed && failedUrl !== pageUrl ? (
           <div className="guide-frame">
             {frameLoading && (
               <LoadingState
@@ -60,16 +67,16 @@ export function Guide({data}: {data: AppData}) {
               referrerPolicy="no-referrer"
               sandbox="allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
               onLoad={() => setLoadedUrl(pageUrl)}
+              onError={() => setFailedUrl(pageUrl)}
             />
           </div>
         ) : (
           <div className="guide-frame-fallback">
-            <span className="file-mark">HTTPS</span>
-            <h3>{tx("Docs open on the public site", "文件可在公開網站開啟")}</h3>
+            <h3>{tx("Open documentation", "開啟文件")}</h3>
             <p>
               {tx(
-                "The embedded GitBook reader is available over HTTPS. Open it directly while using the local preview.",
-                "嵌入式 GitBook 閱讀器需使用 HTTPS；在本機預覽時請直接開啟文件。",
+                "Open this page directly in GitBook.",
+                "請直接在 GitBook 開啟此頁面。",
               )}
             </p>
             <a className="button button--primary" href={pageUrl} target="_blank" rel="noreferrer">

@@ -38,5 +38,9 @@ export function appFixture(): AppData {
     }]},
     content: {schema_version: "1.0.0", entries: []},
     query: {baseUrl: "https://example.test", available: false, error: "Fixture offline"},
+    resources: {
+      models: {status: "ready", error: ""}, orthography: {status: "ready", error: ""},
+      content: {status: "ready", error: ""},
+    },
   };
 }

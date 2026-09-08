@@ -1,6 +1,9 @@
 import {afterEach, vi} from "vitest";
+import {act, createElement} from "react";
+import {createRoot} from "react-dom/client";
 
-import {loadAppData} from "./data";
+import {loadAppData, loadOptionalCatalog, useAppData} from "./data";
+import {appFixture} from "./test/fixtures";
 
 const releaseId = "fb-20240102-3b367525";
 
@@ -28,33 +31,38 @@ const endpointData: Record<string, unknown> = {
   content: {schema_version: "1.0.0", entries: []},
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
-it("keeps static tools available when the query service is unavailable", async () => {
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+it("loads navigation without waiting for optional resources or readiness", async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.endsWith("/readyz")) return new Response("unavailable", {status: 503});
     const endpoint = /\/([^/]+)\.json$/u.exec(url)?.[1] ?? "";
     return Response.json(envelope(endpoint, endpointData[endpoint]));
-  }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
   const data = await loadAppData();
   expect(data.meta.release_id).toBe(releaseId);
   expect(data.query.available).toBe(false);
+  expect(data.resources.models.status).toBe("loading");
+  expect(fetchMock).toHaveBeenCalledTimes(4);
 });
 
-it("finishes loading static tools when readiness never responds", async () => {
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url.endsWith("/readyz")) return await new Promise<Response>(() => undefined);
-    const endpoint = /\/([^/]+)\.json$/u.exec(url)?.[1] ?? "";
-    return Response.json(envelope(endpoint, endpointData[endpoint]));
-  }));
+it("times out an unresponsive optional catalogue", async () => {
+  vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+  await expect(loadOptionalCatalog("models", appFixture().meta, undefined, 1))
+    .rejects.toThrow("did not respond in time");
+});
 
-  const data = await loadAppData(undefined, 1);
-
-  expect(data.meta.release_id).toBe(releaseId);
-  expect(data.query.available).toBe(false);
-  expect(data.query.error).toContain("did not respond");
+it.each(["models", "orthography", "content"] as const)("keeps %s failures local to that catalogue", async (resource) => {
+  const identity = {...appFixture().meta, release_id: releaseId};
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("missing", {status: 404})));
+  await expect(loadOptionalCatalog(resource, identity)).rejects.toThrow("404");
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json(envelope(resource, endpointData[resource]))));
+  await expect(loadOptionalCatalog(resource, identity)).resolves.toEqual(endpointData[resource]);
 });
 
 it("rejects a mixed static release before querying the backend", async () => {
@@ -66,4 +74,42 @@ it("rejects a mixed static release before querying the backend", async () => {
     );
   }));
   await expect(loadAppData()).rejects.toThrow("Static metadata release mismatch: corpora");
+});
+
+it("recovers optional resources and readiness without unmounting local work", async () => {
+  vi.useFakeTimers();
+  let failed = true;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/readyz")) return Response.json({status: "ready", release_id: failed ? "other-release" : releaseId});
+    const endpoint = /\/([^/]+)\.json$/u.exec(url)?.[1] ?? "";
+    if (endpoint === "models" && failed) return new Response("unavailable", {status: 503});
+    return Response.json(envelope(endpoint, endpointData[endpoint]));
+  }));
+  let state: ReturnType<typeof useAppData> | undefined;
+  function Probe() {
+    state = useAppData();
+    return state.data ? createElement("input", {defaultValue: ""}) : null;
+  }
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Probe)));
+    expect(state?.loading).toBe(false);
+    expect(state?.error).toBeNull();
+    expect(state?.data?.query.error).toContain("Release mismatch:");
+    expect(state?.data?.resources.models.status).toBe("error");
+    expect(state?.data?.resources.orthography.status).toBe("ready");
+    const input = container.querySelector("input");
+    if (!input) throw new Error("Local tool was not rendered");
+    input.value = "unfinished work";
+    failed = false;
+    await act(async () => state?.retryResource("models"));
+    await act(async () => vi.advanceTimersByTimeAsync(16_000));
+    expect(state?.data?.query.available).toBe(true);
+    expect(state?.data?.resources.models.status).toBe("ready");
+    expect(container.querySelector("input")?.value).toBe("unfinished work");
+  } finally {
+    await act(async () => root.unmount());
+  }
 });

@@ -26,15 +26,23 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 function initialLocale(): Locale {
-  const stored = window.localStorage.getItem("kakarayan-locale");
-  if (stored === "zh-Hant" || stored === "en") return stored;
+  try {
+    const stored = window.localStorage.getItem("kakarayan-locale");
+    if (stored === "zh-Hant" || stored === "en") return stored;
+  } catch {
+    // Storage may be disabled; the interface still works with an in-memory locale.
+  }
   return navigator.language.toLowerCase().startsWith("zh") ? "zh-Hant" : "en";
 }
 
 export function I18nProvider({children}: PropsWithChildren) {
   const [locale, updateLocale] = useState<Locale>(initialLocale);
   const setLocale = useCallback((next: Locale) => {
-    window.localStorage.setItem("kakarayan-locale", next);
+    try {
+      window.localStorage.setItem("kakarayan-locale", next);
+    } catch {
+      // Remember the choice for this visit even when persistence is unavailable.
+    }
     updateLocale(next);
   }, []);
   useEffect(() => {

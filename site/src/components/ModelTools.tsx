@@ -265,8 +265,8 @@ export function TranslationTool({
         </label>
         <p className="model-privacy-note">
           {tx(
-            "Nothing is sent unless you check the box and press Translate. Kakarayan does not retain the request; Hugging Face processing and logging policies apply.",
-            "除非勾選並按下「翻譯」，否則不會傳送任何內容。Kakarayan 不保留請求；資料處理與記錄依 Hugging Face 政策辦理。",
+            "Sent only with consent. Kakarayan does not store your input. The Space and Hugging Face may keep logs; their retention has not been verified.",
+            "僅在同意後傳送。Kakarayan 不儲存輸入內容。Space 與 Hugging Face 可能保留記錄；其保存期限尚未確認。",
           )}{" "}
           <a href="https://huggingface.co/privacy">{tx("Privacy policy", "隱私權政策")}</a>
         </p>
