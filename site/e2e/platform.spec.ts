@@ -800,6 +800,7 @@ test("tool layouts reflow in both locales and respect reduced motion", async ({p
       await page.setViewportSize({width, height: 900});
       for (const route of ["lookup", "learn", "research?language=lang_amis", "developers", "downloads"]) {
         await page.goto(route);
+        await page.evaluate(() => { document.documentElement.style.scrollbarGutter = "stable"; });
         await expect(page.getByRole("heading", {level: 1})).toBeVisible();
         await expect(page.locator("html")).toHaveAttribute("lang", locale);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${locale} ${width} ${route}`).toBe(true);

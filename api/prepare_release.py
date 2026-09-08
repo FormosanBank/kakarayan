@@ -253,10 +253,10 @@ def prepare_release(manifest_source: str, data_root: Path) -> Path:
                 _stage_release(manifest_source, manifest, manifest_url, stage)
                 _sync_directory(stage)
                 stage.replace(generation)
-                _sync_directory(generations)
             finally:
                 if stage.exists():
                     shutil.rmtree(stage)
+        _sync_directory(generations)
         _select_generation(root, generation)
         return generation
 
