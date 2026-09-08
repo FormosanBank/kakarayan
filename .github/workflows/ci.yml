@@ -126,7 +126,7 @@ jobs:
 
       - name: Build the invented fixture release
         run: |
-          uv run python -m publisher.fixture_cli --output build/fixture-release
+          uv run python -m publisher.fixture_cli --output build/fixture-release --include-prepared
           uv run python -m publisher.verify_release --release build/fixture-release
           uv run python -m publisher.assemble_site \
             --release build/fixture-release \
