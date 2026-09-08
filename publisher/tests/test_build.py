@@ -44,6 +44,62 @@ def test_release_identity_includes_source_and_application_revisions() -> None:
     assert _release_id(source, "3" * 40) == "fb-20240102-111111333333"
 
 
+def test_catalog_counts_are_language_scoped_and_metadata_does_not_choose_a_text(
+    public_repo: Path,
+    tmp_path: Path,
+) -> None:
+    xml_dir = public_repo / "Corpora/TestCorpus/XML"
+    other = (xml_dir / "fixture.xml").read_text().replace('xml:lang="ami"', 'xml:lang="tay"')
+    other = (
+        other.replace("Xiuguluan", "Coastal")
+        .replace("Synthetic Kakarayan publisher fixture", "Another citation")
+        .replace("tests/fixtures/formosanbank", "Another source")
+    )
+    (xml_dir / "other.xml").write_text(other)
+    subprocess.run(["git", "-C", str(public_repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(public_repo), "commit", "-qm", "mixed scope"], check=True)
+    result = build_release(public_repo, tmp_path / "mixed")
+    corpus = json.loads((result.output / "catalog.json").read_text())["corpora"][0]
+    assert corpus["counts"]["sentences"] == 4
+    assert corpus["language_counts"]["lang_amis"]["sentences"] == 2
+    assert corpus["language_counts"]["lang_atayal"]["sentences"] == 2
+    for field, count in corpus["counts"].items():
+        assert sum(scope.get(field, 0) for scope in corpus["language_counts"].values()) == count
+    assert corpus["citation"] == corpus["source"] == ""
+    assert corpus["metadata_variants"]["citation"] == 2
+    assert corpus["metadata_variants"]["source"] == 2
+    assert corpus["copyright"] == "Synthetic fixture"
+    with closing(sqlite3.connect(result.output / "formosanbank.sqlite")) as connection:
+        scopes = connection.execute(
+            "SELECT language_id, corpus_id, dialect, value_json FROM summary_cache"
+        ).fetchall()
+        assert len(scopes) == 8  # Four observed scopes per language, not a cross-product.
+        for language, corpus_id, dialect, encoded in scopes:
+            cached = json.loads(encoded)
+            parameters = (language, corpus_id, corpus_id, dialect, dialect)
+            where = "t.language_id=? AND (?='' OR t.corpus_id=?) AND (?='' OR t.dialect=?)"
+            count = connection.execute(
+                f"SELECT COUNT(*) FROM sentences s JOIN texts t ON t.id=s.parent_id WHERE {where}",
+                parameters,
+            ).fetchone()[0]
+            assert cached["sentences"] == count == 2
+            normalized = connection.execute(
+                "SELECT tok.normalized, COUNT(*) AS n FROM tokens tok "
+                "JOIN sentences s ON s.id=tok.sentence_id JOIN texts t ON t.id=s.parent_id "
+                f"WHERE {where} GROUP BY tok.normalized ORDER BY n DESC, tok.normalized",
+                parameters,
+            ).fetchall()
+            assert cached["normalized_frequencies"] == [
+                {"value": value, "count": n} for value, n in normalized
+            ]
+            plan = connection.execute(
+                "EXPLAIN QUERY PLAN SELECT value_json FROM summary_cache "
+                "WHERE language_id=? AND corpus_id=? AND dialect=?",
+                (language, corpus_id, dialect),
+            ).fetchall()
+            assert any("USING PRIMARY KEY" in row[3] for row in plan)
+
+
 def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path: Path) -> None:
     first = build_release(public_repo, tmp_path / "one")
     second = build_release(public_repo, tmp_path / "two")
@@ -62,7 +118,8 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert catalog["source"]["commit"] == first.source.commit
     assert catalog["corpora"][0]["name"] == "TestCorpus"
     assert catalog["corpora"][0]["rights_id"] == "rights_testcorpus"
-    assert catalog["corpora"][0]["citation_count"] == 1
+    assert catalog["corpora"][0]["metadata_variants"]["citation"] == 1
+    assert catalog["corpora"][0]["language_counts"]["lang_amis"]["sentences"] == 2
     amis = next(row for row in catalog["languages"] if row["name"] == "Amis")
     assert amis["counts"]["sentences"] == 2
     assert amis["dialects"] == ["Xiuguluan"]

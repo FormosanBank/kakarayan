@@ -34,6 +34,38 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
+.page-wrap, .model-grid article, .model-grid dl, .model-grid dd {
+  min-width: 0;
+}
+
+.detail-section a, .detail-metadata dd, .page-wrap--prose a, .page-wrap--prose code,
+.model-grid dd, .model-toolbar, .callout {
+  overflow-wrap: anywhere;
+}
+
+.model-toolbar {
+  flex-wrap: wrap;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.checkbox-row input {
+  accent-color: var(--ink);
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+}
+
 html {
   min-width: 320px;
   background: var(--canvas);
@@ -330,7 +362,7 @@ h3 {
 
 .field small {
   color: var(--muted);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-mono);
 }
 
 .field--compact {
@@ -396,7 +428,7 @@ h3 {
   align-items: center;
   color: var(--body);
   background: var(--surface);
-  font: 600 11px/1 var(--font-body);
+  font: 600 12px/1 var(--font-body);
 }
 
 .status--available,
@@ -454,7 +486,7 @@ h3 {
 .segmented span {
   margin-left: 4px;
   color: inherit;
-  font: 500 11px/1 var(--font-mono);
+  font: 500 12px/1 var(--font-mono);
 }
 
 .table-scroll {
@@ -482,7 +514,7 @@ td {
 th {
   color: var(--muted);
   background: var(--surface);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 

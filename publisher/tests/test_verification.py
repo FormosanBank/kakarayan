@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -53,4 +54,23 @@ def test_database_verification_rejects_an_old_search_schema(
         connection.execute("DROP TABLE reverse_dictionary_terms")
 
     with pytest.raises(VerificationError, match="reverse_dictionary_terms"):
-        _verify_database(database)
+        _verify_database(
+            database, json.loads((release.output / "release-manifest.json").read_text())
+        )
+
+
+def test_verified_output_never_overwrites_a_previous_candidate(public_repo, tmp_path):
+    release = build_release(public_repo, tmp_path / "release", compress_database=True)
+    destination = tmp_path / "verified.sqlite"
+    destination.write_bytes(b"previous")
+    with pytest.raises(VerificationError, match="new file"):
+        verify_release(release.output, database_output=destination)
+    assert destination.read_bytes() == b"previous"
+
+
+def test_database_identity_is_checked_even_when_schema_is_valid(public_repo, tmp_path):
+    release = build_release(public_repo, tmp_path / "release", include_prepared=False)
+    manifest = json.loads((release.output / "release-manifest.json").read_text())
+    manifest["kakarayan"]["commit"] = "f" * 40
+    with pytest.raises(VerificationError, match="kakarayan"):
+        _verify_database(release.output / "formosanbank.sqlite", manifest)

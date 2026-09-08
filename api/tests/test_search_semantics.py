@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from api.search import matches, normalize_surface, normalize_text
+from api.search import match_snippet, matches, normalize_surface, normalize_text
 
 
 def _fixture() -> dict:
@@ -22,6 +22,10 @@ def test_search_semantics_fixture() -> None:
         assert normalize_surface(case["input"]) == case["normalized"]
     for case in fixture["text"]:
         assert normalize_text(case["input"]) == case["normalized"]
+    for case in fixture["highlights"]:
+        assert matches(case["value"], case["query"], "contains", surface=False) == bool(
+            case["selected"]
+        )
     for case in fixture["matches"]:
         assert (
             matches(
@@ -32,6 +36,25 @@ def test_search_semantics_fixture() -> None:
             )
             is case["matches"]
         )
+
+
+def test_snippets_keep_late_matches_and_original_spelling() -> None:
+    for source, query in (
+        ("a\u00a0deer   there", "a deer there"),
+        ("cafe\u0301", "CAFÉ"),
+        ("Straße", "STRASSE"),
+        ("父親", "父親。"),
+    ):
+        text = "An introduction. " * 100 + source + " is here. " * 100
+        snippet, truncated = match_snippet(text, query, 320)
+        assert truncated and len(snippet) <= 320
+        assert source in snippet
+        assert snippet.strip("…") in text
+    query = "distinct beginning " + "long phrase " * 60
+    text = "Introduction. " * 60 + query + " ending."
+    snippet, truncated = match_snippet(text, query, 320)
+    assert truncated and len(snippet) <= 320
+    assert "distinct beginning" in snippet
 
 
 def test_api_matches_golden_semantics(client: TestClient) -> None:

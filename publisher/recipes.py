@@ -44,12 +44,10 @@ def _release_store(release: Path) -> Iterator[CorpusStore]:
         raise BuildError(f"Release manifest does not exist: {manifest}")
     with tempfile.TemporaryDirectory(prefix="kakarayan-recipe-db-") as temporary:
         root = Path(temporary)
-        database = root / "formosanbank.sqlite"
-        active_manifest = root / "active-release.json"
-        prepare_release(str(manifest), database, active_manifest)
+        generation = prepare_release(str(manifest), root)
         settings = Settings(
-            manifest_path=active_manifest,
-            database_path=database,
+            manifest_path=generation / "release-manifest.json",
+            database_path=generation / "formosanbank.sqlite",
             expected_sha256=None,
             cors_origins=(),
         )

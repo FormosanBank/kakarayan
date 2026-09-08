@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 
 from api.errors import ApiError
 
@@ -30,15 +31,20 @@ def decode_cursor(cursor: str | None, fingerprint: str) -> list[CursorValue] | N
     if not cursor:
         return None
     try:
+        if len(cursor) > 2048:
+            raise ValueError
         padded = cursor + "=" * (-len(cursor) % 4)
-        value = json.loads(base64.urlsafe_b64decode(padded.encode()).decode())
+        value = json.loads(base64.b64decode(padded.encode(), altchars=b"-_", validate=True))
         if (
-            value.get("v") != 2
+            not isinstance(value, dict)
+            or value.get("v") != 2
             or value.get("q") != fingerprint
             or not isinstance(value.get("p"), list)
             or len(value["p"]) > 4
             or any(
-                not isinstance(item, str | int | float) or isinstance(item, bool)
+                not isinstance(item, str | int | float)
+                or isinstance(item, bool)
+                or (isinstance(item, float) and not math.isfinite(item))
                 for item in value["p"]
             )
         ):

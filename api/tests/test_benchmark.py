@@ -4,7 +4,9 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from api.benchmark import run
+import pytest
+
+from api.benchmark import BenchmarkError, _case, run
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -30,6 +32,22 @@ class _Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: object) -> None:
         return
+
+
+def test_summary_benchmark_cannot_pass_an_empty_or_invalid_scope(monkeypatch):
+    monkeypatch.setattr("api.benchmark._request", lambda *_args: (1.0, b'{"sentences":0}'))
+    with pytest.raises(BenchmarkError, match="empty summary scope"):
+        _case(
+            "http://localhost",
+            "release",
+            {
+                "name": "dialect summary",
+                "path": "/summaries",
+                "require_summary": True,
+            },
+            samples=2,
+            warmups=0,
+        )
 
 
 def test_benchmark_measures_cases_and_followed_detail(tmp_path) -> None:

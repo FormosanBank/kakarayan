@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import gzip
 import hashlib
 import json
 import os
+import re
+import shutil
 import sqlite3
 import tempfile
 import urllib.parse
@@ -14,7 +17,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, BinaryIO, cast
 
-from api.release import ReleaseError
+from api.config import Settings
+from api.release import ReleaseError, load_release
 
 _BUFFER_SIZE = 1024 * 1024
 _MAX_ARTIFACT_BYTES = 2_000_000_000
@@ -51,7 +55,8 @@ def _read_manifest(source: str) -> tuple[dict[str, Any], str | None]:
     elif parsed.scheme:
         raise ReleaseError("Manifest source must be a local path or HTTPS URL")
     else:
-        raw = Path(source).resolve().read_bytes()
+        with Path(source).resolve().open("rb") as stream:
+            raw = stream.read(10_000_001)
         base_url = None
     if len(raw) > 10_000_000:
         raise ReleaseError("Release manifest exceeds the activation size limit")
@@ -73,6 +78,15 @@ def _artifact(manifest: dict[str, Any]) -> dict[str, Any]:
     required = ("path", "bytes", "sha256")
     if any(not artifact.get(key) for key in required):
         raise ReleaseError("SQLite artifact metadata is incomplete")
+    for size, limit in (
+        (artifact["bytes"], _MAX_ARTIFACT_BYTES),
+        (artifact.get("content_bytes", artifact["bytes"]), _MAX_DATABASE_BYTES),
+    ):
+        if type(size) is not int or not 0 < size <= limit:
+            raise ReleaseError("SQLite artifact size is invalid or exceeds the activation limit")
+    for digest in (artifact["sha256"], artifact.get("content_sha256", artifact["sha256"])):
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ReleaseError("SQLite artifact digest is invalid")
     return artifact
 
 
@@ -104,12 +118,11 @@ def _acquire(source: str, target: Path, expected_bytes: int) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def prepare_release(manifest_source: str, database_path: Path, active_manifest: Path) -> None:
-    manifest, manifest_url = _read_manifest(manifest_source)
+def _stage_release(
+    manifest_source: str, manifest: dict[str, Any], manifest_url: str | None, stage: Path
+) -> None:
     artifact = _artifact(manifest)
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-    active_manifest.parent.mkdir(parents=True, exist_ok=True)
-    artifact_path = database_path.parent / f".{artifact['path']}"
+    artifact_path = stage / f".download-{artifact['path']}"
     source = (
         urllib.parse.urljoin(manifest_url, artifact["path"])
         if manifest_url
@@ -119,7 +132,7 @@ def prepare_release(manifest_source: str, database_path: Path, active_manifest: 
     if _sha256(artifact_path) != artifact["sha256"]:
         artifact_path.unlink(missing_ok=True)
         raise ReleaseError("SQLite artifact checksum does not match the manifest")
-    handle, name = tempfile.mkstemp(prefix=".database-", dir=database_path.parent)
+    handle, name = tempfile.mkstemp(prefix=".database-", dir=stage)
     candidate = Path(name)
     try:
         digest = hashlib.sha256()
@@ -149,31 +162,112 @@ def prepare_release(manifest_source: str, database_path: Path, active_manifest: 
                 raise ReleaseError("SQLite integrity check failed during activation")
         finally:
             connection.close()
-        candidate.replace(database_path)
-        handle, manifest_name = tempfile.mkstemp(prefix=".active-", dir=active_manifest.parent)
-        try:
-            with os.fdopen(handle, "w", encoding="utf-8") as output:
-                json.dump(
-                    manifest, output, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-                )
-                output.write("\n")
-                output.flush()
-                os.fsync(output.fileno())
-            Path(manifest_name).replace(active_manifest)
-        finally:
-            Path(manifest_name).unlink(missing_ok=True)
+        candidate.replace(stage / "formosanbank.sqlite")
+        with (stage / "release-manifest.json").open("x", encoding="utf-8") as output:
+            json.dump(manifest, output, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            output.write("\n")
+            output.flush()
+            os.fsync(output.fileno())
+        _validate_generation(stage, manifest)
     finally:
         candidate.unlink(missing_ok=True)
         artifact_path.unlink(missing_ok=True)
 
 
+def _validate_generation(directory: Path, manifest: dict[str, Any]) -> None:
+    state = load_release(
+        Settings(
+            manifest_path=directory / "release-manifest.json",
+            database_path=directory / "formosanbank.sqlite",
+            expected_sha256=None,
+            cors_origins=(),
+        )
+    )
+    if state.manifest != manifest:
+        raise ReleaseError("Existing generation has different immutable metadata")
+
+
+def _sync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _select_generation(root: Path, generation: Path) -> None:
+    """Replace the one pointer, never the files used by a running process."""
+    current = root / "current"
+    previous = current.resolve() if current.is_symlink() else None
+    if current.exists() and not current.is_symlink():
+        raise ReleaseError("The current release selector must be a symlink")
+    if previous == generation:
+        return
+    for name, target in (("previous", previous), ("current", generation)):
+        if target is None:
+            continue
+        temporary = root / f".{name}-{os.getpid()}"
+        try:
+            temporary.symlink_to(os.path.relpath(target, root), target_is_directory=True)
+            os.replace(temporary, root / name)
+        finally:
+            temporary.unlink(missing_ok=True)
+    _sync_directory(root)
+
+
+def prepare_release(manifest_source: str, data_root: Path) -> Path:
+    """Stage and select a generation under an exclusive local activation lock."""
+    root = data_root.resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    if root.stat().st_uid != os.geteuid() or not os.access(root, os.W_OK):
+        raise ReleaseError("Data directory must be writable and owned by the activation user")
+    with (root / ".activation.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise ReleaseError("Another release activation is running") from error
+        manifest, manifest_url = _read_manifest(manifest_source)
+        release_id = manifest["release_id"]
+        if not re.fullmatch(r"fb-[0-9]{8}-[0-9a-f]{7,12}", release_id):
+            raise ReleaseError("Invalid release ID")
+        artifact = _artifact(manifest)
+        generations = root / "generations"
+        generations.mkdir(exist_ok=True)
+        generation = generations / release_id
+        if generation.exists():
+            _validate_generation(generation, manifest)
+            if _sha256(generation / "formosanbank.sqlite") != artifact.get(
+                "content_sha256", artifact["sha256"]
+            ):
+                raise ReleaseError("Retained database checksum does not match its manifest")
+        else:
+            required = (
+                artifact["bytes"]
+                + artifact.get("content_bytes", artifact["bytes"])
+                + 256 * 1024 * 1024
+            )
+            if shutil.disk_usage(root).free < required:
+                raise ReleaseError(f"Not enough free disk for activation: need {required} bytes")
+            stage = Path(tempfile.mkdtemp(prefix=".staging-", dir=root))
+            try:
+                _stage_release(manifest_source, manifest, manifest_url, stage)
+                _sync_directory(stage)
+                stage.replace(generation)
+            finally:
+                if stage.exists():
+                    shutil.rmtree(stage)
+        _sync_directory(generations)
+        _select_generation(root, generation)
+        return generation
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True)
-    parser.add_argument("--database", type=Path, required=True)
-    parser.add_argument("--activate", type=Path, required=True)
+    parser.add_argument("--data-root", type=Path, required=True)
     args = parser.parse_args(argv)
-    prepare_release(args.manifest, args.database, args.activate)
+    generation = prepare_release(args.manifest, args.data_root)
+    print(f"Selected {generation.name}. Restart the API to use this generation.")
     return 0
 
 

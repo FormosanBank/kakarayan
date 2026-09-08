@@ -34,6 +34,13 @@ The production release exposes 11 curated downloads. Hierarchical JSONL partitio
 bundled into one archive. Corpus-specific canonical XML is not duplicated in the Kakarayan
 release.
 
+Flat table JSONL contains the relational tables separately. Nested sentence JSONL contains
+S records with their W/M children and tiers; text-owned tiers and texts without S are excluded.
+Prepared CSV/TSV use `\N` for null. A source string starting with a backslash gains one
+leading backslash, which consumers remove when decoding. Empty strings remain distinct from
+null. XLSX protects formula-like strings and has Excel's 32,767-character cell limit; use
+XML, SQLite, Parquet, or JSONL for source-faithful long fields.
+
 The time-alignment package stores every valid sentence timing and media reference in one
 JSONL table. It also includes EAF, WebVTT, and SRT files for media with multiple cues, plus
 TextGrid when those cues do not overlap. A one-cue clip stays in the JSONL table because
@@ -57,11 +64,17 @@ The Research builder calls the API for a bounded preview and a finite export. It
 - 1 to 100,000 rows per selected level;
 - CSV, TSV, or JSON Lines.
 
-Each preview returns at most 250 rows. A single level downloads as one table. Two or three
+Each preview returns at most 250 rows, but discovers columns across the full selected export
+window (`selection_rows`), not only the visible sample. A single level downloads as one table. Two or three
 levels download as a ZIP containing one table per level and a manifest. The API streams
 rows and ZIP members instead of keeping the completed download in server or browser memory.
 Use a prepared artifact when the complete corpus or more than 100,000 rows per level is
 needed.
+
+S, W, and M selections are independent. A selected parent does not implicitly include all its
+children, and a selected child need not have its parent in the finite export window. Join by
+the supplied IDs when needed. Completeness checks tier presence, not truthiness: zero and
+false are valid values. `unclear` as a column does not require an unclear annotation.
 
 ## Column meanings
 
@@ -138,6 +151,7 @@ preserves locators, offsets, and provenance without silently copying source medi
 
 ## Versioning
 
-Schema version `1.0.0` defines the current release, static API, recipe, and query contracts.
-A breaking field or semantic change requires a new version. Adding another immutable data
-release does not change the contract version.
+The HTTP/static API is `v1`; release/static envelope schemas are `1.0.0`; the read-model
+contract in `api/contract.json` is `2`; export recipes are `2.0.0`. These identify different
+contracts. Query response types and browser validators are generated from `api/contracts.py`.
+A new source snapshot changes the release ID, not those contract versions.

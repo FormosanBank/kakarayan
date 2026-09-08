@@ -170,7 +170,7 @@
 .model-progress small {
   margin-top: 2px;
   color: var(--muted);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-mono);
 }
 
 .model-progress ol {
@@ -183,7 +183,7 @@
 
 .model-progress li {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .model-progress li[data-state="current"] {
@@ -223,7 +223,7 @@
 
 .practice-reference span {
   color: var(--muted);
-  font: 600 10px/1 var(--font-mono);
+  font: 600 12px/1 var(--font-mono);
   text-transform: uppercase;
 }
 
@@ -235,7 +235,7 @@
 .machine-output > span,
 .orthography-result > span {
   color: var(--muted);
-  font: 600 11px/1 var(--font-mono);
+  font: 600 12px/1 var(--font-mono);
   text-transform: uppercase;
 }
 
@@ -338,7 +338,7 @@
 
 .queue-summary dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .queue-summary dd {

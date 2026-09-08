@@ -14,6 +14,15 @@ const directions: TranslationRequest["direction"][] = [
   "Chinese → Formosan",
 ];
 
+interface TranslationResult {
+  text: string;
+  metadata: string;
+  request: Readonly<TranslationRequest>;
+  languageId: string;
+  modelId: string;
+  contextKey: string;
+}
+
 function serviceLanguageName(language: Language | undefined, supported: string[]): string {
   if (!language) return "";
   const aliases: Record<string, string> = {Truku: "Taroko", Yami: "Yami / Tao"};
@@ -26,19 +35,23 @@ export function TranslationTool({
   languages,
   selectedLanguageId,
   selectedDialect,
+  active = true,
 }: {
   catalog: ModelCatalog;
   languages: Language[];
   selectedLanguageId: string;
   selectedDialect: string;
+  active?: boolean;
 }) {
   const {number, tx} = useI18n();
   const [text, setText] = useState("");
   const [direction, setDirection] =
     useState<TranslationRequest["direction"]>("English → Formosan");
-  const [consent, setConsent] = useState(false);
-  const [result, setResult] = useState("");
-  const [metadata, setMetadata] = useState("");
+  const contextKey = JSON.stringify([selectedLanguageId, selectedDialect, text, direction]);
+  const [consentKey, setConsentKey] = useState<string | null>(null);
+  const consent = consentKey === contextKey;
+  const [savedResult, setResult] = useState<TranslationResult | null>(null);
+  const result = savedResult?.contextKey === contextKey ? savedResult : null;
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
   const [status, setStatus] = useState("");
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -66,8 +79,11 @@ export function TranslationTool({
     [catalog.models, direction, language],
   );
 
-  useEffect(() => () => controller.current?.abort(), []);
-  const running = !["idle", "complete", "cancelled", "error"].includes(stage);
+  useEffect(() => () => {
+    controller.current?.abort();
+    setConsentKey(null);
+  }, [selectedLanguageId, selectedDialect, active]);
+  const running = active && !["idle", "complete", "cancelled", "error"].includes(stage);
   useEffect(() => {
     if (!running) return;
     const update = () => setElapsedSeconds(Math.floor((performance.now() - startedAt.current) / 1000));
@@ -77,26 +93,36 @@ export function TranslationTool({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!consent || !text.trim() || !service?.api_name || !serviceReady) return;
+    if (!active || !consent || !text.trim() || !language || !service?.api_name || !serviceReady) return;
     controller.current?.abort();
     const next = new AbortController();
     controller.current = next;
+    const request: Readonly<TranslationRequest> = Object.freeze({
+      text: text.trim(), direction,
+      language: serviceLanguageName(language, service.supported_languages),
+      dialect: selectedDialect || "Default / unknown",
+    });
+    const languageId = language.id;
+    const modelId = model?.id ?? "";
+    next.signal.addEventListener("abort", () => {
+      if (controller.current !== next) return;
+      setStage("cancelled");
+      setStatus(tx("Request cancelled.", "已取消請求。"));
+      setConsentKey(null);
+    }, {once: true});
     startedAt.current = performance.now();
     setElapsedSeconds(0);
-    setResult("");
-    setMetadata("");
+    setResult(null);
+    setConsentKey(null);
+    setStage("connecting");
     try {
       const output = await translate(
-        {
-          text: text.trim(),
-          direction,
-          language: serviceLanguageName(language, service.supported_languages),
-          dialect: selectedDialect || "Default / unknown",
-        },
+        request,
         {space: service.space, endpoint: service.api_name},
         {
           signal: next.signal,
           onStage: (nextStage, message) => {
+            if (next.signal.aborted || controller.current !== next) return;
             setStage(nextStage);
             if (nextStage === "connecting") {
               setStatus(
@@ -119,9 +145,11 @@ export function TranslationTool({
           },
         },
       );
-      setResult(output.text);
-      setMetadata(output.metadata);
+      if (next.signal.aborted || controller.current !== next) return;
+      setResult({...output, request, languageId, modelId, contextKey});
+      setStage("complete");
     } catch (cause) {
+      if (next.signal.aborted || controller.current !== next) return;
       if (cause instanceof DOMException && cause.name === "AbortError") {
         setStage("cancelled");
         setStatus(tx("Request cancelled. Your input remains in this browser.", "已取消請求。輸入內容仍保留在此瀏覽器。"));
@@ -131,12 +159,15 @@ export function TranslationTool({
           `${cause instanceof Error ? cause.message : String(cause)} ${tx("Use corpus translation search while the public service is unavailable.", "公開服務無法使用時，請改用語料翻譯搜尋。")}`,
         );
       }
+    } finally {
+      if (controller.current === next) controller.current = null;
     }
   }
 
   async function copyResult() {
+    if (!result) return;
     try {
-      await navigator.clipboard.writeText(result);
+      await navigator.clipboard.writeText(result.text);
       setStatus(tx("Machine output copied.", "已複製機器輸出。"));
     } catch {
       setStatus(tx("Clipboard access was unavailable.", "無法存取剪貼簿。"));
@@ -144,16 +175,20 @@ export function TranslationTool({
   }
 
   async function saveResult() {
-    if (!language || !result) return;
-    const sourceIsFormosan = direction.startsWith("Formosan");
-    await saveCard(manualStudyCard({
-      front: sourceIsFormosan ? text : result,
-      back: sourceIsFormosan ? result : text,
-      languageId: language.id,
-      deck: tx("Machine translation drafts", "機器翻譯草稿"),
-      tags: ["machine-draft", selectedDialect, model?.id ?? ""].filter(Boolean),
-    }));
-    setStatus(tx("Draft saved to the local deck and labelled as machine output.", "草稿已儲存到本機牌組，並標示為機器輸出。"));
+    if (!result) return;
+    const sourceIsFormosan = result.request.direction.startsWith("Formosan");
+    try {
+      await saveCard(manualStudyCard({
+        front: sourceIsFormosan ? result.request.text : result.text,
+        back: sourceIsFormosan ? result.text : result.request.text,
+        languageId: result.languageId,
+        deck: tx("Machine translation drafts", "機器翻譯草稿"),
+        tags: ["machine-draft", result.request.dialect, result.modelId].filter(Boolean),
+      }));
+      setStatus(tx("Draft saved to the local deck.", "草稿已儲存到本機牌組。"));
+    } catch {
+      setStatus(tx("Could not save. Your draft is still here.", "無法儲存。草稿仍保留在此。"));
+    }
   }
 
   return (
@@ -175,9 +210,13 @@ export function TranslationTool({
             {tx("Direction", "方向")}
             <select
               value={direction}
-              onChange={(event) =>
-                setDirection(event.target.value as TranslationRequest["direction"])
-              }
+              onChange={(event) => {
+                controller.current?.abort();
+                setResult(null);
+                setConsentKey(null);
+                const value = directions.find((item) => item === event.target.value);
+                if (value) setDirection(value);
+              }}
             >
               {directions.map((value) => (
                 <option key={value} value={value}>
@@ -200,7 +239,12 @@ export function TranslationTool({
           {tx("Text", "文字")}
           <textarea
             value={text}
-            onChange={(event) => setText(event.target.value)}
+            onChange={(event) => {
+              controller.current?.abort();
+              setResult(null);
+              setConsentKey(null);
+              setText(event.target.value);
+            }}
             maxLength={1500}
             rows={5}
           />
@@ -210,7 +254,7 @@ export function TranslationTool({
           <input
             type="checkbox"
             checked={consent}
-            onChange={(event) => setConsent(event.target.checked)}
+            onChange={(event) => setConsentKey(event.target.checked ? contextKey : null)}
           />
           <span>
             {tx(
@@ -221,8 +265,8 @@ export function TranslationTool({
         </label>
         <p className="model-privacy-note">
           {tx(
-            "Nothing is sent unless you check the box and press Translate. Kakarayan does not retain the request; Hugging Face processing and logging policies apply.",
-            "除非勾選並按下「翻譯」，否則不會傳送任何內容。Kakarayan 不保留請求；資料處理與記錄依 Hugging Face 政策辦理。",
+            "Sent only with consent. Kakarayan does not store your input. The Space and Hugging Face may keep logs; their retention has not been verified.",
+            "僅在同意後傳送。Kakarayan 不儲存輸入內容。Space 與 Hugging Face 可能保留記錄；其保存期限尚未確認。",
           )}{" "}
           <a href="https://huggingface.co/privacy">{tx("Privacy policy", "隱私權政策")}</a>
         </p>
@@ -271,15 +315,15 @@ export function TranslationTool({
       {result && (
         <div className="machine-output">
           <span>{tx("Machine output", "機器輸出")}</span>
-          <p>{result}</p>
-          {metadata && <small>{metadata}</small>}
+          <p>{result.text}</p>
+          {result.metadata && <small>{result.metadata}</small>}
           <div className="button-row">
             <button className="button button--quiet" onClick={copyResult}>{tx("Copy", "複製")}</button>
             <button className="button button--quiet" onClick={saveResult}>{tx("Save as labelled draft", "儲存為已標示草稿")}</button>
             {language && (
               <Link
                 className="button button--quiet"
-                to={`/lookup?type=sentences&q=${encodeURIComponent(result)}&language=${encodeURIComponent(language.id)}&mode=exact`}
+                to={`/lookup?type=sentences&q=${encodeURIComponent(result.text)}&language=${encodeURIComponent(result.languageId)}&direction=${result.request.direction.startsWith("Formosan") ? "translation" : "formosan"}&target=${result.request.direction.endsWith("Chinese") ? "zho" : "eng"}&mode=contains`}
               >
                 {tx("Check in corpus", "在語料庫中核對")}
               </Link>

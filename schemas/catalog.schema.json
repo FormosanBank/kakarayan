@@ -82,7 +82,8 @@
         "bibtex_citation",
         "source",
         "copyright",
-        "citation_count"
+        "language_counts",
+        "metadata_variants"
       ],
       "properties": {
         "id": {"type": "string", "pattern": "^corpus_[a-z0-9_]+$"},
@@ -94,7 +95,21 @@
         "bibtex_citation": {"type": "string"},
         "source": {"type": "string"},
         "copyright": {"type": "string"},
-        "citation_count": {"type": "integer", "minimum": 0},
+        "language_counts": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/counts"}
+        },
+        "metadata_variants": {
+          "type": "object",
+          "required": ["citation", "bibtex_citation", "source", "copyright"],
+          "properties": {
+            "citation": {"type": "integer", "minimum": 0},
+            "bibtex_citation": {"type": "integer", "minimum": 0},
+            "source": {"type": "integer", "minimum": 0},
+            "copyright": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
         "counts": {"$ref": "#/$defs/counts"}
       },
       "additionalProperties": false

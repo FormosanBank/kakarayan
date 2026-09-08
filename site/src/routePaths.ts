@@ -30,6 +30,11 @@ export function routeFromPathname(pathname: string): string {
     route = pathname.slice(basePath.length) || "/";
   }
   const withLeadingSlash = route.startsWith("/") ? route : `/${route}`;
+  try {
+    decodeURIComponent(withLeadingSlash);
+  } catch {
+    return "/not-found";
+  }
   if (withLeadingSlash.length === 1) return withLeadingSlash;
   return withLeadingSlash.replace(/\/+$/u, "");
 }

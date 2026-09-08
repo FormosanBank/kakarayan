@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,7 +43,7 @@ def _positive_number(value: str, name: str) -> float:
         parsed = float(value)
     except ValueError as error:
         raise ValueError(f"{name} must be a positive number") from error
-    if parsed <= 0:
+    if not math.isfinite(parsed) or parsed <= 0:
         raise ValueError(f"{name} must be a positive number")
     return parsed
 
@@ -70,13 +71,13 @@ class Settings:
     @classmethod
     def from_environment(cls) -> Settings:
         manifest_path = os.environ.get(
-            "KAKARAYAN_RELEASE_MANIFEST_PATH", "/data/active-release.json"
+            "KAKARAYAN_RELEASE_MANIFEST_PATH", "/data/current/release-manifest.json"
         )
         return cls(
-            manifest_path=Path(manifest_path).resolve(),
+            manifest_path=Path(manifest_path).absolute(),
             database_path=Path(
-                os.environ.get("KAKARAYAN_DB_PATH", "/data/formosanbank.sqlite")
-            ).resolve(),
+                os.environ.get("KAKARAYAN_DB_PATH", "/data/current/formosanbank.sqlite")
+            ).absolute(),
             expected_sha256=os.environ.get("KAKARAYAN_SQLITE_SHA256"),
             cors_origins=_origins(
                 os.environ.get(
@@ -173,7 +174,7 @@ class Settings:
 
     def validate(self) -> None:
         if any(
-            value <= 0
+            not math.isfinite(value) or value <= 0
             for value in (
                 self.query_step_limit,
                 self.requests_per_minute,

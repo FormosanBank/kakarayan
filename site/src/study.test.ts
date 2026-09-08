@@ -1,4 +1,4 @@
-import {cardsAsAnkiTsv, cardsAsCsv, manualStudyCard, scheduleCard, type StudyCard} from "./study";
+import {cardsAsAnkiTsv, cardsAsCsv, manualStudyCard, restoreBackup, scheduleCard, validateBackup, type StudyCard} from "./study";
 
 const card: StudyCard = {
   id: "card-1",
@@ -56,9 +56,32 @@ describe("local study scheduling", () => {
     expect(easy.dueAt).toBe("2026-02-03T00:00:00.000Z");
   });
 
-  it("protects tabular exports from formulas", () => {
-    expect(cardsAsAnkiTsv([{...card, front: "=1+1"}])).toContain("'=1+1");
+  it("protects spreadsheet exports without altering Anki text", () => {
+    expect(cardsAsAnkiTsv([{...card, front: "=1+1"}])).toContain('"=1+1"');
     expect(cardsAsCsv([{...card, front: "=1+1"}])).toContain("'=1+1");
+  });
+
+  it("quotes multiline Anki fields with explicit header metadata", () => {
+    const value = cardsAsAnkiTsv([{...card, front: '第一行\n"line 2"\tend'}]);
+    expect(value).toContain("#separator:Tab\n#html:false\n#columns:Front\tBack\tTags\tSource\n#tags column:3\n");
+    expect(value).toContain('"第一行\n""line 2""\tend"\t"five"');
+  });
+
+  it("validates the entire backup before attempting a write", async () => {
+    const backup = {schemaVersion: 1, exportedAt: card.createdAt, cards: [card]};
+    expect(validateBackup(backup)).toEqual(backup);
+    for (const invalid of [
+      {...backup, cards: [card, card]},
+      {...backup, exportedAt: "not a date"},
+      ...[NaN, Infinity, -1, 1.5].map((repetitions) => ({...backup, cards: [{...card, repetitions}]})),
+      {...backup, cards: [{...card, dueAt: "tomorrow"}]},
+      {...backup, cards: [{...card, direction: "unknown"}]},
+      {...backup, cards: [{...card, audioReferences: [12]}]},
+      {...backup, cards: [{...card, source: {recordId: "x"}}]},
+      {...backup, cards: [{...card, front: "a".repeat(20_001)}]},
+    ]) {
+      await expect(restoreBackup(invalid)).rejects.toThrow(/backup/i);
+    }
   });
 
   it("builds a labelled manual card without corpus provenance", () => {

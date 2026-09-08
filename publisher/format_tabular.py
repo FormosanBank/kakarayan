@@ -23,7 +23,7 @@ from openpyxl.utils import get_column_letter
 from publisher import SCHEMA_VERSION
 from publisher.archive import directory_entries, repack_zip, write_zip
 from publisher.release_db import open_release
-from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS
+from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS, delimited_cell
 
 _BATCH_SIZE = 50_000
 _HIERARCHY_BATCH_SIZE = 500
@@ -76,7 +76,7 @@ def write_tsv(database: Path, output: Path) -> None:
                     f'SELECT {", ".join(columns)} FROM "{table}" ORDER BY rowid'
                 )
                 for row in cursor:
-                    writer.writerow([r"\N" if value is None else value for value in row])
+                    writer.writerow([delimited_cell(value) for value in row])
 
 
 def write_parquet(database: Path, output: Path, release_id: str) -> dict[str, object]:
@@ -496,6 +496,10 @@ def data_dictionary() -> dict[str, object]:
             "sqlite": "NULL",
             "xlsx": "blank cell",
         },
+        "csv_tsv_escaping": (
+            "A source string beginning with backslash gains one leading backslash; "
+            "remove it when decoding. Only a single backslash followed by N represents null."
+        ),
         "tables": {
             table: [
                 {

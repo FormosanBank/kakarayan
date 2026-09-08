@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sqlite3
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Literal
 
@@ -19,6 +20,17 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.gzip import GZipMiddleware
 
 from api.config import Settings
+from api.contracts import (
+    READ_MODEL_VERSION,
+    ConcordancePage,
+    DatasetPreviewResult,
+    DictionaryPage,
+    ErrorResponse,
+    Ready,
+    SearchRecord,
+    SummaryResponse,
+    TranslationLanguages,
+)
 from api.dataset_fields import DatasetField, RecordLevel, default_dataset_fields
 from api.errors import ApiError, api_error_handler, validation_error_handler
 from api.exports import dataset_chunks, zip_chunks
@@ -41,6 +53,8 @@ from api.store import (
     TierRequirement,
     use_query_budget,
 )
+from api.streaming import StreamProgress, controlled_chunks
+from api.telemetry import RequestTelemetry
 
 LOGGER = logging.getLogger("uvicorn.error")
 LOGGER.setLevel(logging.INFO)
@@ -58,24 +72,6 @@ ReleaseId = Annotated[str, Path(min_length=1, max_length=128)]
 def _invoke_with_budget[ResultT](budget: QueryBudget, operation: Callable[[], ResultT]) -> ResultT:
     with use_query_budget(budget):
         return operation()
-
-
-def _next_chunk(chunks: Iterator[bytes]) -> tuple[bool, bytes]:
-    try:
-        return False, next(chunks)
-    except StopIteration:
-        return True, b""
-
-
-async def _controlled_chunks(chunks: Iterator[bytes], budget: QueryBudget) -> AsyncIterator[bytes]:
-    try:
-        while True:
-            complete, chunk = await asyncio.to_thread(_next_chunk, chunks)
-            if complete:
-                return
-            yield chunk
-    finally:
-        budget.cancel()
 
 
 def _cache(response: Response) -> None:
@@ -141,6 +137,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         summary="Read-only access to one pinned public FormosanBank release",
         version="1.0.0",
         lifespan=lifespan,
+        responses={
+            code: {"model": ErrorResponse} for code in (400, 403, 404, 408, 422, 429, 500, 503, 504)
+        },
         license_info={
             "name": "CC BY-NC 4.0",
             "url": "https://creativecommons.org/licenses/by-nc/4.0/",
@@ -196,7 +195,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             client_ip = request.client.host.casefold() if request.client else "unknown"
             decision = rate_limiter.check(
                 client_ip,
-                is_export=path.endswith(("/datasets/export", "/datasets/export-package")),
+                is_export=path.endswith(("/datasets/export", "/datasets/export-package"))
+                and request.query_params.get("preflight", "").lower()
+                not in {"true", "1", "yes", "on"},
             )
         response: Response
         if decision is not None and not decision.allowed:
@@ -235,30 +236,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         failure_code = response.headers.get(_FAILURE_HEADER)
+        request.state.failure_code = failure_code
+        request.state.release_id = release_id
         if failure_code:
             del response.headers[_FAILURE_HEADER]
         if release_id:
             response.headers["X-Kakarayan-Release"] = release_id
-        route = request.scope.get("route")
-        route_path = getattr(route, "path", request.url.path)
         duration_ms = round((time.perf_counter() - started) * 1000)
         response.headers["Server-Timing"] = f"app;dur={duration_ms}"
-        _record(
-            "request",
-            method=request.method,
-            route=route_path,
-            status=response.status_code,
-            duration_ms=duration_ms,
-            duration_bucket="lt100"
-            if duration_ms < 100
-            else "lt500"
-            if duration_ms < 500
-            else "gte500",
-            response_bytes=int(response.headers.get("content-length", 0)),
-            release_id=release_id,
-            failure_code=failure_code,
-        )
         return response
+
+    app.add_middleware(RequestTelemetry)
 
     def store(request: Request) -> CorpusStore:
         current = getattr(request.app.state, "store", None)
@@ -285,6 +273,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             timeout_seconds or configured.query_timeout_seconds,
             workload=workload,
         )
+        request.state.query_budget = active_budget
         task = asyncio.create_task(asyncio.to_thread(_invoke_with_budget, active_budget, operation))
         try:
             while not task.done():
@@ -312,12 +301,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "alive"}
 
-    @app.get("/readyz", tags=["service"])
-    def ready(request: Request, response: Response) -> dict[str, str]:
+    @app.get("/readyz", tags=["service"], response_model=Ready)
+    def ready(request: Request, response: Response) -> dict[str, str | int | None]:
         current = store(request)
         current.check_ready()
         response.headers["Cache-Control"] = "no-store"
-        return {"status": "ready", "release_id": current.release_id}
+        return {
+            "status": "ready",
+            "release_id": current.release_id,
+            "read_model_version": READ_MODEL_VERSION,
+            "image_commit": os.environ.get("KAKARAYAN_IMAGE_COMMIT") or None,
+        }
 
     @app.get("/v1/meta", tags=["catalogue"])
     def meta(request: Request, response: Response) -> dict:
@@ -369,7 +363,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         current = release_store(request, release_id)
         return await run_query(request, lambda: current.text(text_id))
 
-    @app.get("/v1/releases/{release_id}/sentences/{sentence_id}", tags=["records"])
+    @app.get(
+        "/v1/releases/{release_id}/sentences/{sentence_id}",
+        tags=["records"],
+        response_model=SearchRecord,
+    )
     async def sentence(
         request: Request, response: Response, release_id: ReleaseId, sentence_id: str
     ) -> dict:
@@ -377,7 +375,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         current = release_store(request, release_id)
         return await run_query(request, lambda: current.sentence(sentence_id))
 
-    @app.get("/v1/releases/{release_id}/translation-languages", tags=["query"])
+    @app.get(
+        "/v1/releases/{release_id}/translation-languages",
+        tags=["query"],
+        response_model=TranslationLanguages,
+    )
     async def translation_languages(
         request: Request,
         response: Response,
@@ -392,7 +394,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             lambda: current.translation_languages(language_id=language_id, corpus_id=corpus_id),
         )
 
-    @app.get("/v1/releases/{release_id}/dictionary", tags=["query"])
+    @app.get("/v1/releases/{release_id}/dictionary", tags=["query"], response_model=DictionaryPage)
     async def dictionary(
         request: Request,
         response: Response,
@@ -424,7 +426,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         )
 
-    @app.get("/v1/releases/{release_id}/concordance", tags=["query"])
+    @app.get(
+        "/v1/releases/{release_id}/concordance", tags=["query"], response_model=ConcordancePage
+    )
     async def concordance(
         request: Request,
         response: Response,
@@ -489,7 +493,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             workload="analytical",
         )
 
-    @app.get("/v1/releases/{release_id}/summaries", tags=["query"])
+    @app.get("/v1/releases/{release_id}/summaries", tags=["query"], response_model=SummaryResponse)
     async def summaries(
         request: Request,
         response: Response,
@@ -524,6 +528,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record_level: RecordLevel,
         complete_fields: bool,
         max_rows: int,
+        selection_rows: int,
     ) -> dict:
         return release_store(request, release_id).dataset(
             language_id=language_id,
@@ -538,9 +543,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             record_level=record_level,
             complete_fields=complete_fields,
             max_rows=max_rows,
+            selection_rows=selection_rows,
         )
 
-    @app.get("/v1/releases/{release_id}/datasets/preview", tags=["datasets"])
+    @app.get(
+        "/v1/releases/{release_id}/datasets/preview",
+        tags=["datasets"],
+        response_model=DatasetPreviewResult,
+    )
     async def dataset_preview(
         request: Request,
         response: Response,
@@ -557,6 +567,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
         max_rows: Annotated[int, Query(ge=1, le=DATASET_PREVIEW_MAX_ROWS)] = 12,
+        selection_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
     ) -> dict:
         _cache(response)
         return await run_query(
@@ -576,6 +587,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 record_level,
                 complete_fields,
                 max_rows,
+                selection_rows,
             ),
             timeout_seconds=configured.dataset_preview_timeout_seconds,
             workload="analytical",
@@ -602,9 +614,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         complete_fields: bool = False,
         max_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
         format: Literal["csv", "tsv", "jsonl"] = "csv",
+        preflight: bool = False,
     ) -> Response:
         current = release_store(request, release_id)
         current.assert_export_allowed(language_id, corpus_id)
+        if preflight:
+            current.dataset_query(
+                language_id=language_id,
+                corpus_id=corpus_id,
+                dialect=dialect,
+                q=q,
+                direction=direction,
+                translation_language=translation_language,
+                match=match,
+                requirements=requirement or (),
+                fields=field or default_dataset_fields(record_level),
+                record_level=record_level,
+                complete_fields=complete_fields,
+            )
+            return JSONResponse(
+                {"release_id": release_id, "status": "ready"}, headers={"Cache-Control": "no-store"}
+            )
         budget = QueryBudget.for_timeout(
             configured.dataset_export_timeout_seconds,
             workload="analytical",
@@ -633,8 +663,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "jsonl": "application/x-ndjson",
         }[format]
         filename = f"kakarayan-{release_id}-{record_level}s.{format}"
+        progress = StreamProgress()
+        request.state.stream_progress = progress
         return StreamingResponse(
-            _controlled_chunks(iter(dataset_chunks(result, format)), budget),
+            controlled_chunks(
+                iter(dataset_chunks(result, format, progress=progress)), budget, progress
+            ),
             media_type=media_type,
             headers={
                 "Cache-Control": "public, max-age=300",
@@ -666,6 +700,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         complete_fields: bool = True,
         max_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
         format: Literal["csv", "tsv", "jsonl"] = "csv",
+        preflight: bool = False,
     ) -> Response:
         current = release_store(request, release_id)
         current.assert_export_allowed(language_id, corpus_id)
@@ -677,6 +712,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "word": word_field,
             "morpheme": morpheme_field,
         }
+        if preflight:
+            for level in levels:
+                current.dataset_query(
+                    language_id=language_id,
+                    corpus_id=corpus_id,
+                    dialect=dialect,
+                    q=q,
+                    direction=direction,
+                    translation_language=translation_language,
+                    match=match,
+                    requirements=requirement or (),
+                    fields=field_map[level] or default_dataset_fields(level),
+                    record_level=level,
+                    complete_fields=complete_fields,
+                )
+            return JSONResponse(
+                {"release_id": release_id, "status": "ready"}, headers={"Cache-Control": "no-store"}
+            )
         budget = QueryBudget.for_timeout(
             configured.dataset_export_timeout_seconds,
             workload="analytical",
@@ -718,12 +771,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 for result in results
             ],
         }
+        progress = StreamProgress()
+        request.state.stream_progress = progress
         members = (
-            (f"{result.record_level}s.{format}", dataset_chunks(result, format))
+            (f"{result.record_level}s.{format}", dataset_chunks(result, format, progress=progress))
             for result in results
         )
         return StreamingResponse(
-            _controlled_chunks(
+            controlled_chunks(
                 iter(
                     zip_chunks(
                         members,
@@ -731,6 +786,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                 ),
                 budget,
+                progress,
             ),
             media_type="application/zip",
             headers={

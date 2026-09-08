@@ -386,9 +386,6 @@ def dataset_completeness_clauses(level: RecordLevel, fields: Sequence[DatasetFie
                 f"EXISTS (SELECT 1 FROM audio a WHERE a.owner_type = '{owner_type}' "
                 f"AND a.owner_id = {alias}.id)"
             )
-        elif field == "unclear":
-            expression = dataset_expression(level, "unclear").removesuffix(" AS unclear")
-            clauses.append(f"({expression}) = 1")
         elif field in {"class", "sclass", "source"}:
             column = dataset_expression(level, field).removesuffix(f" AS {field}")
             clauses.append(f"COALESCE({column}, '') <> ''")

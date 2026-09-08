@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+
+def delimited_cell(value: object) -> object:
+    """Keep null distinct from source strings beginning with a backslash."""
+    if value is None:
+        return r"\N"
+    return "\\" + value if isinstance(value, str) and value.startswith("\\") else value
+
+
 TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     "texts": (
         "id",

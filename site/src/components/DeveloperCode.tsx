@@ -1,6 +1,7 @@
 import {useMemo, useState} from "react";
 
 import {useI18n} from "../i18n";
+import {Tabs} from "./Tabs";
 
 type ExampleLanguage = "curl" | "javascript" | "python" | "r";
 type CodeLanguage = ExampleLanguage | "json";
@@ -191,21 +192,9 @@ export function RequestExamples({url}: {url: string}) {
               : tx("Copy code", "複製程式碼")}
         </button>
       </div>
-      <div className="code-example__tabs" role="tablist" aria-label={tx("Code language", "程式語言")}>
-        {EXAMPLE_LANGUAGES.map((option) => (
-          <button
-            id={`code-tab-${option.id}`}
-            key={option.id}
-            role="tab"
-            aria-controls="code-example-panel"
-            aria-selected={language === option.id}
-            onClick={() => setLanguage(option.id)}
-            type="button"
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Tabs items={EXAMPLE_LANGUAGES.map((option) => [option.id, option.label])}
+        value={language} onChange={setLanguage} prefix="code" panelId="code-example-panel"
+        className="code-example__tabs" label={tx("Code language", "程式語言")} />
       <div id="code-example-panel" role="tabpanel" aria-labelledby={`code-tab-${language}`}>
         <CodeLines
           label={tx(

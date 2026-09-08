@@ -24,8 +24,8 @@ private network.
 Prepare the instance before merging, but do not point Pages at it yet:
 
 1. Attach a static IP, configure the firewall, add swap, and install Docker.
-2. Clone the pull-request branch and verify that the API image builds.
-3. Merge the query-API pull request into `main`.
+2. Clone the repository and prepare the host configuration.
+3. Merge the pull request into `main`, wait for CI, and load its tested API image.
 4. Build and publish one current-schema data release from `main`.
 5. Activate that exact release on Lightsail and verify `/readyz`.
 6. Set `KAKARAYAN_API_URL` to the Lightsail HTTPS URL.
@@ -141,15 +141,14 @@ docker compose version
 docker run --rm hello-world
 ```
 
-## 4. Stage the application before merge
+## 4. Stage the application
 
-Clone the public repository and check out the pull-request branch:
+Clone the public repository:
 
 ```bash
 sudo install -d -o ubuntu -g ubuntu /opt/kakarayan
 git clone https://github.com/FormosanBank/kakarayan.git /opt/kakarayan
 cd /opt/kakarayan
-git checkout <PULL_REQUEST_BRANCH>
 git status --short --branch
 ```
 
@@ -180,34 +179,53 @@ client address through proxy headers, and Uvicorn trusts those headers because t
 is reachable only from loopback and Docker's private network. Do not expose port 7860 or
 place an untrusted proxy on that network while `--forwarded-allow-ips=*` is configured.
 
-Validate the Compose model and build the generic API image:
+Validate the Compose model and fetch Caddy:
 
 ```bash
 docker compose config --quiet
 docker compose pull caddy
-docker compose build api
-docker image ls kakarayan-api
 ```
 
-The repository `.dockerignore` limits the build context to the API and locked
-Python dependency files. The multi-gigabyte local `build/` directory is never sent
-to Docker. Do not start the stack yet because no current-schema release is active.
+Do not start the stack before loading the tested API image and activating a compatible release.
 
 ## 5. Merge and publish a current-schema data release
 
-After pull-request checks pass, merge the query-API pull request into `main`. Then
-update the server checkout:
+After pull-request checks pass, merge into `main` and wait for that commit's complete
+CI run to succeed. On a trusted workstation, select the exact commit and download
+the tested image. The gate rejects PR runs, failed runs, and commits outside main:
+
+```bash
+KAKARAYAN_COMMIT=FULL_MAIN_COMMIT
+KAKARAYAN_CI_RUN=$(uv run python -m publisher.github_release \
+  --repository FormosanBank/kakarayan --commit "$KAKARAYAN_COMMIT")
+gh run download "$KAKARAYAN_CI_RUN" --repo FormosanBank/kakarayan \
+  --name "api-image-$KAKARAYAN_COMMIT" --dir "build/image-$KAKARAYAN_COMMIT"
+scp -i /absolute/path/to/lightsail-key.pem -r "build/image-$KAKARAYAN_COMMIT" \
+  ubuntu@STATIC_IP:/opt/kakarayan/
+```
+
+On the server, set `KAKARAYAN_COMMIT` to the same full commit. Verify the transferred
+bytes and image identity, then update the checkout to that commit, not a moving branch:
 
 ```bash
 cd /opt/kakarayan
 git fetch origin
-git checkout main
-git pull --ff-only origin main
+git checkout --detach "$KAKARAYAN_COMMIT"
 git log -1 --oneline
+cd "image-$KAKARAYAN_COMMIT"
+sha256sum --check SHA256SUMS
+docker load --input api-image.tar.gz
+test "$(docker image inspect "kakarayan-api:$KAKARAYAN_COMMIT" --format '{{.Id}}')" = "$(cat image-id.txt)"
+cd /opt/kakarayan
 cd deploy/lightsail
+nano .env
 docker compose config --quiet
-docker compose build api
 ```
+
+Set `KAKARAYAN_API_IMAGE=kakarayan-api:FULL_MAIN_COMMIT` in `.env`. Keep the previous
+image for rollback. CI retains image artifacts for 14 days; if one expires, rerun CI
+for the selected trusted main commit and repeat these checks. Do not rebuild an
+unversioned image independently on the production host.
 
 Choose the exact current public FormosanBank commit from a trusted workstation:
 
@@ -239,8 +257,9 @@ https://github.com/FormosanBank/kakarayan/releases/download/data-RELEASE_ID/rele
 
 ## 6. Activate the release on Lightsail
 
-The database is about 5 GB expanded. Activation temporarily keeps the compressed
-download and the candidate database, so require at least 8 GB free before starting:
+Activation keeps the serving generation while downloading and validating a candidate.
+It checks free space against the candidate's compressed and expanded sizes plus
+256 MiB. For the current corpus, allow at least 8 GB **additional** free space:
 
 ```bash
 cd /opt/kakarayan/deploy/lightsail
@@ -261,14 +280,21 @@ Inside the tmux session, replace `RELEASE_ID` and run:
 docker compose run --rm --no-deps api \
   .venv/bin/python -m api.prepare_release \
   --manifest "https://github.com/FormosanBank/kakarayan/releases/download/data-RELEASE_ID/release-manifest.json" \
-  --database /data/formosanbank.sqlite \
-  --activate /data/active-release.json
+  --data-root /data
 ```
 
 Activation downloads the compressed database, verifies its size and SHA-256,
 expands it, verifies the expanded size and SHA-256, runs SQLite integrity checking,
-and atomically places the database and manifest in `deploy/lightsail/data`. It does
-not build the corpus on the Lightsail instance.
+and puts both files in `data/generations/RELEASE_ID/`. One atomic `data/current`
+symlink selects the validated generation; `data/previous` retains the prior target.
+A writer lock prevents concurrent activations. The serving process stays pinned to
+its original files until restarted. No corpus build runs on the Lightsail instance.
+
+For the first upgrade from the old flat-file layout, leave `data/formosanbank.sqlite`
+and `data/active-release.json` intact while the old container runs. Activate the new
+generation, restart, and verify it before manually retiring those two old files.
+Do not mix a new image with an old read-model version. Staging failures leave the
+current selector unchanged; do not delete a serving or rollback generation to make room.
 
 Press `Ctrl-b`, then `d`, to detach from tmux. Reconnect later with:
 
@@ -347,25 +373,81 @@ The API disables Uvicorn access logs, so raw user search queries are not written
 the container log. A rate-limited request returns HTTP 429 with `Retry-After`. Limit headers
 identify the active request or export bucket without logging the client IP.
 
+### Request and host health
+
+Summarize the available logs without collecting search text or client addresses:
+
+```bash
+docker compose logs --no-color --no-log-prefix --since 24h api |
+  docker compose exec -T api .venv/bin/python -m api.log_summary
+docker inspect "$(docker compose ps -q api)" --format '{{.RestartCount}} {{.Image}}'
+openssl s_client -connect "$KAKARAYAN_HOSTNAME:443" -servername "$KAKARAYAN_HOSTNAME" </dev/null 2>/dev/null |
+  openssl x509 -noout -enddate
+```
+
+The report groups requests by route and status, including HTTP errors, incomplete
+responses, bytes, rows, and p95 timing **upper bounds** from fixed histogram buckets.
+Queue wait is separate from time holding a database slot. Slot time includes
+serialization and is not pure SQL execution. `completed` means the server sent the
+final response body, not that the user saved a download. These counts cannot identify
+unique people. Hugging Face delays are outside this API and are not in these logs.
+
+Both containers rotate three 10 MB log files. A busy host may retain less than 24
+hours; `--since` does not restore rotated records. Use `docker stats`, `free -h`, and
+`df -h /` above alongside latency, 429/503/504 counts, incomplete exports, restart
+count, and certificate expiry. Diagnose the failing route before raising limits.
+Keep one API worker: rate and concurrency limits are process-local.
+
+Diagnostics on the site distinguish the public source commit, publisher commit,
+frontend commit, API image commit, data release, and read-model version. `/readyz`
+reports the API image commit when running the CI-built container. A matching data
+release alone does not prove that the intended application image was started.
+
 ## Routine release update
 
 For later FormosanBank updates:
 
 1. Publish a new immutable release from a pinned FormosanBank commit.
 2. Check that at least 8 GB is free on Lightsail.
-3. Pull the latest Kakarayan `main` and rebuild the generic API image.
+3. Load the verified image from the selected successful main CI run; pin the checkout and `.env` to it.
 4. Activate the new manifest with the same command used above.
 5. Restart with `docker compose up -d` and verify `/readyz`.
 6. Deploy Pages with that same release ID.
 
-Keep the previous current-schema GitHub release for rollback. Do not leave partial
-or stale database copies in the host data directory after a successful activation.
+Keep the previous generation and its compatible API image for rollback. Failed
+staging directories are cleaned automatically. Prune only explicitly identified
+older generations after checking that neither `current` nor `previous` selects them.
 
 ## Rollback
 
-Run the activation command with a prior current-schema manifest, start the stack,
-and confirm `/readyz`. Then deploy Pages with the prior release ID. GitHub Releases
-are the durable immutable source, so rollback does not require a server snapshot.
+Select the prior compatible image in `.env`, run activation with its prior manifest,
+then restart and confirm `/readyz` and real queries. A retained generation is checked
+and selected without another download. If restart fails, keep Pages unchanged and
+repeat this rollback; activation success alone is not a successful deployment.
+Then deploy Pages with that prior release ID. Keep the image's read-model contract
+matched to the database. GitHub Releases are the durable data source; application
+rollback does not require a server snapshot.
+
+### Snapshot restore rehearsal
+
+Automatic snapshot success is not proof of a working restore. Before relying on a
+snapshot for recovery, a maintainer should approve and perform this rehearsal:
+
+1. Create a disposable instance from a recent snapshot. Do not transfer the production
+   static IP, change Pages, or stop the serving host.
+2. Verify its SSH host fingerprint, expected disk, image digest, generation selectors,
+   and database/manifest identity. Check local `/readyz` and bounded lookup/export.
+3. If testing HTTPS, use the disposable instance's own hostname and certificate, not
+   the production hostname. Verify Caddy and an audio range request separately.
+4. Activate a compatible second release there, then restore the previous generation
+   and image. Verify readiness and actual queries after each restart.
+5. Record the snapshot ID, release/image identities, results, and recovery duration.
+   Remove only that explicitly identified rehearsal instance after review.
+
+The automated activation tests exercise interrupted staging, an unchanged serving
+process, and application rollback in temporary directories. They do not test an AWS
+snapshot restore. Restrict SSH sources with maintainers only after testing a second
+administrative connection; preserve browser-SSH access if it is part of recovery.
 
 ## Resizing or replacing the host
 

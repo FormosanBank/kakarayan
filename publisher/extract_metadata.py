@@ -123,7 +123,10 @@ def extract_metadata(manifest_path: Path, archive_path: Path, output: Path) -> s
             raise BuildError(
                 f"Invalid static metadata endpoint {endpoint_path.name}: {error}"
             ) from error
-        if document.get("release_id") != manifest["release_id"]:
+        if any(
+            document.get(key) != manifest[key]
+            for key in ("release_id", "source", "kakarayan", "read_model_version")
+        ):
             raise BuildError(f"Static metadata release mismatch in {endpoint_path.name}")
 
     shutil.copy2(manifest_path, output / "release-manifest.json")

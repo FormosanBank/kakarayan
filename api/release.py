@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from api.config import Settings
+from api.contracts import READ_MODEL_VERSION
 
 _MANIFEST_LIMIT = 10_000_000
 _SUPPORTED_SCHEMA_VERSION = "1.0.0"
@@ -91,6 +92,8 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         raise ReleaseError("Active release manifest must be a JSON object")
     if manifest.get("schema_version") != _SUPPORTED_SCHEMA_VERSION:
         raise ReleaseError("Active release manifest schema is unsupported")
+    if manifest.get("read_model_version") != READ_MODEL_VERSION:
+        raise ReleaseError("Active release read model is incompatible with this API image")
     if not isinstance(manifest.get("release_id"), str):
         raise ReleaseError("Active release manifest has no release ID")
     return manifest
@@ -119,16 +122,28 @@ def _fast_database_check(path: Path) -> dict[str, Any]:
     meta = metadata.get("meta")
     if not isinstance(meta, dict) or meta.get("schema_version") != _SUPPORTED_SCHEMA_VERSION:
         raise ReleaseError("SQLite metadata schema is unsupported")
+    if meta.get("read_model_version") != READ_MODEL_VERSION:
+        raise ReleaseError("SQLite read model is incompatible with this API image")
     return metadata
 
 
 def load_release(settings: Settings) -> ReleaseState:
     settings.validate()
-    manifest = _load_manifest(settings.manifest_path)
-    metadata = _fast_database_check(settings.database_path)
+    # Resolve the shared selector once. A later activation cannot split this pair.
+    if settings.manifest_path.parent == settings.database_path.parent:
+        directory = settings.manifest_path.parent.resolve()
+        manifest_path = directory / settings.manifest_path.name
+        database_path = directory / settings.database_path.name
+    else:
+        manifest_path = settings.manifest_path.resolve()
+        database_path = settings.database_path.resolve()
+    manifest = _load_manifest(manifest_path)
+    metadata = _fast_database_check(database_path)
     meta = metadata["meta"]
     if meta.get("release_id") != manifest.get("release_id"):
         raise ReleaseError("SQLite and active manifest identify different releases")
+    if any(meta.get(key) != manifest.get(key) for key in ("source", "kakarayan")):
+        raise ReleaseError("SQLite and manifest identify different source or publisher commits")
     configured_checksum = settings.expected_sha256
     artifact: dict[str, Any] = next(
         (
@@ -145,4 +160,4 @@ def load_release(settings: Settings) -> ReleaseState:
     )
     if configured_checksum and manifest_checksum != configured_checksum:
         raise ReleaseError("Configured checksum does not match the active release")
-    return ReleaseState(settings.database_path, settings.manifest_path, manifest, metadata)
+    return ReleaseState(database_path, manifest_path, manifest, metadata)

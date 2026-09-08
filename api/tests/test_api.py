@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import gzip
 import io
 import json
@@ -331,6 +332,24 @@ def test_summaries_bounds_errors_cors_and_read_only(client: TestClient) -> None:
     assert summary.status_code == 200
     assert summary.json()["sentences"] == 2
     assert summary.json()["source_types"] >= len(summary.json()["source_frequencies"])
+    dialect = client.get(
+        release_path(client, "summaries"),
+        params={
+            "language_id": "lang_amis",
+            "dialect": "Xiuguluan",
+        },
+    )
+    assert dialect.status_code == 200
+    assert dialect.json() == summary.json()
+    scoped = client.get(
+        release_path(client, "summaries"),
+        params={
+            "language_id": "lang_amis",
+            "corpus_id": "corpus_testcorpus",
+            "dialect": "Xiuguluan",
+        },
+    )
+    assert scoped.json() == summary.json()
 
     longer_query = client.get(
         release_path(client, "dictionary"),
@@ -375,7 +394,9 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         ("field", "translations"),
         ("max_rows", "1"),
     ]
-    preview = client.get(release_path(client, "datasets/preview"), params=params)
+    preview = client.get(
+        release_path(client, "datasets/preview"), params=[*params, ("selection_rows", "1")]
+    )
     assert preview.status_code == 200
     assert preview.json()["estimated_rows"] == 2
     assert preview.json()["returned_rows"] == 1
@@ -391,6 +412,15 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
     assert exported.headers["x-kakarayan-row-count"] == "1"
     assert exported.text.startswith("id\tstandard\ttranslation_eng_1\n")
 
+    # A one-row preview describes all columns in the finite two-row export.
+    expanded = client.get(
+        release_path(client, "datasets/preview"), params=[*params, ("selection_rows", "2")]
+    ).json()
+    assert expanded["returned_rows"] == 1
+    assert expanded["selected_rows"] == 2
+    assert expanded["fields"] == ["id", "standard", "translation_eng_1", "translation_zho_1"]
+    assert expanded["items"][0]["translation_zho_1"] == ""
+
     larger_export = client.get(
         release_path(client, "datasets/export"),
         params={"language_id": "lang_amis", "max_rows": 1001},
@@ -402,6 +432,43 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         params={"language_id": "lang_amis", "max_rows": DATASET_EXPORT_MAX_ROWS + 1},
     )
     assert unbounded.status_code == 422
+
+
+def test_finite_preview_and_all_tabular_serializers_agree(client: TestClient) -> None:
+    params = [
+        ("language_id", "lang_amis"),
+        ("field", "id"),
+        ("field", "standard"),
+        ("field", "translations"),
+        ("max_rows", "1"),
+    ]
+    expanded = client.get(
+        release_path(client, "datasets/preview"), params=[*params, ("selection_rows", "2")]
+    ).json()
+
+    for export_format in ("csv", "tsv", "jsonl"):
+        response = client.get(
+            release_path(client, "datasets/export"),
+            params=[
+                *[(key, value) for key, value in params if key != "max_rows"],
+                ("max_rows", "2"),
+                ("format", export_format),
+            ],
+        )
+        assert response.status_code == 200
+        rows = (
+            [json.loads(line) for line in response.text.splitlines()]
+            if export_format == "jsonl"
+            else list(
+                csv.DictReader(
+                    io.StringIO(response.text), delimiter="\t" if export_format == "tsv" else ","
+                )
+            )
+        )
+        assert len(rows) == expanded["selected_rows"]
+        assert list(rows[0]) == expanded["fields"]
+        assert rows[0] == expanded["items"][0]
+        assert rows[1]["translation_zho_1"] == "虛構測試句"
 
 
 def test_dataset_translations_expand_by_language_and_xml_order(
@@ -647,6 +714,24 @@ def test_dataset_xml_levels_preserve_owners_and_complete_selected_fields(
     assert morpheme_item["word_id"] != morpheme_item["sentence_id"]
 
 
+def test_selecting_unclear_column_does_not_filter_clear_records(client: TestClient) -> None:
+    url = release_path(client, "datasets/preview")
+    parameters = [
+        ("language_id", "lang_amis"),
+        ("field", "id"),
+        ("field", "unclear"),
+        ("complete_fields", "true"),
+    ]
+    response = client.get(url, params=parameters)
+    assert response.status_code == 200
+    assert response.json()["estimated_rows"] == 2
+    assert {row["unclear"] for row in response.json()["items"]} == {0, 1}
+    filtered = client.get(url, params=[*parameters, ("requirement", "unclear")])
+    assert filtered.status_code == 200
+    assert filtered.json()["estimated_rows"] == 1
+    assert filtered.json()["items"][0]["unclear"] == 1
+
+
 def test_word_and_morpheme_translation_searches_start_from_indexed_candidates(
     client: TestClient,
 ) -> None:
@@ -670,7 +755,7 @@ def test_word_and_morpheme_translation_searches_start_from_indexed_candidates(
 
     store = cast(FastAPI, client.app).state.store
     assert isinstance(store, CorpusStore)
-    query = store._dataset_query(
+    query = store.dataset_query(
         language_id="lang_amis",
         corpus_id=None,
         dialect=None,

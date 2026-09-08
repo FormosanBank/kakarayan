@@ -1,10 +1,12 @@
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 
 import {summaries} from "../apiClient";
 import {apiErrorMessage, isAbortError} from "../apiErrors";
 import {useI18n} from "../i18n";
+import {useSearchParams} from "../routing";
 import type {AppData} from "../types";
 import {LoadingState} from "./LoadingState";
+import {Tabs} from "./Tabs";
 
 type SummaryResult = Awaited<ReturnType<typeof summaries>>;
 type TableKind = "source" | "normalized" | "translation" | "distribution";
@@ -20,7 +22,7 @@ function rows(result: SummaryResult, kind: TableKind) {
 }
 
 function download(values: Array<{value: string; count: number}>, kind: TableKind) {
-  const csv = `value,count\n${values.map(({value, count}) => `"${value.replaceAll('"', '""')}",${count}`).join("\n")}\n`;
+  const csv = `value,count\n${values.map(({value, count}) => `"${(/^[=+@\-\t\r]/u.test(value) ? `'${value}` : value).replaceAll('"', '""')}",${count}`).join("\n")}\n`;
   const url = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -29,38 +31,46 @@ function download(values: Array<{value: string; count: number}>, kind: TableKind
   URL.revokeObjectURL(url);
 }
 
-export function Summaries({data}: {data: AppData}) {
+export function Summaries({data, active = true}: {data: AppData; active?: boolean}) {
   const {languageName, number, tx} = useI18n();
-  const [languageId, setLanguageId] = useState("");
-  const [corpusId, setCorpusId] = useState("");
-  const [kind, setKind] = useState<TableKind>("source");
-  const [result, setResult] = useState<SummaryResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [params, setParams] = useSearchParams();
+  const language = data.languages.find((item) => item.id === (params.get("summary_language") ?? params.get("language")));
+  const languageId = language?.id ?? "";
+  const corpusId = data.corpora.find((item) => item.id === params.get("summary_corpus") && item.languages.includes(languageId))?.id ?? "";
+  const dialect = language?.dialects.find((value) => value === params.get("summary_dialect")) ?? "";
+  const kind = TABLE_KINDS.find((value) => value === params.get("summary_table")) ?? "source";
+  const scope = JSON.stringify([data.meta.release_id, languageId, corpusId, dialect]);
+  const [state, setState] = useState<{scope: string; busy: boolean; result: SummaryResult | null; error: string} | null>(null);
+  const current = state?.scope === scope ? state : null;
+  const result = current?.result ?? null;
+  const busy = current?.busy ?? false;
+  const error = current?.error ?? "";
   const controller = useRef<AbortController | null>(null);
-  const corpora = useMemo(
-    () => data.corpora.filter((corpus) => !languageId || corpus.languages.includes(languageId)),
-    [data.corpora, languageId],
-  );
+  const corpora = data.corpora.filter((corpus) => !languageId || corpus.languages.includes(languageId));
 
-  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => () => controller.current?.abort(), [scope, active]);
+
+  function select(values: Record<string, string>) {
+    const next = new URLSearchParams(params);
+    for (const [key, value] of Object.entries(values)) next.set(`summary_${key}`, value);
+    setParams(next);
+  }
 
   async function run() {
-    if (!languageId) return;
+    if (!languageId || !active) return;
     controller.current?.abort();
     const next = new AbortController();
     controller.current = next;
-    setBusy(true);
-    setError("");
-    setResult(null);
+    setState({scope, busy: true, error: "", result: null});
     try {
-      setResult(await summaries(data.meta.release_id, languageId, corpusId, next.signal));
+      const value = await summaries(data.meta.release_id, languageId, corpusId, dialect, next.signal);
+      if (!next.signal.aborted && controller.current === next) setState({scope, busy: false, error: "", result: value});
     } catch (cause) {
-      if (!isAbortError(cause)) {
-        setError(apiErrorMessage(cause, tx));
+      if (!next.signal.aborted && !isAbortError(cause) && controller.current === next) {
+        setState({scope, busy: false, error: apiErrorMessage(cause, tx), result: null});
       }
     } finally {
-      if (controller.current === next) setBusy(false);
+      if (next.signal.aborted && controller.current === next) setState(null);
     }
   }
 
@@ -78,16 +88,23 @@ export function Summaries({data}: {data: AppData}) {
         <div className="form-grid">
           <label className="field">
             {tx("Language", "語言")}
-            <select value={languageId} onChange={(event) => { setLanguageId(event.target.value); setCorpusId(""); setResult(null); }}>
+            <select value={languageId} onChange={(event) => select({language: event.target.value, corpus: "", dialect: ""})}>
               <option value="">{tx("Choose…", "請選擇…")}</option>
               {data.languages.map((language) => <option key={language.id} value={language.id}>{languageName(language)}</option>)}
             </select>
           </label>
           <label className="field">
             {tx("Corpus", "語料庫")}
-            <select value={corpusId} disabled={!languageId} onChange={(event) => { setCorpusId(event.target.value); setResult(null); }}>
+            <select value={corpusId} disabled={!languageId} onChange={(event) => select({corpus: event.target.value})}>
               <option value="">{tx("All compatible corpora", "所有相容語料庫")}</option>
               {corpora.map((corpus) => <option key={corpus.id} value={corpus.id}>{corpus.name}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            {tx("Dialect", "方言")}
+            <select value={dialect} disabled={!languageId} onChange={(event) => select({dialect: event.target.value})}>
+              <option value="">{tx("All dialects", "所有方言")}</option>
+              {language?.dialects.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
         </div>
@@ -125,21 +142,11 @@ export function Summaries({data}: {data: AppData}) {
             <div><strong>{number(result.source_types)}</strong><span>{tx("source forms", "來源形式")}</span></div>
             <div><strong>{number(result.normalized_types)}</strong><span>{tx("normalized forms", "正規化形式")}</span></div>
           </div>
-          <div className="summary-tabs" role="tablist" aria-label={tx("Summary table", "摘要表格")}>
-            {TABLE_KINDS.map((value) => (
-              <button
-                key={value}
-                role="tab"
-                aria-controls="summary-table"
-                aria-selected={kind === value}
-                onClick={() => setKind(value)}
-              >
-                {tableLabel(value)}
-              </button>
-            ))}
-          </div>
+          <Tabs items={TABLE_KINDS.map((value) => [value, tableLabel(value)])} value={kind}
+            onChange={(table) => select({table})} prefix="summary" panelId="summary-panel" className="summary-tabs"
+            label={tx("Summary table", "摘要表格")} />
           <div className="summary-export"><button onClick={() => download(currentRows, kind)}>CSV</button></div>
-          <div className="table-scroll" tabIndex={0}>
+          <div className="table-scroll" tabIndex={0} role="tabpanel" id="summary-panel" aria-labelledby={`summary-tab-${kind}`}>
             <table className="summary-table" id="summary-table">
               <colgroup><col /><col className="summary-table__count" /></colgroup>
               <thead><tr><th scope="col">{tableLabel(kind)}</th><th scope="col">{tx("Count", "數量")}</th></tr></thead><tbody>

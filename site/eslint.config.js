@@ -23,7 +23,7 @@ export default tseslint.config(
         "warn",
         {
           allowConstantExport: true,
-          allowExportNames: ["useI18n", "useRoutePath", "useSearchParams"],
+          allowExportNames: ["useI18n", "useRoutePath", "useSearchParams", "useNavigationPermission"],
         },
       ],
       "@typescript-eslint/consistent-type-imports": "error",

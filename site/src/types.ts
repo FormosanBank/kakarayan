@@ -16,6 +16,7 @@ export type Counts = Partial<
 export interface Meta {
   schema_version: string;
   api_version: "v1";
+  read_model_version: number;
   endpoint: "meta";
   release_id: string;
   generated_at: string;
@@ -28,6 +29,7 @@ export interface Meta {
 export interface ApiEnvelope<T> {
   schema_version: string;
   api_version: "v1";
+  read_model_version: number;
   endpoint: string;
   release_id: string;
   generated_at: string;
@@ -57,7 +59,8 @@ export interface Corpus {
   bibtex_citation: string;
   source: string;
   copyright: string;
-  citation_count: number;
+  language_counts: Record<string, Counts>;
+  metadata_variants: Record<"citation" | "bibtex_citation" | "source" | "copyright", number>;
   counts: Counts;
 }
 
@@ -126,96 +129,7 @@ export interface ModelCatalog {
   services: ModelService[];
 }
 
-export interface Translation {
-  text: string;
-  xml_lang: string;
-  kind: string;
-  version: string;
-}
-
-export interface Token {
-  surface: string;
-  normalized: string;
-  position: number;
-  word_id: string;
-}
-
-export interface SearchForm {
-  owner_type: "sentence" | "word" | "morpheme";
-  owner_id: string;
-  position: number;
-  text: string;
-  unclear: number;
-  kind: string;
-  notes: string;
-  normalized: string;
-}
-
-export interface SearchPhonology {
-  owner_type: "sentence" | "word" | "morpheme";
-  owner_id: string;
-  position: number;
-  text: string;
-  unclear: number;
-  kind: string;
-}
-
-export interface TierTranslation extends Translation {
-  owner_type: "sentence" | "word" | "morpheme";
-  owner_id: string;
-  position: number;
-  unclear: number;
-  notes: string;
-  normalized: string;
-}
-
-export interface SearchMorpheme {
-  id: string;
-  xml_id: string;
-  position: number;
-  class: string;
-  sclass: string;
-}
-
-export interface SearchWord {
-  id: string;
-  xml_id: string;
-  position: number;
-  class: string;
-  sclass: string;
-  morphemes: SearchMorpheme[];
-}
-
-export interface SearchRecord {
-  id: string;
-  text_id: string;
-  corpus_id: string;
-  language_id: string;
-  dialect: string;
-  source_path: string;
-  xml_id: string;
-  standard: string;
-  original: string;
-  translations: Translation[];
-  tokens: Token[];
-  forms: SearchForm[];
-  phonology: SearchPhonology[];
-  tier_translations: TierTranslation[];
-  words: SearchWord[];
-  audio: Array<{
-    owner_type: "sentence" | "word" | "morpheme";
-    owner_id: string;
-    position: number;
-    file: string;
-    url: string;
-    playback_urls: string[];
-    start: number | null;
-    end: number | null;
-    source: string;
-    duration: number | null;
-    availability_status: string;
-  }>;
-}
+export type {Translation, Token, SearchForm, SearchPhonology, TierTranslation, SearchMorpheme, SearchWord, SearchRecord, SentenceSummary, DictionaryEntry} from "./contractTypes";
 
 export type SearchDirection = "formosan" | "translation";
 export type MatchMode = "exact" | "prefix" | "contains";
@@ -225,48 +139,6 @@ export type TierRequirement =
   | "phonology"
   | "interlinear"
   | "unclear";
-
-export interface SentenceSummary {
-  id: string;
-  text_id: string;
-  corpus_id: string;
-  language_id: string;
-  language: string;
-  dialect: string;
-  source_path: string;
-  citation: string;
-  xml_id: string;
-  position: number;
-  token_count: number;
-  standard: string;
-  original: string;
-  translations: Translation[];
-  translation_count: number;
-  match_evidence: Array<{
-    tier: "sentence" | "word" | "morpheme";
-    field: "form" | "translation";
-    text: string;
-    xml_lang: string;
-    kind: string;
-  }>;
-  summary_truncated: boolean;
-  audio_count: number;
-}
-
-export interface DictionaryEntry {
-  id: string;
-  language_id: string;
-  headword: string;
-  display_form: string;
-  occurrences: number;
-  variant_count: number;
-  meanings: Array<{text: string; xml_lang: string}>;
-  pronunciations: string[];
-  variants: string[];
-  corpus_ids: string[];
-  examples: SentenceSummary[];
-  summary_truncated: boolean;
-}
 
 export interface PageResult<T> {
   release_id: string;
@@ -278,6 +150,7 @@ export interface QueryAvailability {
   baseUrl: string;
   available: boolean;
   error: string;
+  imageCommit?: string | null;
 }
 
 export interface OrthographyRule {
@@ -336,4 +209,8 @@ export interface AppData {
   orthography: OrthographyCatalog;
   content: LearningContentCatalog;
   query: QueryAvailability;
+  resources: Record<OptionalResource, ResourceState>;
 }
+
+export type OptionalResource = "models" | "orthography" | "content";
+export type ResourceState = {status: "loading" | "ready" | "error"; error: string};

@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 
 import {QueryHighlight} from "./components/QueryHighlight";
 import {queryMatchRanges, queryMatchesText} from "./queryMatching";
+import semantics from "../../tests/fixtures/search-semantics.json";
 
 describe("query highlighting", () => {
   it("finds an exact term inside sentence punctuation and possessives", () => {
@@ -43,5 +44,12 @@ describe("query highlighting", () => {
       active: true,
     }));
     expect(html).toContain('doing <mark class="query-highlight">father</mark>,');
+  });
+
+  it("maps normalized matches back to the unchanged source spelling", () => {
+    for (const {value, query, selected} of semantics.highlights) {
+      const ranges = queryMatchRanges(value, query, "contains");
+      expect(ranges.map(({start, end}) => value.slice(start, end))).toEqual(selected);
+    }
   });
 });

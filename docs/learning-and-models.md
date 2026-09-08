@@ -11,7 +11,9 @@ review state. Cards therefore remain traceable even after the public site advanc
 release.
 
 Review scheduling and interface preferences stay in the browser. Users can export a JSON
-backup and restore it on another browser. Clearing site storage removes unexported cards.
+backup and restore it on another browser. Imports validate every card before one atomic
+merge or replacement transaction. Anki TSV preserves tabs and multiline text with quoted
+fields. Clearing site storage removes unexported cards.
 
 ## Pronunciation and recording
 
@@ -21,7 +23,7 @@ not upload it to its query service.
 
 ASR submission is a separate explicit action. The interface names the provider, describes
 what leaves the tab, links to the provider privacy policy, and requires unchecked-by-default
-consent for each page visit before submission. Users can keep, play, download, or delete a
+consent for each submission and its current input/language context. Users can keep, play, download, or delete a
 recording locally without consenting to ASR.
 
 ## Machine translation and ASR
@@ -38,6 +40,11 @@ Model requests:
 - show sleeping, connecting, running, success, cancellation, and failure states;
 - validate provider output before presenting it;
 - do not silently retry indefinitely.
+
+Results retain their submitted text, language, audio, and reference context even if controls
+change during a request. Failed saves retain the draft. Harmless tool tabs preserve drafts;
+leaving an active recording asks first. Provider retention has not been independently
+verified, and cancelling locally does not retract data already received by the provider.
 
 Model output may be wrong and is not a replacement for a speaker, teacher, corpus citation,
 or reviewed linguistic analysis. A sleeping external service can take much longer than an

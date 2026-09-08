@@ -1,9 +1,6 @@
 services:
   api:
-    build:
-      context: ../..
-      dockerfile: api/Dockerfile
-    image: kakarayan-api:lightsail
+    image: ${KAKARAYAN_API_IMAGE:?set KAKARAYAN_API_IMAGE to the CI-tested commit tag}
     environment:
       KAKARAYAN_CORS_ORIGINS: ${KAKARAYAN_CORS_ORIGINS:?set KAKARAYAN_CORS_ORIGINS in .env}
       KAKARAYAN_QUERY_STEP_LIMIT: ${KAKARAYAN_QUERY_STEP_LIMIT:-2000000}
@@ -31,6 +28,11 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: ${KAKARAYAN_API_MEMORY_LIMIT:-1400m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   caddy:
     image: caddy:2.11.4-alpine
@@ -50,6 +52,11 @@ services:
     security_opt:
       - no-new-privileges:true
     mem_limit: ${KAKARAYAN_CADDY_MEMORY_LIMIT:-128m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   caddy_data:

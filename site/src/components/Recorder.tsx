@@ -3,9 +3,10 @@ import {useEffect, useMemo, useRef, useState, type ChangeEvent} from "react";
 import {transcribe, type ServiceStage} from "../modelServices";
 import {useI18n} from "../i18n";
 import {wordError} from "../recorderMetrics";
-import type {ModelCatalog} from "../types";
+import {NavigationBlocker} from "../routing";
+import type {ModelCatalog, ResourceState} from "../types";
 import {StatusBadge} from "./Layout";
-import {LoadingState} from "./LoadingState";
+import {LoadingState, ResourceGate} from "./LoadingState";
 
 const ASR_LANGUAGES = [
   "Amis",
@@ -36,10 +37,14 @@ export function Recorder({
   catalog,
   selectedLanguage,
   referenceText = "",
+  onReferenceChange,
+  modelResource,
 }: {
   catalog: ModelCatalog;
   selectedLanguage: string;
   referenceText?: string;
+  onReferenceChange?: (text: string) => void;
+  modelResource?: ResourceState;
 }) {
   const {number, tx} = useI18n();
   const recorder = useRef<MediaRecorder | null>(null);
@@ -48,13 +53,19 @@ export function Recorder({
   const controller = useRef<AbortController | null>(null);
   const audioUrlRef = useRef("");
   const recordStartedAt = useRef(0);
+  const alive = useRef(true);
+  const recordingTimer = useRef<number | undefined>(undefined);
+  const [starting, setStarting] = useState(false);
   const [recording, setRecording] = useState(false);
   const [audio, setAudio] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState("");
   const [audioName, setAudioName] = useState("kakarayan-recording.webm");
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [consent, setConsent] = useState(false);
-  const [transcript, setTranscript] = useState("");
+  const [asrResult, setAsrResult] = useState<{
+    text: string; language: string; reference: string; audioName: string;
+  } | null>(null);
+  const transcript = asrResult?.text ?? "";
   const [reference, setReference] = useState(referenceText);
   const [status, setStatus] = useState("");
   const [stage, setStage] = useState<ServiceStage | "idle">("idle");
@@ -78,20 +89,33 @@ export function Recorder({
       item.repository.toLocaleLowerCase().endsWith(`-${modelSlug}`),
   );
   const comparison = useMemo(
-    () => (reference.trim() && transcript ? wordError(reference, transcript) : null),
-    [reference, transcript],
+    () => (asrResult?.reference.trim() ? wordError(asrResult.reference, asrResult.text) : null),
+    [asrResult],
   );
 
   useEffect(
-    () => () => {
-      controller.current?.abort();
-      stream.current?.getTracks().forEach((track) => track.stop());
-      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+    () => {
+      alive.current = true;
+      return () => {
+        alive.current = false;
+        controller.current?.abort();
+        window.clearTimeout(recordingTimer.current);
+        if (recorder.current) {
+          recorder.current.onstop = null;
+          recorder.current.ondataavailable = null;
+          recorder.current.onerror = null;
+          if (recorder.current.state !== "inactive") recorder.current.stop();
+        }
+        stream.current?.getTracks().forEach((track) => track.stop());
+        if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      };
     },
     [],
   );
 
   function setLocalAudio(blob: Blob, name: string, knownDuration: number | null = null) {
+    controller.current?.abort();
+    setConsent(false);
     if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
     const url = URL.createObjectURL(blob);
     audioUrlRef.current = url;
@@ -99,7 +123,7 @@ export function Recorder({
     setAudioUrl(url);
     setAudioName(name);
     setAudioDuration(knownDuration);
-    setTranscript("");
+    setAsrResult(null);
     setStatus("");
     setStage("idle");
     const probe = document.createElement("audio");
@@ -113,6 +137,13 @@ export function Recorder({
       ) {
         setAudioDuration(probe.duration);
       }
+      probe.removeAttribute("src");
+    };
+    probe.onerror = () => {
+      if (audioUrlRef.current === url && alive.current) {
+        setStatus(tx("This audio could not be read. Choose another file.", "無法讀取此音訊。請選擇其他檔案。"));
+      }
+      probe.removeAttribute("src");
     };
   }
 
@@ -120,6 +151,7 @@ export function Recorder({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    if (audio && !window.confirm(tx("Replace the current recording?", "要取代目前的錄音嗎？"))) return;
     if (file.size > 25 * 1024 * 1024) {
       setStatus(tx("Audio must be 25 MiB or smaller.", "音訊檔案不得超過 25 MiB。"));
       return;
@@ -132,34 +164,81 @@ export function Recorder({
   }
 
   async function startRecording() {
+    if (starting || recording) return;
+    if (audio && !window.confirm(tx("Replace the current recording?", "要取代目前的錄音嗎？"))) return;
+    setStarting(true);
+    controller.current?.abort();
+    setConsent(false);
     setStatus("");
-    setTranscript("");
+    setAsrResult(null);
     try {
       const media = await navigator.mediaDevices.getUserMedia({audio: true});
+      if (!alive.current) {
+        media.getTracks().forEach((track) => track.stop());
+        return;
+      }
       stream.current = media;
       chunks.current = [];
-      const next = new MediaRecorder(media);
+      const mimeType = ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"]
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const next = new MediaRecorder(media, mimeType ? {mimeType} : undefined);
       recorder.current = next;
+      let bytes = 0;
+      let reachedLimit = false;
+      let failed = false;
       next.ondataavailable = (event) => {
-        if (event.data.size) chunks.current.push(event.data);
+        if (bytes + event.data.size > 25 * 1024 * 1024) {
+          reachedLimit = true;
+          if (next.state !== "inactive") next.stop();
+          return;
+        }
+        if (event.data.size) {
+          chunks.current.push(event.data);
+          bytes += event.data.size;
+        }
       };
       next.onstop = () => {
-        const blob = new Blob(chunks.current, {type: next.mimeType || "audio/webm"});
-        const duration = Math.max(0, (performance.now() - recordStartedAt.current) / 1_000);
-        setLocalAudio(blob, "kakarayan-recording.webm", duration);
+        window.clearTimeout(recordingTimer.current);
+        const type = next.mimeType || chunks.current[0]?.type || "audio/webm";
+        const blob = new Blob(chunks.current, {type});
+        const duration = Math.min(600, Math.max(0, (performance.now() - recordStartedAt.current) / 1_000));
+        const extension = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+        if (alive.current && blob.size && !failed) setLocalAudio(blob, `kakarayan-recording.${extension}`, duration);
         media.getTracks().forEach((track) => track.stop());
         stream.current = null;
-        setRecording(false);
+        chunks.current = [];
+        if (alive.current) {
+          setRecording(false);
+          if (failed) setStatus(tx("Recording failed. Try again.", "錄音失敗。請重試。"));
+          if (reachedLimit) setStatus(tx("Recording stopped at the size or duration limit.", "錄音已達大小或長度限制，並已停止。"));
+        }
       };
-      next.start();
+      next.onerror = () => {
+        failed = true;
+        if (next.state !== "inactive") next.stop();
+        media.getTracks().forEach((track) => track.stop());
+        if (alive.current) setStatus(tx("Recording failed. Try again.", "錄音失敗。請重試。"));
+      };
+      next.start(1_000);
       recordStartedAt.current = performance.now();
       setRecording(true);
+      recordingTimer.current = window.setTimeout(() => {
+        reachedLimit = true;
+        if (next.state !== "inactive") next.stop();
+      }, 600_000);
     } catch (cause) {
+      stream.current?.getTracks().forEach((track) => track.stop());
+      stream.current = null;
+      if (!alive.current) return;
       setStatus(
-        cause instanceof Error
+        cause instanceof DOMException && cause.name === "NotAllowedError"
+          ? tx("Microphone permission was denied.", "麥克風權限遭到拒絕。")
+          : cause instanceof Error
           ? tx(`Microphone unavailable: ${cause.message}`, `無法使用麥克風：${cause.message}`)
           : tx("Microphone unavailable.", "無法使用麥克風。"),
       );
+    } finally {
+      if (alive.current) setStarting(false);
     }
   }
 
@@ -169,8 +248,9 @@ export function Recorder({
     audioUrlRef.current = "";
     setAudio(null);
     setAudioUrl("");
-    setTranscript("");
+    setAsrResult(null);
     setAudioDuration(null);
+    setConsent(false);
     setStatus(tx("Local recording deleted.", "已刪除本機錄音。"));
     setStage("idle");
   }
@@ -186,7 +266,14 @@ export function Recorder({
     controller.current?.abort();
     const next = new AbortController();
     controller.current = next;
-    setTranscript("");
+    next.signal.addEventListener("abort", () => {
+      if (controller.current !== next || !alive.current) return;
+      setStage("cancelled");
+      setStatus(tx("Transcription cancelled.", "已取消轉錄。"));
+    }, {once: true});
+    setAsrResult(null);
+    setConsent(false);
+    setStage("connecting");
     try {
       const output = await transcribe(
         language,
@@ -195,6 +282,7 @@ export function Recorder({
         {
           signal: next.signal,
           onStage: (nextStage, message) => {
+            if (next.signal.aborted || controller.current !== next || !alive.current) return;
             setStage(nextStage);
             if (nextStage === "connecting") {
               setStatus(
@@ -217,9 +305,12 @@ export function Recorder({
           },
         },
       );
-      setTranscript(output.text);
+      if (next.signal.aborted || controller.current !== next || !alive.current) return;
+      setAsrResult({text: output.text, reference, language, audioName});
+      setStage("complete");
       setStatus(output.metadata);
     } catch (cause) {
+      if (next.signal.aborted || controller.current !== next || !alive.current) return;
       if (cause instanceof DOMException && cause.name === "AbortError") {
         setStage("cancelled");
         setStatus(tx("Transcription cancelled. The recording remains only in this browser.", "已取消轉錄。錄音仍只保留在此瀏覽器。"));
@@ -229,6 +320,8 @@ export function Recorder({
           `${cause instanceof Error ? cause.message : String(cause)} ${tx("You can still play or download your local recording.", "您仍可播放或下載本機錄音。")}`,
         );
       }
+    } finally {
+      if (controller.current === next) controller.current = null;
     }
   }
 
@@ -255,6 +348,8 @@ export function Recorder({
   const running = !["idle", "complete", "cancelled", "error"].includes(stage);
   return (
     <section className="model-tool" aria-labelledby="recording-heading">
+      <NavigationBlocker active={starting || recording || audio !== null || running}
+        message={tx("Leave and discard this local recording?", "要離開並捨棄此本機錄音嗎？")} />
       <div className="tool-heading">
         <h3 id="recording-heading">{tx("Pronunciation recorder", "發音錄音工具")}</h3>
       </div>
@@ -272,7 +367,7 @@ export function Recorder({
       </p>
       <div className="recorder-panel">
         {!recording ? (
-          <button className="button button--primary" onClick={startRecording}>
+          <button className="button button--primary" onClick={startRecording} disabled={starting}>
             {audio ? tx("Record again", "重新錄音") : tx("Start recording", "開始錄音")}
           </button>
         ) : (
@@ -309,13 +404,19 @@ export function Recorder({
       </div>
       {audio && (
         <div className="asr-panel">
+          {modelResource && <ResourceGate resource="models" state={modelResource} />}
           <div className="tool-heading">
             <h4>{tx("Automatic transcript", "自動轉錄")}</h4>
             <StatusBadge value={service?.status ?? "unavailable"} />
           </div>
           <label className="field">
             {tx("Model language", "模型語言")}
-            <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+            <select value={language} onChange={(event) => {
+              controller.current?.abort();
+              setConsent(false);
+              setAsrResult(null);
+              setLanguage(event.target.value);
+            }}>
               {asrLanguages.map((value) => (
                 <option key={value}>{value}</option>
               ))}
@@ -338,7 +439,10 @@ export function Recorder({
             {tx("Reference transcript", "參考轉錄")}
             <textarea
               value={reference}
-              onChange={(event) => setReference(event.target.value)}
+              onChange={(event) => {
+                setReference(event.target.value);
+                onReferenceChange?.(event.target.value);
+              }}
               rows={3}
               maxLength={4_000}
               placeholder={tx("Paste a trusted transcript to compare with the model hypothesis", "貼上可信的轉錄文字，以便與模型假設比較")}
@@ -359,8 +463,8 @@ export function Recorder({
           </label>
           <p className="model-privacy-note">
             {tx(
-              "Nothing is uploaded unless you check the box and press Transcribe. Kakarayan does not retain the upload; Hugging Face processing and logging policies apply.",
-              "除非勾選並按下「轉錄」，否則不會上傳任何內容。Kakarayan 不保留上傳資料；資料處理與記錄依 Hugging Face 政策辦理。",
+              "Uploaded only with consent. Kakarayan does not store your audio. The Space and Hugging Face may keep logs; their retention has not been verified.",
+              "僅在同意後上傳。Kakarayan 不儲存音訊。Space 與 Hugging Face 可能保留記錄；其保存期限尚未確認。",
             )}{" "}
             <a href="https://huggingface.co/privacy">{tx("Privacy policy", "隱私權政策")}</a>
           </p>
@@ -398,6 +502,7 @@ export function Recorder({
         <div className="machine-output">
           <span>{tx("Automatic transcript", "自動轉錄")}</span>
           <p>{transcript}</p>
+          <small>{asrResult?.language} · {asrResult?.audioName}</small>
           <div className="button-row">
             <button
               className="button button--quiet"

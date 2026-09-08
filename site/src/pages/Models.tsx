@@ -1,6 +1,7 @@
 import {useMemo, useState} from "react";
 
 import {PageIntro, StatusBadge} from "../components/Layout";
+import {ResourceGate} from "../components/LoadingState";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData, ModelEntry} from "../types";
@@ -60,6 +61,7 @@ export function Models({data}: {data: AppData}) {
   const evaluatedCount = data.models.models.filter((model) => model.evaluation_metrics.length > 0).length;
   const licensedCount = data.models.models.filter((model) => model.license !== "unknown").length;
   const availableServices = data.models.services.filter((service) => service.status === "available").length;
+  const checkedServices = data.models.services.filter((service) => service.status !== "unchecked").length;
   const statusLabels: Record<string, string> = {
     available: tx("available", "可用"),
     unavailable: tx("unavailable", "不可用"),
@@ -79,11 +81,14 @@ export function Models({data}: {data: AppData}) {
   return (
     <div className="page-wrap">
       <PageIntro title={t("models.title")} />
+      <ResourceGate resource="models" state={data.resources.models}>
       <dl className="model-coverage">
         <div><dt>{tx("Registered models", "登錄模型")}</dt><dd>{number(data.models.models.length)}</dd></div>
         <div><dt>{tx("Evaluation reported", "已提供評估")}</dt><dd>{number(evaluatedCount)}</dd></div>
         <div><dt>{tx("License identified", "已辨識授權")}</dt><dd>{number(licensedCount)}</dd></div>
-        <div><dt>{tx("Available services", "可用服務")}</dt><dd>{number(availableServices)}</dd></div>
+        <div><dt>{tx("Services at last check", "服務上次檢查狀態")}</dt><dd>{checkedServices
+          ? tx(`${availableServices} of ${checkedServices} checked available`, `已檢查的 ${checkedServices} 個中有 ${availableServices} 個可用`)
+          : tx("Not checked", "尚未檢查")}</dd></div>
       </dl>
       <div className="model-toolbar">
         <div className="segmented">
@@ -202,6 +207,7 @@ export function Models({data}: {data: AppData}) {
           </article>
         ))}
       </section>
+      </ResourceGate>
     </div>
   );
 }

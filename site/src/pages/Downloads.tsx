@@ -5,6 +5,7 @@ import {LoadingState} from "../components/LoadingState";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import type {AppData} from "../types";
+import {loadStaticCatalog} from "../data";
 
 interface Artifact {
   path: string;
@@ -28,12 +29,6 @@ interface Artifact {
 interface DownloadsCatalog {
   release_id: string;
   artifacts: Artifact[];
-}
-
-interface DownloadsEnvelope {
-  api_version: "v1";
-  release_id: string;
-  data: DownloadsCatalog;
 }
 
 const CURATED_DOWNLOAD_PATHS = [
@@ -71,19 +66,19 @@ function fileName(path: string): string {
 
 export function Downloads({data}: {data: AppData}) {
   const {number, t, tx} = useI18n();
-  const [manifest, setManifest] = useState<DownloadsCatalog | null>(null);
+  const [loaded, setManifest] = useState<DownloadsCatalog | null>(null);
+  const manifest = loaded?.release_id === data.meta.release_id ? loaded : null;
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${import.meta.env.BASE_URL}api/v1/downloads.json`, {signal: controller.signal})
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-        const envelope = (await response.json()) as DownloadsEnvelope;
-        if (envelope.api_version !== "v1" || envelope.release_id !== data.meta.release_id) {
-          throw new Error("Prepared download metadata does not match the loaded release");
+    loadStaticCatalog<DownloadsCatalog>("downloads", data.meta, controller.signal)
+      .then((catalog) => {
+        if (!controller.signal.aborted) {
+          setManifest(catalog);
+          setError("");
         }
-        setManifest(envelope.data);
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
@@ -91,7 +86,7 @@ export function Downloads({data}: {data: AppData}) {
         }
       });
     return () => controller.abort();
-  }, [data.meta.release_id]);
+  }, [data.meta, attempt]);
 
   const artifacts = useMemo(
     () =>
@@ -137,8 +132,10 @@ export function Downloads({data}: {data: AppData}) {
   };
 
   function localizedArtifactTitle(artifact: Artifact): string {
+    if (artifact.path === "prepared/flat-jsonl-tables.zip") return tx("Flat table JSONL", "平面表格 JSONL");
+    if (artifact.path === "prepared/hierarchical-jsonl.zip") return tx("Nested sentence JSONL", "巢狀句子 JSONL");
     const formatName = formatNames[artifact.format] ?? artifact.format.toUpperCase();
-    return tx(`Complete FormosanBank ${formatName}`, `完整 FormosanBank ${formatName}`);
+    return formatName;
   }
 
   function localizedArtifactScope(artifact: Artifact): string {
@@ -175,6 +172,7 @@ export function Downloads({data}: {data: AppData}) {
         <p className="callout callout--error">
           {tx("Prepared artifact manifest unavailable:", "無法取得預備成品清單：")} {error}. {" "}
           {tx("Canonical XML remains available from the public FormosanBank repository.", "權威 XML 仍可從公開 FormosanBank 儲存庫取得。")}
+          {" "}<button className="text-button" onClick={() => { setError(""); setAttempt((value) => value + 1); }}>{t("common.retry")}</button>
         </p>
       )}
       {!manifest && !error && (

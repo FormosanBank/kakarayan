@@ -88,8 +88,10 @@ stale browser entries when it queries the service. Validation and readiness resp
 cached. Query length, page size, SQLite work, and export rows have high finite limits. Export
 bytes are streamed rather than buffered in API memory.
 
-The offline shell cache is keyed by both the data release and the Kakarayan build. Navigations
-revalidate the shell from the network, while content-hashed assets remain available offline.
+The offline cache is one content-verified shell and metadata generation. Updates wait for
+approval; open tabs do not receive mixed generations. The worker keeps the current and prior
+generation, with at most 64 entries and 10 MiB per generation. Navigations use one cached
+shell key regardless of query parameters. Optional catalogue failures remain retryable.
 
 ## Activation boundary
 
@@ -100,14 +102,14 @@ revalidate the shell from the network, while content-hashed assets remain availa
 3. Enforce download and expansion limits.
 4. Verify compressed and expanded checksums and sizes.
 5. Run SQLite integrity verification.
-6. Atomically replace the active database and manifest.
+6. Atomically select the directory containing both validated files.
 
 Runtime startup performs no network access, decompression, or full integrity scan. It opens
 the database as immutable and read-only, checks required tables and embedded release
 metadata, and becomes ready only when database and manifest identities agree.
 
-Rollback redeploys and activates a prior immutable release. A crash between atomic file
-replacements leaves readiness false rather than serving mixed data.
+Rollback selects a retained generation and its compatible tested image. The old process
+pins its generation until restart, so failed staging cannot change its database or metadata.
 
 ## Publisher boundary
 

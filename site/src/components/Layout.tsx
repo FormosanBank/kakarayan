@@ -127,7 +127,7 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
               {t("common.source")} <code>{data.meta.source.commit.slice(0, 7)}</code>
             </a>
           </nav>
-          <Diagnostics releaseId={data.meta.release_id} />
+          <Diagnostics meta={data.meta} imageCommit={data.query.imageCommit ?? null} />
         </div>
       </footer>
     </div>

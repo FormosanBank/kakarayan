@@ -29,7 +29,7 @@ https://formosanbank.github.io/kakarayan/api/v1/
 
 | Document | Contents |
 | --- | --- |
-| `meta.json` | Release, source, schema, counts, and provenance |
+| `meta.json` | Release, source, publisher, and contract identity |
 | `languages.json` | Display names, identifiers, capabilities, and counts |
 | `corpora.json` | Corpus scopes, languages, source paths, rights, and counts |
 | `rights.json` | Reviewed central and corpus-specific rights decisions |
@@ -56,8 +56,8 @@ Each document uses the envelope in `schemas/static-api.schema.json`. Consumers r
 | `GET /v1/downloads` | Prepared-download catalogue |
 | `GET /v1/releases/{release}/languages/{id}` | One language |
 | `GET /v1/releases/{release}/corpora/{id}` | One corpus |
-| `GET /v1/releases/{release}/texts/{id}` | One full text |
-| `GET /v1/releases/{release}/sentences/{id}` | One full nested sentence |
+| `GET /v1/releases/{release}/texts/{id}` | Bounded text metadata and text-owned tiers |
+| `GET /v1/releases/{release}/sentences/{id}` | Bounded nested sentence detail |
 | `GET /v1/releases/{release}/translation-languages` | Translation-language counts |
 | `GET /v1/releases/{release}/dictionary` | Dictionary summaries |
 | `GET /v1/releases/{release}/concordance` | Sentence summaries |
@@ -93,6 +93,10 @@ Initial dictionary results contain a headword, language-tagged `meanings`, scope
 citations, and a small example set. Each meaning has `text` and `xml_lang`. Concordance
 results contain sentence summaries and a detail identifier. Full words, morphemes, forms,
 phonology, translations, and audio are returned only by the sentence detail route.
+Detail expansion is capped at 2,500 rows and 2 MiB. `detail_truncated=true` identifies a
+shortened display; the source path and XML ID remain available for the authoritative record.
+Interactive response schemas are defined in `api/contracts.py`, exposed in OpenAPI, and
+compiled into browser validators at build time.
 Audio entries preserve the XML reference and provide ordered, release-pinned `playback_urls`
 when FormosanBank declares a public audio mirror. Those URLs resolve the XML `file` and use
 a clip-local timeline. Raw `url` and `source` fallbacks retain the source-recording timeline,
@@ -129,18 +133,24 @@ increasing suffixes in XML order. Preview and export report the expanded names i
 than 256 generated TRANSL columns return `422 dataset_too_wide`.
 
 Set `complete_fields=true` to exclude rows missing any selected optional tier or attribute.
-The Research builder always uses this mode. The API default is `false`, so records with a
+The Research builder defaults to this mode and lets users turn it off. The API default is `false`, so records with a
 missing optional tier remain in the result with empty cells.
 
-Preview returns at most 250 rows and reports `record_level`, `estimated_rows`,
-`returned_rows`, and `truncated`. Export requires `max_rows` from 1 through 100,000 per
-selected level and accepts `format=csv|tsv|jsonl`. Rows are streamed as they are read from
-SQLite, so there is no fixed response-byte cap or full-result memory buffer. CSV and TSV
+Preview returns at most 250 rows and reports `record_level`, `estimated_rows`, `selected_rows`,
+`returned_rows`, and `truncated`. `selection_rows` (default 1,000, maximum 100,000) defines
+the export window used to discover translation columns. Export requires `max_rows` from
+1 through 100,000 per selected level and accepts `format=csv|tsv|jsonl`. Rows are streamed
+with a 512 MiB response cap, finite deadline, and cancellation checks through serialization.
+There is no full-result memory buffer. CSV and TSV
 cells beginning with spreadsheet formula characters are escaped.
 
 For `export-package`, repeat `record_level` and pass level-specific fields as
 `sentence_field`, `word_field`, and `morpheme_field`. The response contains one table per
 selected level plus `manifest.json`.
+
+`preflight=true` on either export route checks the release, scope, rights, and parameters
+without scanning data. It does not reserve capacity or guarantee later completion. The UI
+preflights before starting a native download. Each actual export revalidates the request.
 
 Full-corpus work still belongs to prepared downloads. Custom exports are finite and run in
 the request, with no background job in v1.
@@ -170,16 +180,19 @@ indefinitely.
 
 ## HTTP and privacy behavior
 
-- Successful release-scoped GET responses use immutable public caching.
+- Successful release-scoped GET responses cache publicly for five minutes; response fixes
+  do not change the underlying immutable release.
 - Catalogue responses use a short public cache.
 - Readiness and error responses are not treated as immutable data.
 - CORS accepts only configured exact origins and never credentials.
 - The surface is GET-only and uses parameterized SQL templates.
 - Operational records include method, route template, status, duration, bytes, release ID,
-  and a failure code when applicable. They exclude URLs, raw queries, sentence text,
+  queue wait, database-slot time, serialized rows, final stream outcome, and failure code.
+  They exclude URLs, client IPs, raw queries, sentence text,
   recordings, and model input.
-- `Server-Timing` reports API processing time so browser diagnostics can separate server
-  work from network and TLS latency.
+- `Server-Timing` reports time to response headers, not export completion. Final logs include
+  body delivery. Database-slot time includes serialization while holding the cursor, not
+  only SQLite execution. The API cannot measure time spent inside Hugging Face services.
 
 ## Request controls
 
@@ -191,7 +204,8 @@ The single production API process uses per-IP token buckets:
 - 2 SQLite queries executing at once across all users;
 - 1 dataset or aggregate query executing at once, preserving the other lane for lookup.
 
-Export requests consume both kinds of request token. Requests above the rate return 429.
+Export requests consume both kinds of request token. Preflight consumes only a general token.
+Requests above the rate return 429.
 Database work above the concurrency limit waits for at most one second, then returns
 `503 server_busy`. `/readyz` checks the already-validated active manifest without entering
 the database queue. Normal queries, previews, and exports also have hard deadlines so an

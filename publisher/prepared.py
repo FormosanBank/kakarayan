@@ -22,6 +22,7 @@ from publisher.format_tabular import (
     write_tsv,
     write_xlsx,
 )
+from publisher.profiling import StageProfile
 from publisher.release_db import open_release
 
 
@@ -185,8 +186,10 @@ def build_prepared_formats(
     source_commit: str,
     rights: dict[str, object],
     compact_release: bool = False,
+    profile: StageProfile | None = None,
 ) -> tuple[dict[str, list[str]], dict[str, object]]:
     prepared = output / "prepared"
+    profile = profile or StageProfile()
     tsv = prepared / "tsv"
     parquet = prepared / "parquet"
     text = prepared / "text"
@@ -216,10 +219,13 @@ def build_prepared_formats(
     ]
 
     _package_core_tables(output, package_metadata)
+    profile.mark("csv_jsonl_compression")
     write_tsv(database, tsv)
     _package_directory(tsv, prepared / "tsv-tables.zip", package_metadata)
+    profile.mark("tsv")
     arrow_schemas = write_parquet(database, parquet, release_id)
     _package_directory(parquet, prepared / "parquet-tables.zip", package_metadata)
+    profile.mark("parquet")
     jsonl_manifest = write_hierarchical_jsonl(
         database,
         prepared / "jsonl",
@@ -233,9 +239,11 @@ def build_prepared_formats(
         package_metadata,
         compress=False,
     )
+    profile.mark("hierarchical_jsonl")
     write_plain_text(database, text)
     _package_directory(text, prepared / "text-exports.zip", package_metadata)
     write_audio_manifest(database, prepared / "audio-manifest.tsv")
+    profile.mark("text_and_audio_manifests")
     write_xlsx(
         database,
         prepared / "formosanbank.xlsx",
@@ -243,6 +251,7 @@ def build_prepared_formats(
         source_commit,
         rights,
     )
+    profile.mark("xlsx")
     cldf_counts = write_cldf_package(
         database,
         prepared / "formosanbank-cldf.zip",
@@ -256,6 +265,7 @@ def build_prepared_formats(
         release_id,
         rights,
     )
+    profile.mark("cldf_and_alignment")
 
     (prepared / "arrow-schema.json").write_bytes(_bytes(arrow_schemas))
     (prepared / "sqlite-schema.sql").write_text(

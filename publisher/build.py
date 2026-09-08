@@ -22,6 +22,7 @@ from typing import Any, TextIO, cast
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
+from api.contracts import READ_MODEL_VERSION
 from publisher import API_VERSION, APPLICATION_VERSION, PUBLIC_DOWNLOAD_PATHS, SCHEMA_VERSION
 from publisher.archive import directory_entries, write_zip
 from publisher.audio_sources import load_audio_sources
@@ -29,8 +30,9 @@ from publisher.languages import language_rows
 from publisher.model_catalog import configured_model_catalog
 from publisher.orthography import build_orthography_catalog
 from publisher.prepared import build_prepared_formats
+from publisher.profiling import StageProfile
 from publisher.rights import build_rights_catalog
-from publisher.tables import TABLE_COLUMNS, sqlite_type
+from publisher.tables import TABLE_COLUMNS, delimited_cell, sqlite_type
 from publisher.xml_records import Projection, discover_xml, project_xml
 
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -123,6 +125,7 @@ def _api_envelope(
     return {
         "schema_version": SCHEMA_VERSION,
         "api_version": API_VERSION,
+        "read_model_version": READ_MODEL_VERSION,
         "endpoint": endpoint,
         "generated_at": generated_at,
         "kakarayan": {
@@ -203,10 +206,7 @@ def _write_projection(
         columns = TABLE_COLUMNS[table]
         for row in rows:
             csv_writers[table].writerow(
-                {
-                    column: r"\N" if row.get(column) is None else row.get(column)
-                    for column in columns
-                }
+                {column: delimited_cell(row.get(column)) for column in columns}
             )
             jsonl_files[table].write(
                 json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
@@ -476,25 +476,34 @@ def _add_indexes(connection: sqlite3.Connection) -> None:
 
 
 def _add_summary_cache(connection: sqlite3.Connection) -> None:
-    """Precompute the immutable language and corpus summaries used by the UI."""
+    """Precompute only language/corpus/dialect scopes present in this release."""
     connection.execute(
         "CREATE TABLE summary_cache ("
-        "language_id TEXT NOT NULL, corpus_id TEXT NOT NULL, value_json TEXT NOT NULL, "
-        "PRIMARY KEY (language_id, corpus_id)) WITHOUT ROWID"
+        "language_id TEXT NOT NULL, corpus_id TEXT NOT NULL, dialect TEXT NOT NULL, "
+        "value_json TEXT NOT NULL, PRIMARY KEY (language_id, corpus_id, dialect)) WITHOUT ROWID"
     )
     pairs = [
-        (str(row[0]), str(row[1]))
+        (str(row[0]), str(row[1]), str(row[2]))
         for row in connection.execute(
-            "SELECT DISTINCT language_id, corpus_id FROM texts ORDER BY language_id, corpus_id"
+            "SELECT DISTINCT language_id, corpus_id, dialect FROM texts "
+            "ORDER BY language_id, corpus_id, dialect"
         )
     ]
-    scopes = sorted({(language_id, "") for language_id, _ in pairs} | set(pairs))
-    for language_id, corpus_id in scopes:
+    scopes = sorted(
+        {(language, corpus, dialect) for language, corpus, dialect in pairs}
+        | {(language, corpus, "") for language, corpus, _ in pairs}
+        | {(language, "", dialect) for language, _, dialect in pairs}
+        | {(language, "", "") for language, _, _ in pairs}
+    )
+    for language_id, corpus_id, dialect in scopes:
         clauses = ["t.language_id = ?"]
         parameters: list[object] = [language_id]
         if corpus_id:
             clauses.append("t.corpus_id = ?")
             parameters.append(corpus_id)
+        if dialect:
+            clauses.append("t.dialect = ?")
+            parameters.append(dialect)
         where = " AND ".join(clauses)
         sentence_count = int(
             connection.execute(
@@ -565,10 +574,12 @@ def _add_summary_cache(connection: sqlite3.Connection) -> None:
             "distributions": distributions,
         }
         connection.execute(
-            "INSERT INTO summary_cache(language_id, corpus_id, value_json) VALUES (?, ?, ?)",
+            "INSERT INTO summary_cache(language_id, corpus_id, dialect, value_json) "
+            "VALUES (?, ?, ?, ?)",
             (
                 language_id,
                 corpus_id,
+                dialect,
                 json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
             ),
         )
@@ -638,51 +649,42 @@ def _record_counts(connection: sqlite3.Connection) -> dict[str, int]:
 
 def _scope_counts(
     connection: sqlite3.Connection,
-) -> tuple[dict[str, Counter[str]], dict[str, Counter[str]]]:
+) -> tuple[dict[str, Counter[str]], dict[str, Counter[str]], dict[str, dict[str, Counter[str]]]]:
     corpus: dict[str, Counter[str]] = defaultdict(Counter)
     language: dict[str, Counter[str]] = defaultdict(Counter)
-    text_scope = {
-        row[0]: (row[1], row[2])
-        for row in connection.execute("SELECT id, corpus_id, language_id FROM texts")
+    by_language: dict[str, dict[str, Counter[str]]] = defaultdict(lambda: defaultdict(Counter))
+    sentence_scope = "sentences s JOIN texts t ON t.id = s.parent_id"
+    sources = {
+        "texts": "texts t",
+        "sentences": sentence_scope,
+        "words": "words w JOIN sentences s ON s.id = w.parent_id "
+        "JOIN texts t ON t.id = s.parent_id",
+        "morphemes": (
+            "morphemes m JOIN words w ON w.id = m.parent_id "
+            "JOIN sentences s ON s.id = w.parent_id JOIN texts t ON t.id = s.parent_id"
+        ),
+        "tokens": "tokens tok JOIN sentences s ON s.id = tok.sentence_id "
+        "JOIN texts t ON t.id = s.parent_id",
     }
-    sentence_scope: dict[str, tuple[str, str]] = {}
-    word_scope: dict[str, tuple[str, str]] = {}
-    morpheme_scope: dict[str, tuple[str, str]] = {}
-    for sentence_id, text_id in connection.execute("SELECT id, parent_id FROM sentences"):
-        sentence_scope[sentence_id] = text_scope[text_id]
-    for word_id, sentence_id in connection.execute("SELECT id, parent_id FROM words"):
-        word_scope[word_id] = sentence_scope[sentence_id]
-    for morpheme_id, word_id in connection.execute("SELECT id, parent_id FROM morphemes"):
-        morpheme_scope[morpheme_id] = word_scope[word_id]
-    scopes = {
-        "text": text_scope,
-        "sentence": sentence_scope,
-        "word": word_scope,
-        "morpheme": morpheme_scope,
-    }
-    for table, owner_type in (
-        ("texts", "text"),
-        ("sentences", "sentence"),
-        ("words", "word"),
-        ("morphemes", "morpheme"),
-    ):
-        for record_id_value in scopes[owner_type]:
-            corpus_id, language_id = scopes[owner_type][record_id_value]
-            corpus[corpus_id][table] += 1
-            language[language_id][table] += 1
     for table in ("forms", "phonology", "translations", "audio"):
-        for owner_type, owner_id in connection.execute(
-            f'SELECT owner_type, owner_id FROM "{table}"'
+        # TEXT evidence is not in tier_scope, which starts at S.
+        sources[table] = (
+            f'(SELECT t.corpus_id, t.language_id FROM "{table}" evidence '
+            "JOIN tier_scope ts ON ts.owner_type = evidence.owner_type "
+            "AND ts.owner_id = evidence.owner_id "
+            "JOIN sentences s ON s.id = ts.sentence_id JOIN texts t ON t.id = s.parent_id "
+            f'UNION ALL SELECT t.corpus_id, t.language_id FROM "{table}" evidence '
+            "JOIN texts t ON evidence.owner_type = 'text' AND t.id = evidence.owner_id) t"
+        )
+    for table, source_sql in sources.items():
+        for corpus_id, language_id, count in connection.execute(
+            f"SELECT t.corpus_id, t.language_id, COUNT(*) FROM {source_sql} "
+            "GROUP BY t.corpus_id, t.language_id"
         ):
-            scope = scopes.get(owner_type, {}).get(owner_id)
-            if scope:
-                corpus[scope[0]][table] += 1
-                language[scope[1]][table] += 1
-    for sentence_id in connection.execute("SELECT sentence_id FROM tokens"):
-        scope = sentence_scope[sentence_id[0]]
-        corpus[scope[0]]["tokens"] += 1
-        language[scope[1]]["tokens"] += 1
-    return corpus, language
+            corpus[corpus_id][table] += count
+            language[language_id][table] += count
+            by_language[corpus_id][language_id][table] += count
+    return corpus, language, by_language
 
 
 def _build_catalog(
@@ -694,7 +696,7 @@ def _build_catalog(
     application_commit: str,
     rights: dict[str, object],
 ) -> dict[str, object]:
-    corpus_counts, language_counts = _scope_counts(connection)
+    corpus_counts, language_counts, corpus_language_counts = _scope_counts(connection)
     rights_entries = cast(list[dict[str, object]], rights["entries"])
     rights_by_corpus = {str(entry["corpus"]): str(entry["id"]) for entry in rights_entries}
     corpora = []
@@ -709,19 +711,16 @@ def _build_catalog(
                 (corpus_id,),
             )
         ]
-        citation, bibtex, source_note, copyright_note, citation_count = connection.execute(
-            """
-            SELECT
-              COALESCE(MAX(NULLIF(citation, '')), ''),
-              COALESCE(MAX(NULLIF(bibtex_citation, '')), ''),
-              COALESCE(MAX(NULLIF(source, '')), ''),
-              COALESCE(MAX(NULLIF(copyright, '')), ''),
-              COUNT(DISTINCT NULLIF(citation, ''))
-            FROM texts
-            WHERE corpus_id = ?
-            """,
-            (corpus_id,),
-        ).fetchone()
+        metadata = {}
+        variants = {}
+        for field in ("citation", "bibtex_citation", "source", "copyright"):
+            value, count = connection.execute(
+                f"SELECT MAX(NULLIF(\"{field}\", '')), COUNT(DISTINCT NULLIF(\"{field}\", '')) "
+                "FROM texts WHERE corpus_id = ?",
+                (corpus_id,),
+            ).fetchone()
+            metadata[field] = value if count == 1 else ""
+            variants[field] = count
         corpora.append(
             {
                 "id": corpus_id,
@@ -730,11 +729,12 @@ def _build_catalog(
                 "languages": languages,
                 "rights_id": rights_by_corpus[name],
                 "counts": dict(corpus_counts[corpus_id]),
-                "citation": citation,
-                "bibtex_citation": bibtex,
-                "source": source_note,
-                "copyright": copyright_note,
-                "citation_count": citation_count,
+                "language_counts": {
+                    language: dict(counts)
+                    for language, counts in sorted(corpus_language_counts[corpus_id].items())
+                },
+                **metadata,
+                "metadata_variants": variants,
             }
         )
     languages = language_rows()
@@ -938,10 +938,12 @@ def build_release(
     compress_database: bool = False,
     release_only: bool = False,
     application_commit: str | None = None,
+    profile: StageProfile | None = None,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
     if release_only and (not include_prepared or not compress_database):
         raise BuildError("A release-only build requires prepared formats and a compressed database")
+    profile = profile or StageProfile()
     repo = repo.resolve()
     source = inspect_source(repo, expected_commit)
     kakarayan_commit = inspect_application_commit(application_commit)
@@ -960,6 +962,11 @@ def build_release(
     orthography = build_orthography_catalog(repo, source.commit)
     content_path = Path(__file__).resolve().parents[1] / "content" / "manifest.json"
     content = cast(dict[str, object], json.loads(content_path.read_text(encoding="utf-8")))
+    profile.mark(
+        "inputs",
+        xml_files=len(xml_paths),
+        largest_xml_bytes=max((path.stat().st_size for path in xml_paths), default=0),
+    )
 
     tables_dir = output / "tables"
     tables_dir.mkdir()
@@ -993,10 +1000,12 @@ def build_release(
                 warnings.extend(
                     f"{projection.source_path}: {warning}" for warning in projection.warnings
                 )
+        profile.mark("parse_and_core_serialization")
         _add_indexes(connection)
+        profile.mark("indexes")
         _add_summary_cache(connection)
         connection.commit()
-        _validate_sqlite(connection)
+        profile.mark("summary_materialization")
         catalog = _build_catalog(
             connection,
             source=source,
@@ -1026,7 +1035,9 @@ def build_release(
             },
         )
         connection.commit()
+        profile.mark("catalogues")
         _validate_sqlite(connection)
+        profile.mark("integrity", database_bytes=sqlite_path.stat().st_size)
     finally:
         connection.close()
 
@@ -1073,6 +1084,7 @@ def build_release(
             source_commit=source.commit,
             rights=rights,
             compact_release=release_only,
+            profile=profile,
         )
     else:
         prepared_rights = {}
@@ -1085,6 +1097,7 @@ def build_release(
     if compress_database:
         compressed_database, content = _compress_database(sqlite_path)
         artifact_content[compressed_database.relative_to(output).as_posix()] = content
+        profile.mark("database_compression", compressed_bytes=compressed_database.stat().st_size)
     if release_only:
         write_zip(output / "site-metadata.zip", directory_entries(output / "api"))
         if tables_dir.exists():
@@ -1194,6 +1207,7 @@ def build_release(
     artifacts.sort(key=lambda artifact: str(artifact["path"]))
     manifest = {
         "schema_version": SCHEMA_VERSION,
+        "read_model_version": READ_MODEL_VERSION,
         "release_id": release_id,
         "generated_at": generated_at,
         "kakarayan": {
@@ -1215,6 +1229,10 @@ def build_release(
         "  release-manifest.json"
     )
     (output / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
+    profile.mark(
+        "manifest_and_checksums",
+        output_bytes=sum(path.stat().st_size for path in output.rglob("*") if path.is_file()),
+    )
     return BuildResult(
         release_id=release_id,
         output=output,

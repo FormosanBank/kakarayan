@@ -26,10 +26,12 @@ concurrency:
 jobs:
   prepare:
     name: Resolve immutable publication inputs
+    if: inputs.dry_run || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
     outputs:
       source_commit: ${{ steps.source.outputs.source_commit }}
       release_id: ${{ steps.source.outputs.release_id }}
@@ -74,21 +76,11 @@ jobs:
           echo "Resolved FormosanBank $SOURCE_REF to $SOURCE_COMMIT"
           echo "Resolved Kakarayan release identity $RELEASE_ID"
 
-      - name: Refuse an existing release identity before a real build
+      - name: Require successful main CI before publication
         if: ${{ !inputs.dry_run }}
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ steps.source.outputs.release_id }}
-        shell: bash
-        run: |
-          EXISTING_RELEASE_ID="$(
-            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq ".[] | select(.tag_name == \"data-$RELEASE_ID\") | .id"
-          )"
-          if [[ -n "$EXISTING_RELEASE_ID" ]]; then
-            echo "Release data-$RELEASE_ID already exists; immutable release tags cannot be reused."
-            exit 1
-          fi
+        run: python -m publisher.github_release --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA"
 
       - name: Capture one public model catalogue
         run: |
@@ -177,7 +169,7 @@ jobs:
           uv run ruff check publisher
           uv run mypy publisher
 
-      - name: Build and verify the immutable publication
+      - name: Build the immutable publication
         run: |
           uv run python -m publisher.cli \
             --repo build/formosanbank \
@@ -186,10 +178,8 @@ jobs:
             --kakarayan-commit "$GITHUB_SHA" \
             --model-catalog build/publication-inputs/models.json \
             --compress-database \
-            --release-only
-          uv run python -m publisher.verify_release \
-            --release build/data-release \
-            --max-artifact-mib 2048
+            --release-only \
+            --profile build/build-profile.json
 
       - name: Record release ID
         id: release
@@ -202,16 +192,48 @@ jobs:
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Validated $RELEASE_ID from FormosanBank $SOURCE_COMMIT"
 
+      - name: Reproduce the complete publication
+        if: ${{ inputs.verify_determinism }}
+        run: |
+          cp build/data-release/release-manifest.json \
+            "$RUNNER_TEMP/first-release-manifest.json"
+          rm -r -- build/data-release
+          uv run python -m publisher.cli \
+            --repo build/formosanbank \
+            --output build/data-release \
+            --source-commit "$SOURCE_COMMIT" \
+            --kakarayan-commit "$GITHUB_SHA" \
+            --model-catalog build/publication-inputs/models.json \
+            --compress-database \
+            --release-only \
+            --profile build/reproduction-profile.json
+          cmp "$RUNNER_TEMP/first-release-manifest.json" \
+            build/data-release/release-manifest.json
+
+      - name: Verify and reconcile the complete publication once
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          rights=()
+          if [[ "$DRY_RUN" == "false" ]]; then
+            rights=(--require-publishable-scope site-metadata
+                    --require-publishable-scope release-core
+                    --require-publishable-scope prepared-download)
+          fi
+          uv run python -m publisher.reconcile \
+            --release build/data-release \
+            --source-repo build/formosanbank \
+            --database-output build/verified.sqlite \
+            --max-artifact-mib 2048 \
+            --profile build/reconciliation-profile.json \
+            "${rights[@]}" | tee build/reconciliation.json
+
       - name: Benchmark the complete query release
         shell: bash
         run: |
-          mkdir -p build/active-release
-          uv run python -m api.prepare_release \
-            --manifest build/data-release/release-manifest.json \
-            --database build/active-release/formosanbank.sqlite \
-            --activate build/active-release/release-manifest.json
-          KAKARAYAN_DB_PATH=build/active-release/formosanbank.sqlite \
-          KAKARAYAN_RELEASE_MANIFEST_PATH=build/active-release/release-manifest.json \
+          KAKARAYAN_DB_PATH=build/verified.sqlite \
+          KAKARAYAN_RELEASE_MANIFEST_PATH=build/data-release/release-manifest.json \
           KAKARAYAN_REQUESTS_PER_MINUTE=60000 \
           KAKARAYAN_REQUEST_BURST=60000 \
           KAKARAYAN_EXPORTS_PER_MINUTE=60000 \
@@ -236,62 +258,28 @@ jobs:
             --base-url http://127.0.0.1:8000 \
             --cases tests/fixtures/query-benchmark.json \
             --output build/query-benchmark.json \
+            --samples 30 \
             --network-profile "GitHub Actions loopback, full release"
           kill "$API_PID"
           wait "$API_PID" || true
           trap - EXIT
-          rm -r -- build/active-release
+          rm -- build/verified.sqlite
 
-      - name: Reproduce the complete publication
-        if: ${{ inputs.verify_determinism }}
-        run: |
-          cp build/data-release/release-manifest.json \
-            "$RUNNER_TEMP/first-release-manifest.json"
-          rm -r -- build/data-release
-          uv run python -m publisher.cli \
-            --repo build/formosanbank \
-            --output build/data-release \
-            --source-commit "$SOURCE_COMMIT" \
-            --kakarayan-commit "$GITHUB_SHA" \
-            --model-catalog build/publication-inputs/models.json \
-            --compress-database \
-            --release-only
-          cmp "$RUNNER_TEMP/first-release-manifest.json" \
-            build/data-release/release-manifest.json
-          uv run python -m publisher.verify_release \
-            --release build/data-release \
-            --max-artifact-mib 2048
-
-      - name: Reconcile complete prepared formats
-        run: |
-          uv run python -m publisher.reconcile \
-            --release build/data-release \
-            --source-repo build/formosanbank \
-            | tee build/reconciliation.json
-
-      - name: Preserve query benchmark evidence
+      - name: Preserve query and publication measurements
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: query-benchmark-${{ steps.release.outputs.release_id }}
           path: |
             build/query-benchmark.json
             build/reconciliation.json
+            build/*-profile.json
           compression-level: 0
           retention-days: 90
           if-no-files-found: error
 
       - name: Remove the temporary source checkout
         run: rm -r -- build/formosanbank
-
-      - name: Enforce publication rights
-        if: ${{ !inputs.dry_run }}
-        run: |
-          uv run python -m publisher.verify_release \
-            --release build/data-release \
-            --max-artifact-mib 2048 \
-            --require-publishable-scope site-metadata \
-            --require-publishable-scope release-core \
-            --require-publishable-scope prepared-download
 
       - name: Pack validated release output
         if: ${{ !inputs.dry_run }}
@@ -319,6 +307,7 @@ jobs:
     timeout-minutes: 180
     permissions:
       contents: write
+      actions: read
     environment:
       name: data-release
     env:
@@ -360,112 +349,8 @@ jobs:
             --require-publishable-scope release-core \
             --require-publishable-scope prepared-download
 
-      - name: Create the draft release
-        shell: bash
+      - name: Upload or resume the immutable draft
         run: |
-          TAG="data-$RELEASE_ID"
-          EXISTING_RELEASE_ID="$(
-            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq ".[] | select(.tag_name == \"$TAG\") | .id"
-          )"
-          if [[ -n "$EXISTING_RELEASE_ID" ]]; then
-            echo "Release $TAG already exists."
-            exit 1
-          fi
-          gh release create "$TAG" \
-            --draft \
-            --title "FormosanBank data $RELEASE_ID" \
-            --notes "Immutable public data and query read model from FormosanBank commit $SOURCE_COMMIT. The source was projected once, then every prepared artifact and the Pages metadata package were verified before upload. This draft requires maintainer review before publication."
-
-      - name: Upload release assets
-        shell: bash
-        run: |
-          TAG="data-$RELEASE_ID"
-          mkdir -p build/release-assets
-          while IFS=$'\t' read -r path asset_name; do
-            if [[ "$(basename "$path")" != "$asset_name" ]]; then
-              echo "Unsafe asset mapping: $path -> $asset_name"
-              exit 1
-            fi
-            ln "build/data-release/$path" "build/release-assets/$asset_name"
-          done < <(
-            jq -r '.artifacts[] | [.path, .asset_name] | @tsv' \
-              build/data-release/release-manifest.json
-          )
-          jq -r \
-            '.artifacts | sort_by(.asset_name)[] | "\(.sha256)  \(.asset_name)"' \
-            build/data-release/release-manifest.json \
-            > build/release-assets/SHA256SUMS
-          MANIFEST_SHA256="$(
-            sha256sum build/data-release/release-manifest.json | cut -d ' ' -f 1
-          )"
-          printf '%s  release-manifest.json\n' "$MANIFEST_SHA256" \
-            >> build/release-assets/SHA256SUMS
-          while IFS= read -r asset; do
-            gh release upload "$TAG" "$asset"
-          done < <(find build/release-assets -type f | sort)
-          gh release upload "$TAG" build/data-release/release-manifest.json
-
-      - name: Verify remote release assets
-        shell: bash
-        run: |
-          TAG="data-$RELEASE_ID"
-          REMOTE_RELEASE_ID="$(
-            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq ".[] | select(.tag_name == \"$TAG\") | .id"
-          )"
-          if [[ -z "$REMOTE_RELEASE_ID" ]]; then
-            echo "Draft release $TAG was not found."
-            exit 1
-          fi
-          gh api "repos/$GITHUB_REPOSITORY/releases/$REMOTE_RELEASE_ID" \
-            > build/remote-release.json
-          uv run python - <<'PY'
-          import hashlib
-          import json
-          from pathlib import Path
-
-          root = Path("build/data-release")
-          manifest = json.loads((root / "release-manifest.json").read_text())
-          expected = {
-              item["asset_name"]: (item["bytes"], item["sha256"])
-              for item in manifest["artifacts"]
-          }
-          checksum_path = Path("build/release-assets/SHA256SUMS")
-          manifest_path = root / "release-manifest.json"
-          checksums = {}
-          for line in checksum_path.read_text().splitlines():
-              digest, name = line.split("  ", 1)
-              if name in checksums:
-                  raise SystemExit(f"Duplicate release checksum for {name}")
-              checksums[name] = digest
-          expected_checksums = {name: digest for name, (_, digest) in expected.items()}
-          expected_checksums["release-manifest.json"] = hashlib.sha256(
-              manifest_path.read_bytes()
-          ).hexdigest()
-          if checksums != expected_checksums:
-              raise SystemExit("Release checksum names or digests differ from the manifest")
-          for name, path in (
-              ("SHA256SUMS", checksum_path),
-              ("release-manifest.json", manifest_path),
-          ):
-              expected[name] = (
-                  path.stat().st_size,
-                  hashlib.sha256(path.read_bytes()).hexdigest(),
-              )
-          remote = json.loads(Path("build/remote-release.json").read_text())
-          actual = {item["name"]: item for item in remote["assets"]}
-          if set(actual) != set(expected):
-              raise SystemExit(
-                  f"Remote asset set differs: missing={sorted(set(expected) - set(actual))}, "
-                  f"extra={sorted(set(actual) - set(expected))}"
-              )
-          for name, (size, digest) in expected.items():
-              item = actual[name]
-              if item["size"] != size:
-                  raise SystemExit(f"Remote size mismatch for {name}")
-              remote_digest = item.get("digest")
-              if remote_digest and remote_digest != f"sha256:{digest}":
-                  raise SystemExit(f"Remote digest mismatch for {name}")
-          print(f"Verified {len(expected)} remote assets for {manifest['release_id']}")
-          PY
+          uv run python -m publisher.github_release \
+            --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+            --release build/data-release

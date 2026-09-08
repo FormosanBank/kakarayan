@@ -21,6 +21,7 @@ it("emits the schema-validated representative recipe", () => {
         morpheme: ["id", "word_id", "form", "translations"],
       },
       format: "csv",
+      completeFields: true,
     }),
   ).toEqual(fixture);
 });

@@ -242,7 +242,7 @@
 
 .search-intent__options small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
 }
 
@@ -444,7 +444,7 @@
   color: rgb(255 255 255 / 72%);
   background: transparent;
   cursor: pointer;
-  font: 600 11px/1 var(--font-body);
+  font: 600 12px/1 var(--font-body);
 }
 
 .results-heading {
@@ -470,7 +470,7 @@
 
 .result-summary dt {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .result-summary dd {
@@ -494,7 +494,7 @@
   display: grid;
   gap: 5px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .result-export select {
@@ -529,7 +529,7 @@
 .result-card__scope,
 .dictionary-entry footer small {
   color: var(--muted);
-  font: 400 11px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-mono);
 }
 
 .result-card__scope {
@@ -582,7 +582,7 @@
   min-width: 64px;
   margin-right: 8px;
   color: var(--muted);
-  font: 600 10px/1.4 var(--font-mono);
+  font: 600 12px/1.4 var(--font-mono);
 }
 
 .dictionary-entry__details {
@@ -830,7 +830,7 @@
 
 .builder__level-options small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 400;
 }
 
@@ -881,7 +881,7 @@
 .builder__column-tabs button span {
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .builder__level-columns {
@@ -964,7 +964,7 @@
   max-width: 70ch;
   margin: 8px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .builder__summary {
@@ -1020,7 +1020,7 @@
 .builder__package-note {
   margin: 14px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .builder__schema > summary {
@@ -1039,7 +1039,7 @@
   display: block;
   margin-bottom: 10px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .builder__field-actions {
@@ -1134,7 +1134,7 @@
 
 .dataset-fields small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   line-height: 1.35;
 }
@@ -1202,7 +1202,7 @@
 .builder__preview-tabs button span {
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .builder__preview td {
@@ -1249,7 +1249,7 @@
 .builder__schema dt,
 .builder__schema dd {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .builder__schema dd {

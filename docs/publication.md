@@ -16,22 +16,24 @@ Pages must not deploy a site that points at a missing or different query release
 An administrator configures these once:
 
 1. Set **Settings > Pages > Build and deployment > Source** to **GitHub Actions**.
-2. Create the `data-release` environment and require the intended maintainer approval.
-3. Keep the `github-pages` environment restricted to `main`.
+2. Create the `data-release` and `github-pages` environments.
+3. Restrict both environments to `main` and configure the intended required reviewers.
 4. Deploy the query API on the Tokyo Lightsail host using [lightsail.md](lightsail.md).
 5. After the selected API is ready, set repository variable `KAKARAYAN_API_URL` to its
    public HTTPS base URL.
 6. Enable the dependency graph when an administrator is available. It improves dependency
    review but is not a runtime deployment requirement.
 
-The software license must remain present as `LICENSE` or `LICENSE.md`.
+The software license must remain present as `LICENSE` or `LICENSE.md`. Environment
+reviewers are repository settings, not supplied by these workflow files. An administrator
+must verify them; a branch restriction alone is not a human approval gate.
 
 ## Pull request checks
 
 `.github/workflows/ci.yml` runs:
 
 - Python formatting, lint, typing, API and publisher tests, and dependency audit;
-- a generic API Docker image build;
+- an API Docker image build and fixture readiness test, retained by exact commit after main CI;
 - frontend audit, lint, typing, unit tests, production build, and site verification;
 - one Chromium contract and accessibility journey;
 - pull-request dependency review when repository metadata is available.
@@ -51,15 +53,25 @@ Dispatch **Build and publish a data release** on `main` with:
 
 The workflow resolves the source ref once, captures one model catalogue, parses the source
 once, and builds one complete release. It verifies schemas, SQLite, checksums, artifact
-inventory, source identity, and rights. The full-release query benchmark runs after the
-verified build so a performance failure stops early. When `verify_determinism` is enabled,
-the workflow then rebuilds the complete release and compares manifests before reconciliation.
-Indexed searches retain a 300 ms loopback p95 budget. The one-character Chinese substring
-case has a 400 ms budget because trigram indexes require at least three characters. A real
+inventory, source identity, and rights. When `verify_determinism` is enabled, it rebuilds and compares complete manifests first.
+One same-job verification then checks checksums, identity, rights, SQLite integrity, and
+prepared formats. It retains those verified database bytes for the 30-sample query benchmark;
+it does not download, expand, or integrity-check that same file again for each caller.
+Indexed searches retain a 300 ms loopback p95 budget. The one- and two-character Chinese
+substring cases have a 400 ms budget because trigram indexes require at least three characters. A real
 run transfers the already verified output to the protected `data-release` job and creates
 `data-<release-id>` as a draft GitHub release. The release ID includes both the source and
-Kakarayan publisher revisions, and a real run refuses an existing immutable release tag
-before starting the expensive corpus build.
+Kakarayan publisher revisions. Real publication requires successful CI for the exact
+main commit and pins the draft tag to it. A matching partial draft can resume: every
+existing asset must have the expected name, size, and SHA-256 digest. Only missing
+assets are uploaded. Published releases, differing identities, and unverifiable assets
+are rejected without overwriting anything.
+
+`build-profile.json` and `reconciliation-profile.json` record stage times, process peak RSS,
+and sizes outside the immutable release. Full-row semantic digests compare SQLite, CSV,
+TSV, flat JSONL, and Parquet; XLSX compares counts and up to 32 evenly spaced records per
+table with its documented escaping/cell limits. Hierarchical counts account for excluded
+text-owned tiers. A transferred release is fully verified again in the publish job.
 
 Inspect the draft before publication:
 
@@ -77,7 +89,7 @@ never be reused for different bytes.
 ## Deploy the query API
 
 For the supported Tokyo Lightsail deployment, follow
-[the Lightsail runbook](lightsail.md). It builds the same generic API image, activates
+[the Lightsail runbook](lightsail.md). It loads the CI-tested image by commit and digest, activates
 the published release into a host-mounted data directory, and puts Caddy HTTPS in front
 of the service. Continue with Pages only after `/readyz` reports the selected release.
 
@@ -91,8 +103,10 @@ returns the selected release ID.
 
 ## Deploy Pages
 
-Dispatch **Deploy GitHub Pages** with the same release ID. A relevant push to `main` also
-attempts deployment using the newest current-schema release.
+Dispatch **Deploy GitHub Pages** from `main` with the same explicit release ID after
+that frontend commit passes CI. There is no automatic push deployment and no selection
+of a guessed "latest compatible" release. Frontend-only updates can use the ready API's
+existing approved release when the read-model contract still matches.
 
 The workflow:
 
@@ -100,11 +114,12 @@ The workflow:
 2. Downloads only its manifest and static metadata package.
 3. Verifies the package checksum, safe ZIP paths, size limits, schemas, and release IDs.
 4. Assembles `site/public/api` plus curated download metadata.
-5. Requires the configured API `/readyz` to match the selected release.
+5. Requires the API release and read-model version to match the selected metadata and frontend contract.
 6. Builds and verifies the site under a 10 MiB total and 2 MiB per-file budget.
 7. Runs focused production lookup, dataset, locale, accessibility, and degradation smoke
    checks. The full fixture-backed browser suite remains in CI.
 8. Uploads and deploys the exact verified Pages artifact.
+9. Tests the actual public Pages deployment, API identity, and browser journeys after cutover.
 
 Pages contains no corpus index, record shard, query database, or prepared bulk dataset.
 
@@ -133,11 +148,11 @@ Activate it outside the release directory:
 ```bash
 uv run python -m api.prepare_release \
   --manifest build/data-release/release-manifest.json \
-  --database build/active/formosanbank.sqlite \
-  --activate build/active/release-manifest.json
+  --data-root build/active
 ```
 
-Start the API with the two active paths, extract `site-metadata.zip` with
+Start the API with `build/active/current/formosanbank.sqlite` and
+`build/active/current/release-manifest.json`, extract `site-metadata.zip` with
 `publisher.extract_metadata`, assemble Pages with `publisher.assemble_site`, and require
 `/readyz` to match before building the site. The concise invented-data commands are in the
 root [README](../README.md).
