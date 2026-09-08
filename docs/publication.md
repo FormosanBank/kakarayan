@@ -16,7 +16,7 @@ Pages must not deploy a site that points at a missing or different query release
 An administrator configures these once:
 
 1. Set **Settings > Pages > Build and deployment > Source** to **GitHub Actions**.
-2. Create the `data-release` environment and require the intended maintainer approval.
+2. Create the `data-release` and `github-pages` environments.
 3. Restrict both environments to `main` and configure the intended required reviewers.
 4. Deploy the query API on the Tokyo Lightsail host using [lightsail.md](lightsail.md).
 5. After the selected API is ready, set repository variable `KAKARAYAN_API_URL` to its
@@ -57,8 +57,8 @@ inventory, source identity, and rights. When `verify_determinism` is enabled, it
 One same-job verification then checks checksums, identity, rights, SQLite integrity, and
 prepared formats. It retains those verified database bytes for the 30-sample query benchmark;
 it does not download, expand, or integrity-check that same file again for each caller.
-Indexed searches retain a 300 ms loopback p95 budget. The one-character Chinese substring
-case has a 400 ms budget because trigram indexes require at least three characters. A real
+Indexed searches retain a 300 ms loopback p95 budget. The one- and two-character Chinese
+substring cases have a 400 ms budget because trigram indexes require at least three characters. A real
 run transfers the already verified output to the protected `data-release` job and creates
 `data-<release-id>` as a draft GitHub release. The release ID includes both the source and
 Kakarayan publisher revisions. Real publication requires successful CI for the exact

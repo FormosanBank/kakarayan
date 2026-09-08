@@ -777,5 +777,31 @@ evidence for each acceptance test.
 
 ## Implementation evidence
 
-Implementation is in progress. The findings above remain the acceptance criteria; a passing
-baseline is not completion. Scoped commits and tests will be recorded here before merge.
+The application changes are implemented in [PR #89](https://github.com/FormosanBank/kakarayan/pull/89).
+The dated findings above describe the original baseline, not current behavior.
+
+| Findings | Implemented and checked |
+| --- | --- |
+| F01–F05 | Correct finite selections, split translation columns, scoped counts and dialect summaries, strict cursors, and source-preserving Unicode highlights. Regression fixtures cover absent/empty tiers, false values, scope counts, summary query plans, punctuation, NBSP, combining marks, and long matched excerpts. |
+| F06–F07 | Model results retain their submitted context; stale requests cannot overwrite it. Recording cleanup, explicit consent/discard, atomic validated deck imports, storage failure recovery, and quoted Anki exports are tested. No real user audio or text was sent to a model provider. |
+| F08–F15 | Independent optional-resource loading, bounded readiness/retry, shared runtime response validation, URL/history state, serial finite previews, bounded downloads and detail expansion, keyboard/focus behavior, both locales, and coherent user-approved offline updates. Browser tests include a stopped origin, failed shell installation, two generations, and multi-tab activation. |
+| F16–F17, F20 | Locked, disk-checked generation staging with durable atomic selection, unchanged old service, retained rollback, tested-image/main-CI publication gates, safe partial-draft resume, and bounded final-outcome logs. Disposable application tests inject activation and restart failures. |
+| F18–F19 | Stage profiles, one same-job verified database, all-row flat-format semantic digests, stratified XLSX comparisons, explicit scheduled performance tests, retained browser evidence, and public post-cutover smoke checks. Full-corpus measurement is recorded below when validation completes. |
+| F21 | Existing search, data-format, model, API, publication, and Lightsail documents now own their respective contracts. Flat and nested JSONL have distinct titles; diagnostics separate source, publisher, frontend, image, and data identities. |
+
+Local verification: 137 Python tests, 83 frontend unit tests, formatting, lint, type checks,
+workflow validation, fixture release verification, and a production frontend build passed.
+The browser matrix passed 86 tests across Chromium, mobile Chromium, Firefox, and WebKit,
+with 18 explicit browser-specific skips. The 30-sample mobile lab run measured a 1.43 s
+shell load and 144 ms warm lookup p95 on invented fixture data, with 80 ms emulated
+latency, 1.5 Mbps download, 4× CPU throttling, and browser caching disabled. Manual review
+also checked compact Learn tabs, prepared downloads, split-column previews, summaries,
+developer layout, documentation fallback, and one-click update activation. These are local
+fixture/lab results, not measurements from Taiwanese users.
+
+No production deployment, release publication, Lightsail restart, firewall change, or
+snapshot restore was performed by this PR. The new read-model version requires a new
+immutable data release before deployment. A maintainer-approved snapshot rehearsal and SSH-source
+review in [lightsail.md](lightsail.md#snapshot-restore-rehearsal), plus public post-cutover
+checks, remain operator tasks. Application rollback tests do not substitute for an AWS
+snapshot restore, and server stream completion does not prove a user saved a file.
