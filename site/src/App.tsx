@@ -5,6 +5,7 @@ import {Diagnostics} from "./components/Diagnostics";
 import {LoadingState} from "./components/LoadingState";
 import {ResourceRetryContext, useAppData} from "./data";
 import {StudyDeck} from "./components/StudyDeck";
+import {SiteUpdate} from "./components/SiteUpdate";
 import {GITBOOK_BASE_URL} from "./gitbook";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
@@ -90,34 +91,17 @@ function NotFound() {
 export function App() {
   const state = useAppData();
   const {t} = useI18n();
-  const releaseId = state.data?.meta.release_id;
-  useEffect(() => {
-    if (!releaseId || !("serviceWorker" in navigator)) return;
-    const buildId = import.meta.env.VITE_KAKARAYAN_BUILD_ID ?? "development";
-    const cacheVersion = `${releaseId}-${buildId}`;
-    const url = `${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(cacheVersion)}`;
-    navigator.serviceWorker.register(url).catch(() => {
-      // Offline support is additive. The core site remains usable without registration.
-    });
-  }, [releaseId]);
-  if (state.loading) return <Loading />;
-  if (!state.data) {
-    return <Unavailable error={state.error ?? new Error("No release data")} retry={state.reload} />;
-  }
-  return <ResourceRetryContext.Provider value={state.retryResource}>
-    {state.error && <div className="callout callout--warning" role="status">
-      {state.error.message} <button onClick={state.reload}>{t("common.retry")}</button>
-    </div>}
-    <RoutedApp data={state.data} />
-  </ResourceRetryContext.Provider>;
-}
-
-function RoutedApp({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
-  return (
-    <RoutingProvider>
-      <RouteContent data={data} />
-    </RoutingProvider>
-  );
+  return <RoutingProvider>
+    <SiteUpdate />
+    {state.loading ? <Loading /> : !state.data
+      ? <Unavailable error={state.error ?? new Error("No release data")} retry={state.reload} />
+      : <ResourceRetryContext.Provider value={state.retryResource}>
+        {state.error && <div className="callout callout--warning" role="status">
+          {state.error.message} <button onClick={state.reload}>{t("common.retry")}</button>
+        </div>}
+        <RouteContent data={state.data} />
+      </ResourceRetryContext.Provider>}
+  </RoutingProvider>;
 }
 
 function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
