@@ -6,6 +6,7 @@ import argparse
 import gzip
 import hashlib
 import json
+import shutil
 import sqlite3
 import tempfile
 from contextlib import closing
@@ -60,7 +61,7 @@ def _checksums(path: Path) -> dict[str, str]:
     return result
 
 
-def _verify_database(path: Path) -> None:
+def _verify_database(path: Path, manifest: dict[str, Any]) -> None:
     if not path.is_file():
         return
     uri = f"file:{path}?mode=ro&immutable=1"
@@ -77,20 +78,38 @@ def _verify_database(path: Path) -> None:
                 raise VerificationError(
                     f"SQLite release is missing required tables: {', '.join(sorted(missing))}"
                 )
+            metadata = database.execute(
+                "SELECT value_json FROM publication_metadata WHERE key='meta'"
+            ).fetchone()
+            if metadata is None:
+                raise VerificationError("SQLite publication identity is missing")
+            identity = json.loads(metadata[0])
+            for key in ("release_id", "read_model_version", "source", "kakarayan"):
+                if identity.get(key) != manifest[key]:
+                    raise VerificationError(f"SQLite publication {key} does not match the manifest")
     except sqlite3.Error as error:
         raise VerificationError(f"Cannot verify SQLite release: {error}") from error
 
 
-def _verify_compressed_database(path: Path, artifact: dict[str, Any]) -> None:
+def _verify_compressed_database(
+    path: Path, artifact: dict[str, Any], destination: Path, manifest: dict[str, Any]
+) -> None:
     digest = hashlib.sha256()
     size = 0
-    temporary_path: Path | None = None
+    created = False
+    expected_bytes = artifact.get("content_bytes", 0)
+    if not 0 < expected_bytes <= 8 * 1024**3:
+        raise VerificationError("Expanded SQLite size is outside the supported bound")
+    if shutil.disk_usage(destination.parent).free < expected_bytes + 256 * 1024**2:
+        raise VerificationError("Insufficient space to verify the SQLite release")
     try:
-        with tempfile.NamedTemporaryFile(prefix="kakarayan-verify-", suffix=".sqlite") as output:
-            temporary_path = Path(output.name)
+        with destination.open("xb") as output:
+            created = True
             with gzip.open(path, "rb") as source:
                 while chunk := source.read(1024 * 1024):
                     size += len(chunk)
+                    if size > expected_bytes:
+                        raise VerificationError("Expanded SQLite exceeds the manifest size")
                     digest.update(chunk)
                     output.write(chunk)
             output.flush()
@@ -98,9 +117,11 @@ def _verify_compressed_database(path: Path, artifact: dict[str, Any]) -> None:
                 raise VerificationError("Expanded SQLite size does not match the manifest")
             if digest.hexdigest() != artifact.get("content_sha256"):
                 raise VerificationError("Expanded SQLite checksum does not match the manifest")
-            _verify_database(temporary_path)
-    except OSError as error:
-        raise VerificationError(f"Cannot expand the SQLite release: {error}") from error
+            _verify_database(destination, manifest)
+    except BaseException:
+        if created:
+            destination.unlink(missing_ok=True)
+        raise
 
 
 def verify_release(
@@ -108,8 +129,15 @@ def verify_release(
     *,
     required_scopes: set[str] | None = None,
     max_artifact_bytes: int | None = None,
+    database_output: Path | None = None,
 ) -> dict[str, Any]:
     root = root.resolve()
+    if database_output is not None:
+        database_output = database_output.resolve()
+        if database_output.is_relative_to(root) or database_output.exists():
+            raise VerificationError(
+                "Verified database output must be a new file outside the release"
+            )
     manifest_path = root / "release-manifest.json"
     checksum_path = root / "SHA256SUMS"
     manifest = _json(manifest_path)
@@ -185,12 +213,22 @@ def verify_release(
     if database and compressed_database:
         raise VerificationError("Release contains both compressed and uncompressed SQLite")
     if compressed_database:
-        _verify_compressed_database(
-            root / "formosanbank.sqlite.gz",
-            compressed_database,
-        )
+        if database_output is not None:
+            _verify_compressed_database(
+                root / "formosanbank.sqlite.gz", compressed_database, database_output, manifest
+            )
+        else:
+            with tempfile.TemporaryDirectory(prefix="kakarayan-verify-") as temporary:
+                _verify_compressed_database(
+                    root / "formosanbank.sqlite.gz",
+                    compressed_database,
+                    Path(temporary) / "verified.sqlite",
+                    manifest,
+                )
     elif database:
-        _verify_database(root / "formosanbank.sqlite")
+        _verify_database(root / "formosanbank.sqlite", manifest)
+        if database_output is not None:
+            shutil.copyfile(root / "formosanbank.sqlite", database_output)
     return manifest
 
 

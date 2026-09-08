@@ -30,8 +30,9 @@ from publisher.languages import language_rows
 from publisher.model_catalog import configured_model_catalog
 from publisher.orthography import build_orthography_catalog
 from publisher.prepared import build_prepared_formats
+from publisher.profiling import StageProfile
 from publisher.rights import build_rights_catalog
-from publisher.tables import TABLE_COLUMNS, sqlite_type
+from publisher.tables import TABLE_COLUMNS, delimited_cell, sqlite_type
 from publisher.xml_records import Projection, discover_xml, project_xml
 
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -205,10 +206,7 @@ def _write_projection(
         columns = TABLE_COLUMNS[table]
         for row in rows:
             csv_writers[table].writerow(
-                {
-                    column: r"\N" if row.get(column) is None else row.get(column)
-                    for column in columns
-                }
+                {column: delimited_cell(row.get(column)) for column in columns}
             )
             jsonl_files[table].write(
                 json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
@@ -940,10 +938,12 @@ def build_release(
     compress_database: bool = False,
     release_only: bool = False,
     application_commit: str | None = None,
+    profile: StageProfile | None = None,
 ) -> BuildResult:
     """Build deterministic core tables, SQLite, catalogue, and static API."""
     if release_only and (not include_prepared or not compress_database):
         raise BuildError("A release-only build requires prepared formats and a compressed database")
+    profile = profile or StageProfile()
     repo = repo.resolve()
     source = inspect_source(repo, expected_commit)
     kakarayan_commit = inspect_application_commit(application_commit)
@@ -962,6 +962,11 @@ def build_release(
     orthography = build_orthography_catalog(repo, source.commit)
     content_path = Path(__file__).resolve().parents[1] / "content" / "manifest.json"
     content = cast(dict[str, object], json.loads(content_path.read_text(encoding="utf-8")))
+    profile.mark(
+        "inputs",
+        xml_files=len(xml_paths),
+        largest_xml_bytes=max((path.stat().st_size for path in xml_paths), default=0),
+    )
 
     tables_dir = output / "tables"
     tables_dir.mkdir()
@@ -995,10 +1000,12 @@ def build_release(
                 warnings.extend(
                     f"{projection.source_path}: {warning}" for warning in projection.warnings
                 )
+        profile.mark("parse_and_core_serialization")
         _add_indexes(connection)
+        profile.mark("indexes")
         _add_summary_cache(connection)
         connection.commit()
-        _validate_sqlite(connection)
+        profile.mark("summary_materialization")
         catalog = _build_catalog(
             connection,
             source=source,
@@ -1028,7 +1035,9 @@ def build_release(
             },
         )
         connection.commit()
+        profile.mark("catalogues")
         _validate_sqlite(connection)
+        profile.mark("integrity", database_bytes=sqlite_path.stat().st_size)
     finally:
         connection.close()
 
@@ -1075,6 +1084,7 @@ def build_release(
             source_commit=source.commit,
             rights=rights,
             compact_release=release_only,
+            profile=profile,
         )
     else:
         prepared_rights = {}
@@ -1087,6 +1097,7 @@ def build_release(
     if compress_database:
         compressed_database, content = _compress_database(sqlite_path)
         artifact_content[compressed_database.relative_to(output).as_posix()] = content
+        profile.mark("database_compression", compressed_bytes=compressed_database.stat().st_size)
     if release_only:
         write_zip(output / "site-metadata.zip", directory_entries(output / "api"))
         if tables_dir.exists():
@@ -1218,6 +1229,10 @@ def build_release(
         "  release-manifest.json"
     )
     (output / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="utf-8")
+    profile.mark(
+        "manifest_and_checksums",
+        output_bytes=sum(path.stat().st_size for path in output.rglob("*") if path.is_file()),
+    )
     return BuildResult(
         release_id=release_id,
         output=output,

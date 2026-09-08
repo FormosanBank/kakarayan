@@ -8,6 +8,7 @@ from pathlib import Path
 
 from publisher.build import BuildError, build_release
 from publisher.model_catalog import CatalogueFetchError, build_model_catalog
+from publisher.profiling import StageProfile
 
 
 def parser() -> argparse.ArgumentParser:
@@ -16,6 +17,7 @@ def parser() -> argparse.ArgumentParser:
         "--repo", type=Path, required=True, help="Clean public FormosanBank checkout"
     )
     result.add_argument("--output", type=Path, required=True, help="New or empty output directory")
+    result.add_argument("--profile", type=Path, help="Stage timing report outside the release")
     result.add_argument("--source-commit", help="Required exact HEAD commit when supplied")
     result.add_argument(
         "--kakarayan-commit",
@@ -52,6 +54,9 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
+    if args.profile and args.profile.resolve().is_relative_to(args.output.resolve()):
+        raise BuildError("The profile must be outside the immutable release")
+    profile = StageProfile()
     models = (
         build_model_catalog()
         if args.refresh_models
@@ -68,7 +73,12 @@ def main(argv: list[str] | None = None) -> int:
         compress_database=args.compress_database,
         release_only=args.release_only,
         application_commit=args.kakarayan_commit,
+        profile=profile,
     )
+    if args.profile:
+        profile.write(
+            args.profile, source_commit=result.source.commit, release_id=result.release_id
+        )
     print(
         json.dumps(
             {

@@ -169,7 +169,7 @@ jobs:
           uv run ruff check publisher
           uv run mypy publisher
 
-      - name: Build and verify the immutable publication
+      - name: Build the immutable publication
         run: |
           uv run python -m publisher.cli \
             --repo build/formosanbank \
@@ -178,10 +178,8 @@ jobs:
             --kakarayan-commit "$GITHUB_SHA" \
             --model-catalog build/publication-inputs/models.json \
             --compress-database \
-            --release-only
-          uv run python -m publisher.verify_release \
-            --release build/data-release \
-            --max-artifact-mib 2048
+            --release-only \
+            --profile build/build-profile.json
 
       - name: Record release ID
         id: release
@@ -194,15 +192,48 @@ jobs:
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
           echo "Validated $RELEASE_ID from FormosanBank $SOURCE_COMMIT"
 
+      - name: Reproduce the complete publication
+        if: ${{ inputs.verify_determinism }}
+        run: |
+          cp build/data-release/release-manifest.json \
+            "$RUNNER_TEMP/first-release-manifest.json"
+          rm -r -- build/data-release
+          uv run python -m publisher.cli \
+            --repo build/formosanbank \
+            --output build/data-release \
+            --source-commit "$SOURCE_COMMIT" \
+            --kakarayan-commit "$GITHUB_SHA" \
+            --model-catalog build/publication-inputs/models.json \
+            --compress-database \
+            --release-only \
+            --profile build/reproduction-profile.json
+          cmp "$RUNNER_TEMP/first-release-manifest.json" \
+            build/data-release/release-manifest.json
+
+      - name: Verify and reconcile the complete publication once
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          rights=()
+          if [[ "$DRY_RUN" == "false" ]]; then
+            rights=(--require-publishable-scope site-metadata
+                    --require-publishable-scope release-core
+                    --require-publishable-scope prepared-download)
+          fi
+          uv run python -m publisher.reconcile \
+            --release build/data-release \
+            --source-repo build/formosanbank \
+            --database-output build/verified.sqlite \
+            --max-artifact-mib 2048 \
+            --profile build/reconciliation-profile.json \
+            "${rights[@]}" | tee build/reconciliation.json
+
       - name: Benchmark the complete query release
         shell: bash
         run: |
-          mkdir -p build/active-release
-          uv run python -m api.prepare_release \
-            --manifest build/data-release/release-manifest.json \
-            --data-root build/active-release
-          KAKARAYAN_DB_PATH=build/active-release/current/formosanbank.sqlite \
-          KAKARAYAN_RELEASE_MANIFEST_PATH=build/active-release/current/release-manifest.json \
+          KAKARAYAN_DB_PATH=build/verified.sqlite \
+          KAKARAYAN_RELEASE_MANIFEST_PATH=build/data-release/release-manifest.json \
           KAKARAYAN_REQUESTS_PER_MINUTE=60000 \
           KAKARAYAN_REQUEST_BURST=60000 \
           KAKARAYAN_EXPORTS_PER_MINUTE=60000 \
@@ -227,62 +258,28 @@ jobs:
             --base-url http://127.0.0.1:8000 \
             --cases tests/fixtures/query-benchmark.json \
             --output build/query-benchmark.json \
+            --samples 30 \
             --network-profile "GitHub Actions loopback, full release"
           kill "$API_PID"
           wait "$API_PID" || true
           trap - EXIT
-          rm -r -- build/active-release
+          rm -- build/verified.sqlite
 
-      - name: Reproduce the complete publication
-        if: ${{ inputs.verify_determinism }}
-        run: |
-          cp build/data-release/release-manifest.json \
-            "$RUNNER_TEMP/first-release-manifest.json"
-          rm -r -- build/data-release
-          uv run python -m publisher.cli \
-            --repo build/formosanbank \
-            --output build/data-release \
-            --source-commit "$SOURCE_COMMIT" \
-            --kakarayan-commit "$GITHUB_SHA" \
-            --model-catalog build/publication-inputs/models.json \
-            --compress-database \
-            --release-only
-          cmp "$RUNNER_TEMP/first-release-manifest.json" \
-            build/data-release/release-manifest.json
-          uv run python -m publisher.verify_release \
-            --release build/data-release \
-            --max-artifact-mib 2048
-
-      - name: Reconcile complete prepared formats
-        run: |
-          uv run python -m publisher.reconcile \
-            --release build/data-release \
-            --source-repo build/formosanbank \
-            | tee build/reconciliation.json
-
-      - name: Preserve query benchmark evidence
+      - name: Preserve query and publication measurements
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: query-benchmark-${{ steps.release.outputs.release_id }}
           path: |
             build/query-benchmark.json
             build/reconciliation.json
+            build/*-profile.json
           compression-level: 0
           retention-days: 90
           if-no-files-found: error
 
       - name: Remove the temporary source checkout
         run: rm -r -- build/formosanbank
-
-      - name: Enforce publication rights
-        if: ${{ !inputs.dry_run }}
-        run: |
-          uv run python -m publisher.verify_release \
-            --release build/data-release \
-            --max-artifact-mib 2048 \
-            --require-publishable-scope site-metadata \
-            --require-publishable-scope release-core \
-            --require-publishable-scope prepared-download
 
       - name: Pack validated release output
         if: ${{ !inputs.dry_run }}
