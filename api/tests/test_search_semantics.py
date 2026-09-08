@@ -22,6 +22,10 @@ def test_search_semantics_fixture() -> None:
         assert normalize_surface(case["input"]) == case["normalized"]
     for case in fixture["text"]:
         assert normalize_text(case["input"]) == case["normalized"]
+    for case in fixture["highlights"]:
+        assert matches(case["value"], case["query"], "contains", surface=False) == bool(
+            case["selected"]
+        )
     for case in fixture["matches"]:
         assert (
             matches(

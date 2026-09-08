@@ -22,6 +22,16 @@
     {"value": "虛構測試句", "query": "測試", "mode": "contains", "surface": false, "matches": true},
     {"value": "lima", "query": "li", "mode": "exact", "surface": true, "matches": false}
   ],
+  "highlights": [
+    {"value": "He saw a\u00a0deer   there.", "query": "a deer there", "selected": ["a\u00a0deer   there"]},
+    {"value": "A cafe\u0301 here", "query": "CAFÉ", "selected": ["cafe\u0301"]},
+    {"value": "Die Straße", "query": "STRASSE", "selected": ["Straße"]},
+    {"value": "a ﬂower", "query": "flower", "selected": ["ﬂower"]},
+    {"value": "這是父親的家", "query": "父親。", "selected": ["父親"]},
+    {"value": "👩🏽‍💻 cafe\u0301", "query": "café", "selected": ["cafe\u0301"]},
+    {"value": "ı", "query": "i", "selected": []},
+    {"value": "ß", "query": "s", "selected": ["ß"]}
+  ],
   "api": [
     {
       "name": "Formosan dictionary exact with punctuation folding",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import gzip
 import io
 import json
@@ -431,6 +432,43 @@ def test_bounded_dataset_preview_and_export(client: TestClient) -> None:
         params={"language_id": "lang_amis", "max_rows": DATASET_EXPORT_MAX_ROWS + 1},
     )
     assert unbounded.status_code == 422
+
+
+def test_finite_preview_and_all_tabular_serializers_agree(client: TestClient) -> None:
+    params = [
+        ("language_id", "lang_amis"),
+        ("field", "id"),
+        ("field", "standard"),
+        ("field", "translations"),
+        ("max_rows", "1"),
+    ]
+    expanded = client.get(
+        release_path(client, "datasets/preview"), params=[*params, ("selection_rows", "2")]
+    ).json()
+
+    for export_format in ("csv", "tsv", "jsonl"):
+        response = client.get(
+            release_path(client, "datasets/export"),
+            params=[
+                *[(key, value) for key, value in params if key != "max_rows"],
+                ("max_rows", "2"),
+                ("format", export_format),
+            ],
+        )
+        assert response.status_code == 200
+        rows = (
+            [json.loads(line) for line in response.text.splitlines()]
+            if export_format == "jsonl"
+            else list(
+                csv.DictReader(
+                    io.StringIO(response.text), delimiter="\t" if export_format == "tsv" else ","
+                )
+            )
+        )
+        assert len(rows) == expanded["selected_rows"]
+        assert list(rows[0]) == expanded["fields"]
+        assert rows[0] == expanded["items"][0]
+        assert rows[1]["translation_zho_1"] == "虛構測試句"
 
 
 def test_dataset_translations_expand_by_language_and_xml_order(

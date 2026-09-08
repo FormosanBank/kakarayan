@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sqlite3
 import time
 from collections.abc import AsyncIterator, Callable
@@ -301,7 +302,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "alive"}
 
     @app.get("/readyz", tags=["service"], response_model=Ready)
-    def ready(request: Request, response: Response) -> dict[str, str | int]:
+    def ready(request: Request, response: Response) -> dict[str, str | int | None]:
         current = store(request)
         current.check_ready()
         response.headers["Cache-Control"] = "no-store"
@@ -309,6 +310,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "status": "ready",
             "release_id": current.release_id,
             "read_model_version": READ_MODEL_VERSION,
+            "image_commit": os.environ.get("KAKARAYAN_IMAGE_COMMIT") or None,
         }
 
     @app.get("/v1/meta", tags=["catalogue"])

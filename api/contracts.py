@@ -46,6 +46,7 @@ class Ready(WireModel):
     status: Literal["ready"]
     release_id: str
     read_model_version: int
+    image_commit: str | None = None
 
 
 class ExportReady(WireModel):

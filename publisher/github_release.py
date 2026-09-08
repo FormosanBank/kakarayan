@@ -103,6 +103,18 @@ def publish_draft(directory: Path, repository: str, commit: str) -> None:
         for release in page
     ]
     remote = next((release for release in releases if release["tag_name"] == tag), None)
+    # Inventory refs as well: a pre-existing tag must not point somewhere else.
+    refs = [
+        ref
+        for page in api(f"repos/{repository}/git/matching-refs/tags/{tag}", paginate=True)
+        for ref in page
+    ]
+    if any(
+        ref["ref"] == f"refs/tags/{tag}"
+        and api(f"repos/{repository}/commits/{tag}")["sha"] != commit
+        for ref in refs
+    ):
+        raise ValueError("Existing data tag points to another commit")
     if remote is None:
         gh(
             "release",
@@ -122,18 +134,6 @@ def publish_draft(directory: Path, repository: str, commit: str) -> None:
         remote = api(f"repos/{repository}/releases/tags/{tag}")
     if not remote["draft"] or remote.get("prerelease") or remote["target_commitish"] != commit:
         raise ValueError("Only a draft pinned to this exact publisher commit can be resumed")
-    # Inventory refs as well: a pre-existing tag must not point somewhere else.
-    refs = [
-        ref
-        for page in api(f"repos/{repository}/git/matching-refs/tags/{tag}", paginate=True)
-        for ref in page
-    ]
-    if any(
-        ref["ref"] == f"refs/tags/{tag}"
-        and api(f"repos/{repository}/commits/{tag}")["sha"] != commit
-        for ref in refs
-    ):
-        raise ValueError("Existing data tag points to another commit")
     missing = missing_assets(remote, expected)
     if remote["assets"] and "release-manifest.json" in missing:
         raise ValueError("A partially uploaded draft must already have its matching manifest")

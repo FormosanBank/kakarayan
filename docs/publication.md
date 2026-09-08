@@ -53,9 +53,10 @@ Dispatch **Build and publish a data release** on `main` with:
 
 The workflow resolves the source ref once, captures one model catalogue, parses the source
 once, and builds one complete release. It verifies schemas, SQLite, checksums, artifact
-inventory, source identity, and rights. The full-release query benchmark runs after the
-verified build so a performance failure stops early. When `verify_determinism` is enabled,
-the workflow then rebuilds the complete release and compares manifests before reconciliation.
+inventory, source identity, and rights. When `verify_determinism` is enabled, it rebuilds and compares complete manifests first.
+One same-job verification then checks checksums, identity, rights, SQLite integrity, and
+prepared formats. It retains those verified database bytes for the 30-sample query benchmark;
+it does not download, expand, or integrity-check that same file again for each caller.
 Indexed searches retain a 300 ms loopback p95 budget. The one-character Chinese substring
 case has a 400 ms budget because trigram indexes require at least three characters. A real
 run transfers the already verified output to the protected `data-release` job and creates
@@ -65,6 +66,12 @@ main commit and pins the draft tag to it. A matching partial draft can resume: e
 existing asset must have the expected name, size, and SHA-256 digest. Only missing
 assets are uploaded. Published releases, differing identities, and unverifiable assets
 are rejected without overwriting anything.
+
+`build-profile.json` and `reconciliation-profile.json` record stage times, process peak RSS,
+and sizes outside the immutable release. Full-row semantic digests compare SQLite, CSV,
+TSV, flat JSONL, and Parquet; XLSX compares counts and up to 32 evenly spaced records per
+table with its documented escaping/cell limits. Hierarchical counts account for excluded
+text-owned tiers. A transferred release is fully verified again in the publish job.
 
 Inspect the draft before publication:
 
@@ -141,11 +148,11 @@ Activate it outside the release directory:
 ```bash
 uv run python -m api.prepare_release \
   --manifest build/data-release/release-manifest.json \
-  --database build/active/formosanbank.sqlite \
-  --activate build/active/release-manifest.json
+  --data-root build/active
 ```
 
-Start the API with the two active paths, extract `site-metadata.zip` with
+Start the API with `build/active/current/formosanbank.sqlite` and
+`build/active/current/release-manifest.json`, extract `site-metadata.zip` with
 `publisher.extract_metadata`, assemble Pages with `publisher.assemble_site`, and require
 `/readyz` to match before building the site. The concise invented-data commands are in the
 root [README](../README.md).

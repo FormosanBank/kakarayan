@@ -20,16 +20,6 @@ RUN pip install --no-cache-dir uv==0.11.31 \
     && uv sync --locked --no-dev --no-group publisher --no-install-project
 COPY api /app/api
 
-# Production builds prepare and validate the immutable database in the image.
-# A blank argument is allowed only so CI can verify the generic image shape.
-ARG KAKARAYAN_RELEASE_MANIFEST_URL=""
-RUN if [ -n "$KAKARAYAN_RELEASE_MANIFEST_URL" ]; then \
-      .venv/bin/python -m api.prepare_release \
-        --manifest "$KAKARAYAN_RELEASE_MANIFEST_URL" \
-        --data-root /data; \
-    fi \
-    && chown -R kakarayan:kakarayan /data
-
 USER kakarayan
 EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

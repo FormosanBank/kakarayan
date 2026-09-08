@@ -69,6 +69,35 @@ def test_catalog_counts_are_language_scoped_and_metadata_does_not_choose_a_text(
     assert corpus["metadata_variants"]["citation"] == 2
     assert corpus["metadata_variants"]["source"] == 2
     assert corpus["copyright"] == "Synthetic fixture"
+    with closing(sqlite3.connect(result.output / "formosanbank.sqlite")) as connection:
+        scopes = connection.execute(
+            "SELECT language_id, corpus_id, dialect, value_json FROM summary_cache"
+        ).fetchall()
+        assert len(scopes) == 8  # Four observed scopes per language, not a cross-product.
+        for language, corpus_id, dialect, encoded in scopes:
+            cached = json.loads(encoded)
+            parameters = (language, corpus_id, corpus_id, dialect, dialect)
+            where = "t.language_id=? AND (?='' OR t.corpus_id=?) AND (?='' OR t.dialect=?)"
+            count = connection.execute(
+                f"SELECT COUNT(*) FROM sentences s JOIN texts t ON t.id=s.parent_id WHERE {where}",
+                parameters,
+            ).fetchone()[0]
+            assert cached["sentences"] == count == 2
+            normalized = connection.execute(
+                "SELECT tok.normalized, COUNT(*) AS n FROM tokens tok "
+                "JOIN sentences s ON s.id=tok.sentence_id JOIN texts t ON t.id=s.parent_id "
+                f"WHERE {where} GROUP BY tok.normalized ORDER BY n DESC, tok.normalized",
+                parameters,
+            ).fetchall()
+            assert cached["normalized_frequencies"] == [
+                {"value": value, "count": n} for value, n in normalized
+            ]
+            plan = connection.execute(
+                "EXPLAIN QUERY PLAN SELECT value_json FROM summary_cache "
+                "WHERE language_id=? AND corpus_id=? AND dialect=?",
+                (language, corpus_id, dialect),
+            ).fetchall()
+            assert any("USING PRIMARY KEY" in row[3] for row in plan)
 
 
 def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path: Path) -> None:

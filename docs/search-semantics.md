@@ -14,7 +14,8 @@ exports.
 - Empty normalized queries are invalid.
 
 Displayed tier values are never replaced by these keys. Original, standardized, and
-alternate `FORM` text is copied from the pinned XML, including punctuation. Token and
+alternate `FORM` text retains punctuation from the pinned XML, with outer whitespace trimmed
+by the projection. It is not a byte-for-byte rendering of XML markup. Token and
 frequency views keep both the selected surface spelling and its normalized key. The selected
 surface uses standard `FORM`, then original, then alternate as fallbacks. As a result,
 `word` and `word,` remain visibly distinct source strings but share one normalized frequency
@@ -27,6 +28,11 @@ The executable golden cases are in `tests/fixtures/search-semantics.json`.
 - `exact`: the complete normalized value equals the normalized query.
 - `prefix`: the complete normalized value starts with the normalized query.
 - `contains`: the normalized value contains the normalized query.
+
+Contains is the interface default. Searching `where should` does not exactly equal
+`If we reap the rice, where should we dry it?`; it is a contains match. Highlights use
+the normalized match positions mapped back to the unchanged displayed spelling, including
+case-fold expansions, combining marks, and nonbreaking spaces.
 
 These definitions apply in both directions. A Formosan-direction sentence query searches
 original, standardized, and alternate `FORM` values at S, W, and M levels, plus the selected

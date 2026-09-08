@@ -87,6 +87,8 @@ def _case(
     items = first_document.get("items")
     if case.get("require_items") and (not isinstance(items, list) or not items):
         raise BenchmarkError(f"Benchmark case {name!r} returned no representative items")
+    if case.get("require_summary") and not first_document.get("sentences", 0):
+        raise BenchmarkError(f"Benchmark case {name!r} returned an empty summary scope")
 
     for _ in range(warmups):
         _request(base_url, path, parameters)

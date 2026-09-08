@@ -373,6 +373,36 @@ The API disables Uvicorn access logs, so raw user search queries are not written
 the container log. A rate-limited request returns HTTP 429 with `Retry-After`. Limit headers
 identify the active request or export bucket without logging the client IP.
 
+### Request and host health
+
+Summarize the available logs without collecting search text or client addresses:
+
+```bash
+docker compose logs --no-color --no-log-prefix --since 24h api |
+  docker compose exec -T api .venv/bin/python -m api.log_summary
+docker inspect "$(docker compose ps -q api)" --format '{{.RestartCount}} {{.Image}}'
+openssl s_client -connect "$KAKARAYAN_HOSTNAME:443" -servername "$KAKARAYAN_HOSTNAME" </dev/null 2>/dev/null |
+  openssl x509 -noout -enddate
+```
+
+The report groups requests by route and status, including HTTP errors, incomplete
+responses, bytes, rows, and p95 timing **upper bounds** from fixed histogram buckets.
+Queue wait is separate from time holding a database slot. Slot time includes
+serialization and is not pure SQL execution. `completed` means the server sent the
+final response body, not that the user saved a download. These counts cannot identify
+unique people. Hugging Face delays are outside this API and are not in these logs.
+
+Both containers rotate three 10 MB log files. A busy host may retain less than 24
+hours; `--since` does not restore rotated records. Use `docker stats`, `free -h`, and
+`df -h /` above alongside latency, 429/503/504 counts, incomplete exports, restart
+count, and certificate expiry. Diagnose the failing route before raising limits.
+Keep one API worker: rate and concurrency limits are process-local.
+
+Diagnostics on the site distinguish the public source commit, publisher commit,
+frontend commit, API image commit, data release, and read-model version. `/readyz`
+reports the API image commit when running the CI-built container. A matching data
+release alone does not prove that the intended application image was started.
+
 ## Routine release update
 
 For later FormosanBank updates:
@@ -397,6 +427,27 @@ repeat this rollback; activation success alone is not a successful deployment.
 Then deploy Pages with that prior release ID. Keep the image's read-model contract
 matched to the database. GitHub Releases are the durable data source; application
 rollback does not require a server snapshot.
+
+### Snapshot restore rehearsal
+
+Automatic snapshot success is not proof of a working restore. Before relying on a
+snapshot for recovery, a maintainer should approve and perform this rehearsal:
+
+1. Create a disposable instance from a recent snapshot. Do not transfer the production
+   static IP, change Pages, or stop the serving host.
+2. Verify its SSH host fingerprint, expected disk, image digest, generation selectors,
+   and database/manifest identity. Check local `/readyz` and bounded lookup/export.
+3. If testing HTTPS, use the disposable instance's own hostname and certificate, not
+   the production hostname. Verify Caddy and an audio range request separately.
+4. Activate a compatible second release there, then restore the previous generation
+   and image. Verify readiness and actual queries after each restart.
+5. Record the snapshot ID, release/image identities, results, and recovery duration.
+   Remove only that explicitly identified rehearsal instance after review.
+
+The automated activation tests exercise interrupted staging, an unchanged serving
+process, and application rollback in temporary directories. They do not test an AWS
+snapshot restore. Restrict SSH sources with maintainers only after testing a second
+administrative connection; preserve browser-SSH access if it is part of recovery.
 
 ## Resizing or replacing the host
 

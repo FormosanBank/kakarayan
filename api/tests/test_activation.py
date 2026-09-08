@@ -7,7 +7,9 @@ import subprocess
 from collections import namedtuple
 
 import pytest
+from fastapi.testclient import TestClient
 
+from api.app import create_app
 from api.prepare_release import prepare_release
 from api.release import ReleaseError, load_release
 from api.store import CorpusStore
@@ -131,3 +133,32 @@ def test_retained_generation_reactivation_needs_no_download(release, tmp_path, m
 
     monkeypatch.setattr("api.prepare_release._acquire", fail)
     assert prepare_release(source, root) == first
+
+
+def test_failed_restart_can_recover_the_retained_generation(release, settings, tmp_path):
+    root = tmp_path / "data"
+    source = str(release.output / "release-manifest.json")
+    prepare_release(source, root)
+    configured = type(settings)(
+        manifest_path=root / "current" / "release-manifest.json",
+        database_path=root / "current" / "formosanbank.sqlite",
+        expected_sha256=None,
+        cors_origins=(),
+    )
+    with TestClient(create_app(configured)) as old:
+        query = f"/v1/releases/{release.release_id}/dictionary"
+        params = {"q": "lima", "language_id": "lang_amis", "match": "exact"}
+        baseline = old.get(query, params=params).json()
+        broken = root / "generations" / "broken"
+        broken.mkdir()
+        (broken / "release-manifest.json").write_text("{}")
+        replacement = root / "replacement"
+        replacement.symlink_to("generations/broken")
+        replacement.replace(root / "current")
+        with TestClient(create_app(configured)) as failed:
+            assert failed.get("/readyz").status_code == 503
+        assert old.get(query, params=params).json() == baseline
+        prepare_release(source, root)
+        with TestClient(create_app(configured)) as recovered:
+            assert recovered.get("/readyz").json()["release_id"] == release.release_id
+            assert recovered.get(query, params=params).json() == baseline

@@ -75,7 +75,7 @@ Start the query API in one terminal:
 KAKARAYAN_DB_PATH=build/fixture-release/formosanbank.sqlite \
 KAKARAYAN_RELEASE_MANIFEST_PATH=build/fixture-release/release-manifest.json \
 KAKARAYAN_CORS_ORIGINS=http://127.0.0.1:5173 \
-uv run uvicorn api.app:app --host 127.0.0.1 --port 8000
+uv run uvicorn api.app:app --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
 Start the site in another terminal:

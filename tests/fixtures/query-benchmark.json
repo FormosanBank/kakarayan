@@ -172,6 +172,18 @@
       "maximum_gzip_bytes": 102400
     },
     {
+      "name": "two-character Chinese reverse sentence",
+      "path": "/v1/releases/{release_id}/concordance",
+      "parameters": {
+        "q": "父親", "language_id": "lang_amis", "direction": "translation",
+        "translation_language": "zho", "match": "contains", "limit": 25
+      },
+      "require_items": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 400,
+      "maximum_gzip_bytes": 102400
+    },
+    {
       "name": "dataset preview",
       "path": "/v1/releases/{release_id}/datasets/preview",
       "parameters": {
@@ -194,6 +206,16 @@
         "language_id": "lang_amis",
         "limit": 50
       },
+      "require_summary": true,
+      "maximum_first_ms": 1500,
+      "maximum_p95_ms": 300,
+      "maximum_gzip_bytes": 102400
+    },
+    {
+      "name": "Coastal dialect summary",
+      "path": "/v1/releases/{release_id}/summaries",
+      "parameters": {"language_id": "lang_amis", "dialect": "Coastal", "limit": 50},
+      "require_summary": true,
       "maximum_first_ms": 1500,
       "maximum_p95_ms": 300,
       "maximum_gzip_bytes": 102400
