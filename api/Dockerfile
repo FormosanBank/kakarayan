@@ -2,8 +2,8 @@ FROM python:3.13-slim@sha256:6771159cd4fa5d9bba1258caf0b82e6b73458c694d178ad97c5
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    KAKARAYAN_DB_PATH=/data/formosanbank.sqlite \
-    KAKARAYAN_RELEASE_MANIFEST_PATH=/data/active-release.json \
+    KAKARAYAN_DB_PATH=/data/current/formosanbank.sqlite \
+    KAKARAYAN_RELEASE_MANIFEST_PATH=/data/current/release-manifest.json \
     KAKARAYAN_CORS_ORIGINS=https://formosanbank.github.io
 
 RUN groupadd --gid 10001 kakarayan \
@@ -23,8 +23,7 @@ ARG KAKARAYAN_RELEASE_MANIFEST_URL=""
 RUN if [ -n "$KAKARAYAN_RELEASE_MANIFEST_URL" ]; then \
       .venv/bin/python -m api.prepare_release \
         --manifest "$KAKARAYAN_RELEASE_MANIFEST_URL" \
-        --database "$KAKARAYAN_DB_PATH" \
-        --activate "$KAKARAYAN_RELEASE_MANIFEST_PATH"; \
+        --data-root /data; \
     fi \
     && chown -R kakarayan:kakarayan /data
 

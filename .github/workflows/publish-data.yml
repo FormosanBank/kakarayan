@@ -208,10 +208,9 @@ jobs:
           mkdir -p build/active-release
           uv run python -m api.prepare_release \
             --manifest build/data-release/release-manifest.json \
-            --database build/active-release/formosanbank.sqlite \
-            --activate build/active-release/release-manifest.json
-          KAKARAYAN_DB_PATH=build/active-release/formosanbank.sqlite \
-          KAKARAYAN_RELEASE_MANIFEST_PATH=build/active-release/release-manifest.json \
+            --data-root build/active-release
+          KAKARAYAN_DB_PATH=build/active-release/current/formosanbank.sqlite \
+          KAKARAYAN_RELEASE_MANIFEST_PATH=build/active-release/current/release-manifest.json \
           KAKARAYAN_REQUESTS_PER_MINUTE=60000 \
           KAKARAYAN_REQUEST_BURST=60000 \
           KAKARAYAN_EXPORTS_PER_MINUTE=60000 \

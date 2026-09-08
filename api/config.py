@@ -70,13 +70,13 @@ class Settings:
     @classmethod
     def from_environment(cls) -> Settings:
         manifest_path = os.environ.get(
-            "KAKARAYAN_RELEASE_MANIFEST_PATH", "/data/active-release.json"
+            "KAKARAYAN_RELEASE_MANIFEST_PATH", "/data/current/release-manifest.json"
         )
         return cls(
-            manifest_path=Path(manifest_path).resolve(),
+            manifest_path=Path(manifest_path).absolute(),
             database_path=Path(
-                os.environ.get("KAKARAYAN_DB_PATH", "/data/formosanbank.sqlite")
-            ).resolve(),
+                os.environ.get("KAKARAYAN_DB_PATH", "/data/current/formosanbank.sqlite")
+            ).absolute(),
             expected_sha256=os.environ.get("KAKARAYAN_SQLITE_SHA256"),
             cors_origins=_origins(
                 os.environ.get(
