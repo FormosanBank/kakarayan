@@ -7,8 +7,9 @@ import {OrthographyTool} from "../components/OrthographyTool";
 import {Recorder} from "../components/Recorder";
 import {SearchTool, type LookupKind} from "../components/SearchTool";
 import {StudyDeck} from "../components/StudyDeck";
+import {Tabs} from "../components/Tabs";
 import {useI18n} from "../i18n";
-import {useSearchParams} from "../routing";
+import {useNavigationPermission, useSearchParams} from "../routing";
 import type {AppData, DictionaryEntry, SearchRecord} from "../types";
 
 type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" | "lessons";
@@ -16,6 +17,7 @@ type StudioTab = "lookup" | "deck" | "practice" | "translation" | "orthography" 
 export function Learn({data}: {data: AppData}) {
   const {dialectName, languageName, t, tx} = useI18n();
   const [params] = useSearchParams();
+  const mayLeave = useNavigationPermission();
   const amis = data.languages.find((language) => language.name === "Amis");
   const requestedLanguage = params.get("language");
   const initialLanguage = data.languages.find((language) => language.id === requestedLanguage) ?? amis ?? data.languages[0];
@@ -31,6 +33,14 @@ export function Learn({data}: {data: AppData}) {
       ? requestedTool
       : "lookup",
   );
+  const [visited, setVisited] = useState(() => new Set<StudioTab>([tab]));
+  function changeTab(next: StudioTab) {
+    if (next === tab) return true;
+    if (!mayLeave()) return false;
+    setVisited((previous) => new Set([...previous, next]));
+    setTab(next);
+    return true;
+  }
   const requestedLookupKind = params.get("type");
   const [lookupKind, setLookupKind] = useState<LookupKind>(
     requestedLookupKind === "sentences" ? "sentences" : "dictionary",
@@ -38,6 +48,7 @@ export function Learn({data}: {data: AppData}) {
   const [pendingSentenceQuery, setPendingSentenceQuery] = useState<string | null>(null);
   const [practiceTarget, setPracticeTarget] = useState("");
   function changeLanguage(nextId: string) {
+    if (!mayLeave()) return;
     setLanguageId(nextId);
     setDialect("");
     setPendingSentenceQuery(null);
@@ -52,12 +63,12 @@ export function Learn({data}: {data: AppData}) {
     if (entry.language_id !== languageId) changeLanguage(entry.language_id);
     setPendingSentenceQuery(entry.headword);
     setLookupKind("sentences");
-    setTab("lookup");
+    changeTab("lookup");
   }
 
   function practice(record: SearchRecord) {
     setPracticeTarget(record.standard || record.original);
-    setTab("practice");
+    changeTab("practice");
   }
   const tabs: Array<[StudioTab, string]> = [
     ["lookup", tx("Lookup", "查詢")],
@@ -81,7 +92,9 @@ export function Learn({data}: {data: AppData}) {
           {language.dialects.length > 0 && (
             <label className="field">
               {tx("Dialect", "方言")}
-              <select value={dialect} onChange={(event) => setDialect(event.target.value)}>
+              <select value={dialect} onChange={(event) => {
+                if (mayLeave()) setDialect(event.target.value);
+              }}>
                 <option value="">{tx("All dialects", "所有方言")}</option>
                 {language.dialects.map((value) => <option key={value} value={value}>{dialectName(value)}</option>)}
               </select>
@@ -89,24 +102,11 @@ export function Learn({data}: {data: AppData}) {
           )}
         </section>
       )}
-      <div className="studio-tabs" role="tablist" aria-label={tx("Learner tools", "學習工具")}>
-        {tabs.map(([id, label]) => (
-          <button
-            key={id}
-            role="tab"
-            aria-selected={tab === id}
-            aria-controls={`studio-${id}`}
-            onClick={() => {
-              if (id !== "lookup") setPendingSentenceQuery(null);
-              setTab(id);
-            }}
-          >
-            <span>{label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="studio-panel" id={`studio-${tab}`} role="tabpanel">
-        {tab === "lookup" && (
+      <Tabs items={tabs} value={tab} onChange={changeTab} prefix="studio"
+        className="studio-tabs" label={tx("Learner tools", "學習工具")} />
+      <div className="studio-panel" id="studio-lookup" role="tabpanel"
+        aria-labelledby="studio-tab-lookup" hidden={tab !== "lookup"}>
+        {visited.has("lookup") && (
           <>
             <LookupKindToggle kind={lookupKind} onChange={selectLookupKind} />
             <div id="lookup-results">
@@ -125,19 +125,34 @@ export function Learn({data}: {data: AppData}) {
             </div>
           </>
         )}
-        {tab === "deck" && (
+      </div>
+      <div className="studio-panel" id="studio-deck" role="tabpanel"
+        aria-labelledby="studio-tab-deck" hidden={tab !== "deck"}>
+        {visited.has("deck") && (
           <StudyDeck currentRelease={data.meta.release_id} languageId={languageId} dialect={dialect} />
         )}
-        {tab === "practice" && <Recorder key={`${languageId}-${practiceTarget}`} catalog={data.models} selectedLanguage={language?.name ?? "Amis"} referenceText={practiceTarget} />}
-        {tab === "translation" && (
+      </div>
+      <div className="studio-panel" id="studio-practice" role="tabpanel"
+        aria-labelledby="studio-tab-practice" hidden={tab !== "practice"}>
+        {tab === "practice" && <Recorder key={`${languageId}-${dialect}`} catalog={data.models}
+          selectedLanguage={language?.name ?? "Amis"} referenceText={practiceTarget}
+          onReferenceChange={setPracticeTarget} />}
+      </div>
+      <div className="studio-panel" id="studio-translation" role="tabpanel"
+        aria-labelledby="studio-tab-translation" hidden={tab !== "translation"}>
+        {visited.has("translation") && (
           <TranslationTool
             catalog={data.models}
             languages={data.languages}
             selectedLanguageId={languageId}
             selectedDialect={dialect}
+            active={tab === "translation"}
           />
         )}
-        {tab === "orthography" && (
+      </div>
+      <div className="studio-panel" id="studio-orthography" role="tabpanel"
+        aria-labelledby="studio-tab-orthography" hidden={tab !== "orthography"}>
+        {visited.has("orthography") && (
           <OrthographyTool
             key={`${languageId}-${dialect}`}
             catalog={data.orthography}
@@ -146,6 +161,9 @@ export function Learn({data}: {data: AppData}) {
             selectedDialect={dialect}
           />
         )}
+      </div>
+      <div className="studio-panel" id="studio-lessons" role="tabpanel"
+        aria-labelledby="studio-tab-lessons" hidden={tab !== "lessons"}>
         {tab === "lessons" &&
           (data.content.entries.length ? (
             <div className="reviewed-content">

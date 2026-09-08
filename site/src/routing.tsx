@@ -21,7 +21,7 @@ const LocationContext = createContext<LocationValue>({path: "/", search: new URL
 
 interface NavigationGuardValue {
   register: (blocker: () => boolean) => () => void;
-  request: () => boolean;
+  request: (navigation?: boolean) => boolean;
 }
 
 const NavigationGuardContext = createContext<NavigationGuardValue>({
@@ -56,19 +56,16 @@ export function RoutingProvider({children}: PropsWithChildren) {
     prepareRouting();
     return readLocation();
   });
-  const blocker = useRef<(() => boolean) | null>(null);
+  const blockers = useRef(new Set<() => boolean>());
   const acceptedUrl = useRef(currentBrowserUrl());
   const allowNextPop = useRef(false);
   const register = useCallback((next: () => boolean) => {
-    blocker.current = next;
-    return () => {
-      if (blocker.current === next) blocker.current = null;
-    };
+    blockers.current.add(next);
+    return () => { blockers.current.delete(next); };
   }, []);
-  const request = useCallback(() => {
-    if (!blocker.current) return true;
-    const allowed = blocker.current();
-    if (allowed) allowNextPop.current = true;
+  const request = useCallback((navigation = false) => {
+    const allowed = [...blockers.current].every((check) => check());
+    if (allowed && navigation) allowNextPop.current = true;
     return allowed;
   }, []);
   useEffect(() => {
@@ -76,7 +73,7 @@ export function RoutingProvider({children}: PropsWithChildren) {
       prepareRouting();
       if (allowNextPop.current) {
         allowNextPop.current = false;
-      } else if (blocker.current && !blocker.current()) {
+      } else if (![...blockers.current].every((check) => check())) {
         window.history.pushState(window.history.state, "", acceptedUrl.current);
         return;
       }
@@ -125,7 +122,7 @@ export function Link({to, children, onClick, target, ...props}: LinkProps) {
           return;
         }
         event.preventDefault();
-        if (currentBrowserUrl() === href || !guard.request()) return;
+        if (currentBrowserUrl() === href || !guard.request(true)) return;
         pushRoute(href);
       }}
       {...props}
@@ -161,7 +158,7 @@ export function useSearchParams(): [
   );
   const setSearch = (value: Record<string, string>) => {
     const next = new URLSearchParams(value);
-    if (!guard.request()) return;
+    if (!guard.request(true)) return;
     pushRoute(routeHref(`${location.path}${next.size ? `?${next}` : ""}`));
   };
   return [search, setSearch];
@@ -183,4 +180,8 @@ export function NavigationBlocker({active, message}: {active: boolean; message: 
     };
   }, [active, guard, message]);
   return null;
+}
+
+export function useNavigationPermission(): () => boolean {
+  return useContext(NavigationGuardContext).request;
 }

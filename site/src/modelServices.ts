@@ -85,7 +85,11 @@ async function runGradio(
   const interrupt = (reason: DOMException) => {
     if (interrupted) return;
     interrupted = reason;
-    if (job) void job.cancel();
+    if (job) {
+      const current = job;
+      // Provider cancellation is best effort. Detach locally even if it fails.
+      void Promise.resolve().then(() => current.cancel()).catch(() => undefined);
+    }
     rejectInterruption?.(reason);
   };
   const abort = () => interrupt(new DOMException("Request cancelled", "AbortError"));
@@ -109,9 +113,10 @@ async function runGradio(
   let result: unknown[] | null = null;
   try {
     const client = await Promise.race([connection, interruption]);
-    job = client.submit(endpoint, payload);
+    const submitted = client.submit(endpoint, payload);
+    job = submitted;
     const consume = async () => {
-      for await (const event of job as AsyncIterable<GradioEvent>) {
+      for await (const event of submitted) {
         if (event.type === "data") result = event.data;
         if (event.type === "status") {
           if (event.stage === "pending") {

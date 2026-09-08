@@ -92,18 +92,31 @@ export function StudyDeck({
 
   async function grade(value: Grade) {
     if (!current) return;
-    await saveCard(scheduleCard(current, value, new Date()));
-    setShowAnswer(false);
-    reload();
+    await perform(async () => {
+      await saveCard(scheduleCard(current, value, new Date()));
+      setShowAnswer(false);
+      reload();
+    });
+  }
+
+  async function perform(action: () => Promise<void>) {
+    try {
+      await action();
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
   }
 
   async function backup() {
-    const value = await exportBackup();
-    download(
-      `${JSON.stringify(value, null, 2)}\n`,
-      `kakarayan-study-${new Date().toISOString().slice(0, 10)}.json`,
-      "application/json",
-    );
+    await perform(async () => {
+      const value = await exportBackup();
+      download(
+        `${JSON.stringify(value, null, 2)}\n`,
+        `kakarayan-study-${new Date().toISOString().slice(0, 10)}.json`,
+        "application/json",
+      );
+    });
   }
 
   async function restore(event: ChangeEvent<HTMLInputElement>) {
@@ -111,6 +124,7 @@ export function StudyDeck({
     event.target.value = "";
     if (!file) return;
     try {
+      if (file.size > 20 * 1024 * 1024) throw new Error(tx("Backup must be 20 MiB or smaller.", "備份不得超過 20 MiB。"));
       await restoreBackup(JSON.parse(await file.text()) as unknown);
       reload();
     } catch (cause) {
@@ -120,14 +134,18 @@ export function StudyDeck({
 
   async function remove(card: StudyCard) {
     if (!window.confirm(tx(`Delete "${card.front}" from this device?`, `要從此裝置刪除「${card.front}」嗎？`))) return;
-    await deleteCard(card.id);
-    reload();
+    await perform(async () => {
+      await deleteCard(card.id);
+      reload();
+    });
   }
 
   async function resetAll() {
     if (!window.confirm(tx("Delete every Kakarayan study card from this browser?", "要從此瀏覽器刪除所有 Kakarayan 學習卡片嗎？"))) return;
-    await clearCards();
-    reload();
+    await perform(async () => {
+      await clearCards();
+      reload();
+    });
   }
 
   async function addManualCard() {

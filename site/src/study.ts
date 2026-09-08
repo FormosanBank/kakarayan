@@ -65,6 +65,7 @@ function transactionDone(transaction: IDBTransaction): Promise<void> {
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, VERSION);
+    let blocked = false;
     request.onupgradeneeded = () => {
       const database = request.result;
       if (!database.objectStoreNames.contains(STORE)) {
@@ -73,17 +74,19 @@ function openDatabase(): Promise<IDBDatabase> {
         store.createIndex("deck", "deck");
       }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      if (blocked) request.result.close();
+      else {
+        request.result.onversionchange = () => request.result.close();
+        resolve(request.result);
+      }
+    };
     request.onerror = () => reject(request.error ?? new Error("Cannot open local study data"));
+    request.onblocked = () => {
+      blocked = true;
+      reject(new Error("Study storage is blocked by another tab. Close it and retry."));
+    };
   });
-}
-
-function normalizeCard(card: StudyCard): StudyCard {
-  return {
-    ...card,
-    direction: card.direction ?? "recognition",
-    audioReferences: card.audioReferences ?? [],
-  };
 }
 
 export function scheduleCard(card: StudyCard, grade: Grade, now: Date): StudyCard {
@@ -237,14 +240,16 @@ export async function listCards(): Promise<StudyCard[]> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readonly");
-    const cards = await requestResult<StudyCard[]>(transaction.objectStore(STORE).getAll());
-    return cards.map(normalizeCard);
+    const cards: unknown[] = await requestResult(transaction.objectStore(STORE).getAll());
+    if (!cards.every(isCard)) throw new Error("Some local cards are invalid. Keep a backup before changing them.");
+    return cards;
   } finally {
     database.close();
   }
 }
 
 export async function saveCard(card: StudyCard): Promise<void> {
+  if (!isCard(card)) throw new Error("This card has invalid content or scheduling data");
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readwrite");
@@ -281,40 +286,66 @@ export async function exportBackup(): Promise<StudyBackup> {
   return {schemaVersion: 1, exportedAt: new Date().toISOString(), cards: await listCards()};
 }
 
-function isCard(value: unknown): value is StudyCard {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Partial<StudyCard>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.front === "string" &&
-    typeof candidate.back === "string" &&
-    typeof candidate.dueAt === "string" &&
-    typeof candidate.ease === "number" &&
-    Array.isArray(candidate.tags) &&
-    candidate.tags.every((tag) => typeof tag === "string") &&
-    (candidate.direction === undefined ||
-      candidate.direction === "recognition" ||
-      candidate.direction === "production") &&
-    (candidate.audioReferences === undefined ||
-      (Array.isArray(candidate.audioReferences) &&
-        candidate.audioReferences.every((value) => typeof value === "string")))
-  );
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function boundedText(value: unknown, maximum = 20_000): value is string {
+  return typeof value === "string" && value.length <= maximum;
+}
+
+function isoDate(value: unknown): value is string {
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) return false;
+  return new Date(value).toISOString() === value;
+}
+
+function stringList(value: unknown, maximum: number): value is string[] {
+  return Array.isArray(value) && value.length <= maximum &&
+    value.every((item) => boundedText(item, 4_096));
+}
+
+export function isCard(value: unknown): value is StudyCard {
+  if (!isObject(value)) return false;
+  return boundedText(value.id, 256) && value.id.length > 0 &&
+    boundedText(value.deck, 256) && boundedText(value.front) && boundedText(value.back) &&
+    boundedText(value.languageId, 128) && stringList(value.tags, 100) &&
+    stringList(value.audioReferences, 100) &&
+    (value.direction === "recognition" || value.direction === "production") &&
+    isoDate(value.createdAt) && isoDate(value.updatedAt) && isoDate(value.dueAt) &&
+    typeof value.ease === "number" && Number.isFinite(value.ease) && value.ease >= 1.3 && value.ease <= 100 &&
+    [value.intervalDays, value.repetitions, value.lapses].every(
+      (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 0 && item <= 1_000_000,
+    ) &&
+    (value.source === null || (isObject(value.source) &&
+      boundedText(value.source.releaseId, 128) && boundedText(value.source.recordId, 256) &&
+      boundedText(value.source.sourcePath, 4_096)));
+}
+
+export function validateBackup(value: unknown): StudyBackup {
+  if (!isObject(value) || value.schemaVersion !== 1 || !isoDate(value.exportedAt) ||
+    !Array.isArray(value.cards) || value.cards.length > 10_000 || !value.cards.every(isCard)) {
+    throw new Error("Unsupported or malformed study backup");
+  }
+  const ids = new Set(value.cards.map((card) => card.id));
+  if (ids.size !== value.cards.length) throw new Error("Backup contains duplicate card IDs");
+  return {schemaVersion: 1, exportedAt: value.exportedAt, cards: value.cards};
 }
 
 export async function restoreBackup(value: unknown): Promise<number> {
-  if (typeof value !== "object" || value === null) throw new Error("Invalid backup");
-  const backup = value as Partial<StudyBackup>;
-  if (backup.schemaVersion !== 1 || !Array.isArray(backup.cards) || !backup.cards.every(isCard)) {
-    throw new Error("Unsupported or malformed study backup");
-  }
+  const backup = validateBackup(value);
   const database = await openDatabase();
   try {
+    // Existing IDs are replaced by the backup. New IDs are added atomically.
     const transaction = database.transaction(STORE, "readwrite");
-    const store = transaction.objectStore(STORE);
-    for (const card of backup.cards) {
-      store.put(normalizeCard(card));
+    const done = transactionDone(transaction);
+    try {
+      for (const card of backup.cards) transaction.objectStore(STORE).put(card);
+    } catch (cause) {
+      transaction.abort();
+      await done.catch(() => undefined);
+      throw cause;
     }
-    await transactionDone(transaction);
+    await done;
   } finally {
     database.close();
   }
@@ -327,14 +358,17 @@ function spreadsheetCell(value: string): string {
 
 export function cardsAsAnkiTsv(cards: StudyCard[]): string {
   return [
-    "front\tback\ttags\tsource",
+    "#separator:Tab",
+    "#html:false",
+    "#columns:Front\tBack\tTags\tSource",
+    "#tags column:3",
     ...cards.map((card) =>
       [
-        spreadsheetCell(card.front).replaceAll("\t", " "),
-        spreadsheetCell(card.back).replaceAll("\t", " "),
+        card.front,
+        card.back,
         card.tags.join(" "),
         card.source?.recordId ?? "",
-      ].join("\t"),
+      ].map((value) => `"${value.replaceAll('"', '""')}"`).join("\t"),
     ),
   ].join("\n");
 }
