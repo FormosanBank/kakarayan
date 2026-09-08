@@ -187,6 +187,14 @@ def _validate_generation(directory: Path, manifest: dict[str, Any]) -> None:
         raise ReleaseError("Existing generation has different immutable metadata")
 
 
+def _sync_directory(directory: Path) -> None:
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _select_generation(root: Path, generation: Path) -> None:
     """Replace the one pointer, never the files used by a running process."""
     current = root / "current"
@@ -204,11 +212,7 @@ def _select_generation(root: Path, generation: Path) -> None:
             os.replace(temporary, root / name)
         finally:
             temporary.unlink(missing_ok=True)
-    descriptor = os.open(root, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    _sync_directory(root)
 
 
 def prepare_release(manifest_source: str, data_root: Path) -> Path:
@@ -247,7 +251,9 @@ def prepare_release(manifest_source: str, data_root: Path) -> Path:
             stage = Path(tempfile.mkdtemp(prefix=".staging-", dir=root))
             try:
                 _stage_release(manifest_source, manifest, manifest_url, stage)
+                _sync_directory(stage)
                 stage.replace(generation)
+                _sync_directory(generations)
             finally:
                 if stage.exists():
                     shutil.rmtree(stage)

@@ -98,7 +98,7 @@ def test_activation_rejects_low_disk_wrong_owner_and_concurrent_writer(
             prepare_release(source, root)
 
 
-@pytest.mark.parametrize("failure", ["download", "validation", "selection"])
+@pytest.mark.parametrize("failure", ["download", "validation", "durability", "selection"])
 def test_failed_activation_never_changes_current_generation(
     release, tmp_path, monkeypatch, failure
 ):
@@ -114,6 +114,7 @@ def test_failed_activation_never_changes_current_generation(
     target = {
         "download": "_acquire",
         "validation": "_validate_generation",
+        "durability": "_sync_directory",
         "selection": "_select_generation",
     }[failure]
     monkeypatch.setattr(f"api.prepare_release.{target}", fail)
