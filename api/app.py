@@ -7,7 +7,7 @@ import json
 import logging
 import sqlite3
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Literal
 
@@ -42,6 +42,8 @@ from api.store import (
     TierRequirement,
     use_query_budget,
 )
+from api.streaming import StreamProgress, controlled_chunks
+from api.telemetry import RequestTelemetry
 
 LOGGER = logging.getLogger("uvicorn.error")
 LOGGER.setLevel(logging.INFO)
@@ -59,24 +61,6 @@ ReleaseId = Annotated[str, Path(min_length=1, max_length=128)]
 def _invoke_with_budget[ResultT](budget: QueryBudget, operation: Callable[[], ResultT]) -> ResultT:
     with use_query_budget(budget):
         return operation()
-
-
-def _next_chunk(chunks: Iterator[bytes]) -> tuple[bool, bytes]:
-    try:
-        return False, next(chunks)
-    except StopIteration:
-        return True, b""
-
-
-async def _controlled_chunks(chunks: Iterator[bytes], budget: QueryBudget) -> AsyncIterator[bytes]:
-    try:
-        while True:
-            complete, chunk = await asyncio.to_thread(_next_chunk, chunks)
-            if complete:
-                return
-            yield chunk
-    finally:
-        budget.cancel()
 
 
 def _cache(response: Response) -> None:
@@ -197,7 +181,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             client_ip = request.client.host.casefold() if request.client else "unknown"
             decision = rate_limiter.check(
                 client_ip,
-                is_export=path.endswith(("/datasets/export", "/datasets/export-package")),
+                is_export=path.endswith(("/datasets/export", "/datasets/export-package"))
+                and request.query_params.get("preflight", "").lower()
+                not in {"true", "1", "yes", "on"},
             )
         response: Response
         if decision is not None and not decision.allowed:
@@ -236,30 +222,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         failure_code = response.headers.get(_FAILURE_HEADER)
+        request.state.failure_code = failure_code
+        request.state.release_id = release_id
         if failure_code:
             del response.headers[_FAILURE_HEADER]
         if release_id:
             response.headers["X-Kakarayan-Release"] = release_id
-        route = request.scope.get("route")
-        route_path = getattr(route, "path", request.url.path)
         duration_ms = round((time.perf_counter() - started) * 1000)
         response.headers["Server-Timing"] = f"app;dur={duration_ms}"
-        _record(
-            "request",
-            method=request.method,
-            route=route_path,
-            status=response.status_code,
-            duration_ms=duration_ms,
-            duration_bucket="lt100"
-            if duration_ms < 100
-            else "lt500"
-            if duration_ms < 500
-            else "gte500",
-            response_bytes=int(response.headers.get("content-length", 0)),
-            release_id=release_id,
-            failure_code=failure_code,
-        )
         return response
+
+    app.add_middleware(RequestTelemetry)
 
     def store(request: Request) -> CorpusStore:
         current = getattr(request.app.state, "store", None)
@@ -286,6 +259,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             timeout_seconds or configured.query_timeout_seconds,
             workload=workload,
         )
+        request.state.query_budget = active_budget
         task = asyncio.create_task(asyncio.to_thread(_invoke_with_budget, active_budget, operation))
         try:
             while not task.done():
@@ -611,9 +585,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         complete_fields: bool = False,
         max_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
         format: Literal["csv", "tsv", "jsonl"] = "csv",
+        preflight: bool = False,
     ) -> Response:
         current = release_store(request, release_id)
         current.assert_export_allowed(language_id, corpus_id)
+        if preflight:
+            current.dataset_query(
+                language_id=language_id,
+                corpus_id=corpus_id,
+                dialect=dialect,
+                q=q,
+                direction=direction,
+                translation_language=translation_language,
+                match=match,
+                requirements=requirement or (),
+                fields=field or default_dataset_fields(record_level),
+                record_level=record_level,
+                complete_fields=complete_fields,
+            )
+            return JSONResponse(
+                {"release_id": release_id, "status": "ready"}, headers={"Cache-Control": "no-store"}
+            )
         budget = QueryBudget.for_timeout(
             configured.dataset_export_timeout_seconds,
             workload="analytical",
@@ -642,8 +634,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "jsonl": "application/x-ndjson",
         }[format]
         filename = f"kakarayan-{release_id}-{record_level}s.{format}"
+        progress = StreamProgress()
+        request.state.stream_progress = progress
         return StreamingResponse(
-            _controlled_chunks(iter(dataset_chunks(result, format)), budget),
+            controlled_chunks(
+                iter(dataset_chunks(result, format, progress=progress)), budget, progress
+            ),
             media_type=media_type,
             headers={
                 "Cache-Control": "public, max-age=300",
@@ -675,6 +671,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         complete_fields: bool = True,
         max_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
         format: Literal["csv", "tsv", "jsonl"] = "csv",
+        preflight: bool = False,
     ) -> Response:
         current = release_store(request, release_id)
         current.assert_export_allowed(language_id, corpus_id)
@@ -686,6 +683,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "word": word_field,
             "morpheme": morpheme_field,
         }
+        if preflight:
+            for level in levels:
+                current.dataset_query(
+                    language_id=language_id,
+                    corpus_id=corpus_id,
+                    dialect=dialect,
+                    q=q,
+                    direction=direction,
+                    translation_language=translation_language,
+                    match=match,
+                    requirements=requirement or (),
+                    fields=field_map[level] or default_dataset_fields(level),
+                    record_level=level,
+                    complete_fields=complete_fields,
+                )
+            return JSONResponse(
+                {"release_id": release_id, "status": "ready"}, headers={"Cache-Control": "no-store"}
+            )
         budget = QueryBudget.for_timeout(
             configured.dataset_export_timeout_seconds,
             workload="analytical",
@@ -727,12 +742,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 for result in results
             ],
         }
+        progress = StreamProgress()
+        request.state.stream_progress = progress
         members = (
-            (f"{result.record_level}s.{format}", dataset_chunks(result, format))
+            (f"{result.record_level}s.{format}", dataset_chunks(result, format, progress=progress))
             for result in results
         )
         return StreamingResponse(
-            _controlled_chunks(
+            controlled_chunks(
                 iter(
                     zip_chunks(
                         members,
@@ -740,6 +757,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
                 ),
                 budget,
+                progress,
             ),
             media_type="application/zip",
             headers={

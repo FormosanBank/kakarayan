@@ -48,6 +48,8 @@ class QueryBudget:
     deadline: float
     cancelled: threading.Event
     workload: QueryWorkload = "interactive"
+    queue_wait_seconds: float = 0.0
+    slot_seconds: float = 0.0
 
     @classmethod
     def for_timeout(
@@ -224,6 +226,7 @@ class CorpusStore:
                 timeout=self.query_queue_wait_seconds
             )
             if not analytical_acquired:
+                active_budget.queue_wait_seconds += time.monotonic() - queue_started
                 raise ApiError(
                     503,
                     "server_busy",
@@ -235,6 +238,7 @@ class CorpusStore:
             self.query_queue_wait_seconds - (time.monotonic() - queue_started),
         )
         query_acquired = self._query_slots.acquire(timeout=remaining_wait)
+        active_budget.queue_wait_seconds += time.monotonic() - queue_started
         if not query_acquired:
             if analytical_acquired:
                 self._analytical_slots.release()
@@ -246,6 +250,7 @@ class CorpusStore:
             )
         connection: sqlite3.Connection | None = None
         interruption_reason: str | None = None
+        slot_started = time.monotonic()
         try:
             try:
                 connection = self._connections.get_nowait()
@@ -289,6 +294,7 @@ class CorpusStore:
                 ) from None
             raise
         finally:
+            active_budget.slot_seconds += time.monotonic() - slot_started
             if connection is not None:
                 connection.set_progress_handler(None, 0)
                 self._connections.put(connection)
@@ -1426,7 +1432,7 @@ class CorpusStore:
         self._tier_requirements(clauses, requirements)
         return candidates, clauses, parameters
 
-    def _dataset_query(
+    def dataset_query(
         self,
         *,
         language_id: str,
@@ -1441,6 +1447,9 @@ class CorpusStore:
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
     ) -> DatasetQuery:
+        self.language(language_id)
+        if corpus_id:
+            self.corpus(corpus_id)
         supported = allowed_dataset_fields(record_level)
         if not fields or any(field not in supported for field in fields):
             raise ApiError(
@@ -1533,7 +1542,7 @@ class CorpusStore:
         schema_rows: int | None = None,
     ) -> DatasetStream:
         budget = _ACTIVE_QUERY_BUDGET.get()
-        query = self._dataset_query(
+        query = self.dataset_query(
             language_id=language_id,
             corpus_id=corpus_id,
             dialect=dialect,

@@ -717,7 +717,7 @@ def test_word_and_morpheme_translation_searches_start_from_indexed_candidates(
 
     store = cast(FastAPI, client.app).state.store
     assert isinstance(store, CorpusStore)
-    query = store._dataset_query(
+    query = store.dataset_query(
         language_id="lang_amis",
         corpus_id=None,
         dialect=None,

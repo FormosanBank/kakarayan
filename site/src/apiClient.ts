@@ -252,6 +252,22 @@ export function datasetUrl(
   return `${apiBaseUrl}${releasePath(releaseId, `datasets/${route}`)}?${parameters}`;
 }
 
+export async function preflightExport(
+  releaseId: string,
+  route: "export" | "export-package",
+  parameters: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<void> {
+  const values = new URLSearchParams(parameters);
+  values.set("preflight", "true");
+  const result = await request<{release_id: string; status: string}>(
+    `${releasePath(releaseId, `datasets/${route}`)}?${values}`, signal, {retryBusy: false},
+  );
+  if (result.release_id !== releaseId || result.status !== "ready") {
+    throw new ApiRequestError("The export release is not ready", "release_mismatch", 503);
+  }
+}
+
 export function datasetPreview(
   releaseId: string,
   parameters: URLSearchParams,

@@ -75,7 +75,8 @@ export function DatasetPreview({
         </div>
         {levels.length > 1 && (
           <Tabs items={levels.map((level) => { const item = levelInfo.get(level) ?? DATASET_LEVEL_INFO[0];
-            return [level, `${item[1]} ${tx(item[2], item[3])}`]; })}
+            const status = errors[level] ? tx("Error", "錯誤") : loadingLevels.includes(level) ? "…" : "";
+            return [level, `${item[1]} ${tx(item[2], item[3])}${status ? ` · ${status}` : ""}`]; })}
             value={displayLevel} onChange={setActiveLevel} prefix="preview" panelId="preview-panel"
             className="builder__preview-tabs" label={tx("XML level preview", "XML 層級預覽")} />
         )}

@@ -10,6 +10,7 @@ from collections.abc import Buffer, Iterable, Iterator
 from typing import Literal
 
 from api.store import DatasetStream
+from api.streaming import StreamProgress
 
 
 def spreadsheet_safe(value: object) -> object:
@@ -23,12 +24,30 @@ def dataset_chunks(
     export_format: Literal["csv", "tsv", "jsonl"],
     *,
     spreadsheet_safe_cells: bool = True,
+    progress: StreamProgress | None = None,
+) -> Iterator[bytes]:
+    try:
+        yield from _serialize_dataset(result, export_format, spreadsheet_safe_cells, progress)
+    finally:
+        close = getattr(result.rows, "close", None)
+        if close:
+            close()
+
+
+def _serialize_dataset(
+    result: DatasetStream,
+    export_format: Literal["csv", "tsv", "jsonl"],
+    spreadsheet_safe_cells: bool,
+    progress: StreamProgress | None,
 ) -> Iterator[bytes]:
     fields = list(result.fields)
     output = io.StringIO(newline="")
     if export_format == "jsonl":
         for row in result.rows:
-            yield (json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+            body = (json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+            if progress:
+                progress.rows_serialized += 1
+            yield body
         return
 
     delimiter = "\t" if export_format == "tsv" else ","
@@ -44,6 +63,8 @@ def dataset_chunks(
                 for field in fields
             }
         )
+        if progress:
+            progress.rows_serialized += 1
         yield output.getvalue().encode()
 
 
@@ -96,10 +117,15 @@ def zip_chunks(
     sink = _ZipSink()
     with zipfile.ZipFile(sink, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for name, chunks in members:
-            with archive.open(_zip_info(name), "w", force_zip64=True) as member:
-                for chunk in chunks:
-                    member.write(chunk)
-                    yield from sink.drain()
+            try:
+                with archive.open(_zip_info(name), "w", force_zip64=True) as member:
+                    for chunk in chunks:
+                        member.write(chunk)
+                        yield from sink.drain()
+            finally:
+                close = getattr(chunks, "close", None)
+                if close:
+                    close()
             yield from sink.drain()
         with archive.open(_zip_info(manifest_name), "w", force_zip64=True) as member:
             member.write(manifest)

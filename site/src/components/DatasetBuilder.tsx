@@ -3,6 +3,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
   datasetPreview,
   datasetUrl,
+  preflightExport,
   translationLanguages,
   type DatasetPreviewResult,
 } from "../apiClient";
@@ -46,6 +47,8 @@ function startDownload(url: string, filename: string) {
   anchor.href = url;
   anchor.download = filename;
   anchor.rel = "noopener";
+  // A late server error must not navigate away from the user's selection.
+  anchor.target = "kakarayan-export";
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -81,6 +84,8 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
     errors: {},
   });
   const [error, setError] = useState("");
+  const [exportAttempt, setExportAttempt] = useState<{signature: string; status: "idle" | "checking" | "started"}>({signature: "", status: "idle"});
+  const exportController = useRef<AbortController | null>(null);
   const [previewAttempt, setPreviewAttempt] = useState(0);
   const previewController = useRef<AbortController | null>(null);
   const previewTimer = useRef<number | null>(null);
@@ -176,6 +181,8 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
     active && languageId && selectionReady && translationSearchReady && !facetError && data.query.available,
   );
   const previewIsCurrent = previewState.signature === previewSignature;
+  const exportSignature = `${previewSignature}|${format}`;
+  const exportState = active && exportAttempt.signature === exportSignature ? exportAttempt.status : "idle";
   const previews = previewIsCurrent ? previewState.values : {};
   const previewLoadingLevels = canPreview
     ? (previewIsCurrent ? previewState.pending : levels)
@@ -362,7 +369,7 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
     );
   }
 
-  function exportDataset() {
+  async function exportDataset() {
     if (!languageId || !selectionReady || !translationSearchReady || exportBlocked) return;
     setError("");
     let route: "export" | "export-package" = "export";
@@ -388,8 +395,26 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
       }
       filename = `kakarayan-${data.meta.release_id}-xml-levels.zip`;
     }
-    startDownload(datasetUrl(data.meta.release_id, route, values), filename);
+    const controller = new AbortController();
+    exportController.current?.abort();
+    exportController.current = controller;
+    setExportAttempt({signature: exportSignature, status: "checking"});
+    try {
+      await preflightExport(data.meta.release_id, route, values, controller.signal);
+      if (controller.signal.aborted) return;
+      startDownload(datasetUrl(data.meta.release_id, route, values), filename);
+      setExportAttempt({signature: exportSignature, status: "started"});
+    } catch (cause) {
+      if (controller.signal.aborted) return;
+      setExportAttempt({signature: exportSignature, status: "idle"});
+      setError(apiErrorMessage(cause, tx));
+    }
   }
+
+  useEffect(() => () => exportController.current?.abort(), []);
+  useEffect(() => {
+    exportController.current?.abort();
+  }, [previewSignature, active, format]);
 
   function downloadRecipe() {
     const recipe = createDatasetRecipe({
@@ -555,13 +580,15 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
           <label className="field">{tx("File type", "檔案類型")}<select value={format} onChange={(event) => setFormat(event.target.value as DatasetFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option><option value="jsonl">JSON Lines</option></select></label>
           {levels.length > 1 && <p className="builder__package-note">{tx(`${levels.length} tables in one ZIP`, `${levels.length} 個資料表合併為一個 ZIP`)}</p>}
           <button
-            aria-busy={previewBusy}
+            aria-busy={previewBusy || exportState === "checking"}
             className="button button--primary"
-            disabled={!languageId || !selectionReady || exportBlocked || !data.query.available || previewBusy || !previewComplete}
+            disabled={!languageId || !selectionReady || exportBlocked || !data.query.available || previewBusy || !previewComplete || exportState === "checking"}
             onClick={exportDataset}
           >
-            {previewBusy ? tx("Calculating…", "計算中…") : tx("Download dataset", "下載資料集")}
+            {exportState === "checking" ? tx("Checking…", "檢查中…") : previewBusy ? tx("Calculating…", "計算中…") : tx("Download dataset", "下載資料集")}
           </button>
+          {exportState === "started" && <p role="status">{tx("Download started", "已開始下載")}</p>}
+          <iframe name="kakarayan-export" title={tx("Dataset download", "資料集下載")} hidden />
           {previewBusy && (
             <button className="text-button" type="button" onClick={cancelPreview}>
               {tx("Cancel preview", "取消預覽")}

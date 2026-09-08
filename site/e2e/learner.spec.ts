@@ -1,7 +1,7 @@
 import {expect, test, type Page} from "@playwright/test";
 import {readFile} from "node:fs/promises";
 
-async function seedLegacyCard(page: Page) {
+async function seedCard(page: Page) {
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
@@ -16,12 +16,14 @@ async function seedLegacyCard(page: Page) {
           const database = request.result;
           const transaction = database.transaction("cards", "readwrite");
           transaction.objectStore("cards").put({
-            id: "legacy-card",
-            deck: "Legacy",
-            front: "legacy front",
-            back: "legacy answer",
+            id: "fixture-card",
+            deck: "Practice",
+            front: "practice front",
+            back: "practice answer",
             languageId: "lang_amis",
-            tags: ["migration"],
+            tags: ["backup"],
+            direction: "recognition",
+            audioReferences: [],
             source: null,
             createdAt: "2024-01-01T00:00:00.000Z",
             updatedAt: "2024-01-01T00:00:00.000Z",
@@ -59,12 +61,12 @@ test("learn keeps one language context across its tools", async ({page}) => {
   await expect(page.getByRole("heading", {name: "Machine translation"})).toBeVisible();
 });
 
-test("local study data migrates, backs up, and restores", async ({page}, testInfo) => {
+test("local study data backs up and restores without losing fields", async ({page}, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "IndexedDB is exercised once");
   await page.goto("learn");
-  await seedLegacyCard(page);
+  await seedCard(page);
   await page.getByRole("tab", {name: /Study deck/u}).click();
-  await expect(page.getByRole("heading", {name: "legacy front"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "practice front"})).toBeVisible();
 
   const download = page.waitForEvent("download");
   await page.getByRole("button", {name: "Export backup"}).click();
@@ -72,6 +74,7 @@ test("local study data migrates, backs up, and restores", async ({page}, testInf
   if (!path) throw new Error("Study backup has no local path");
   const backup = JSON.parse(await readFile(path, "utf8")) as {cards: unknown[]};
   expect(backup.cards).toHaveLength(1);
+  expect(backup.cards[0]).toMatchObject({direction: "recognition", audioReferences: [], tags: ["backup"]});
 
   await page.getByText(/All local cards/u).click();
   page.once("dialog", (dialog) => void dialog.accept());
@@ -82,7 +85,7 @@ test("local study data migrates, backs up, and restores", async ({page}, testInf
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(backup)),
   });
-  await expect(page.getByRole("heading", {name: "legacy front"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "practice front"})).toBeVisible();
 });
 
 test("microphone denial is recoverable and local audio can be deleted", async ({
@@ -102,7 +105,7 @@ test("microphone denial is recoverable and local audio can be deleted", async ({
   await page.getByRole("tab", {name: /Pronunciation/u}).click();
   const panel = page.getByRole("tabpanel");
   await panel.getByRole("button", {name: "Start recording"}).click();
-  await expect(panel.getByText(/Microphone unavailable: Permission denied/u)).toBeVisible();
+  await expect(panel.getByText("Microphone permission was denied.")).toBeVisible();
   await panel.locator('input[type="file"][accept="audio/*"]').setInputFiles({
     name: "local-practice.webm",
     mimeType: "audio/webm",
@@ -119,7 +122,7 @@ test("the shell and local cards remain available offline", async ({
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "Offline behavior is exercised once");
   await page.goto("learn");
-  await seedLegacyCard(page);
+  await seedCard(page);
   await page.getByRole("tab", {name: /Study deck/u}).click();
   await page.evaluate(async () => navigator.serviceWorker.ready);
   await page.reload();
@@ -129,5 +132,5 @@ test("the shell and local cards remain available offline", async ({
   await page.reload();
   await expect(page.getByRole("heading", {level: 1})).toBeVisible();
   await page.getByRole("tab", {name: /Study deck/u}).click();
-  await expect(page.getByRole("heading", {name: "legacy front"})).toBeVisible();
+  await expect(page.getByRole("heading", {name: "practice front"})).toBeVisible();
 });

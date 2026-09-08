@@ -3,6 +3,7 @@ import {afterEach, describe, expect, it, vi} from "vitest";
 import {
   API_INTERACTIVE_TIMEOUT_MS,
   dictionary,
+  preflightExport,
 } from "./apiClient";
 import type {ApiRequestError} from "./apiClient";
 
@@ -20,6 +21,14 @@ afterEach(() => {
 });
 
 describe("API request lifecycle", () => {
+  it.each([429, 503, 504, 403])("leaves export preflight failures actionable (%s)", async (status) => {
+    const mock = vi.fn().mockResolvedValue(Response.json({error: {code: "blocked", message: "Try again"}}, {status}));
+    vi.stubGlobal("fetch", mock);
+    await expect(preflightExport("fb-test", "export", new URLSearchParams({language_id: "lang_amis"})))
+      .rejects.toMatchObject({status, code: "blocked"});
+    expect(mock).toHaveBeenCalledTimes(1);
+    expect(mock.mock.calls[0]?.[0]).toContain("preflight=true");
+  });
   it("retries one momentary busy response", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn()
