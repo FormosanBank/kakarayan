@@ -830,3 +830,14 @@ test("prepared downloads keep flat and nested tables distinct", async ({page}) =
   await expect(page.getByRole("heading", {name: "平面表格 JSONL", exact: true})).toBeVisible();
   await expect(page.getByRole("heading", {name: "巢狀句子 JSONL", exact: true})).toBeVisible();
 });
+
+test("route navigation focuses content without hiding the heading", async ({page}) => {
+  await page.goto("downloads");
+  await page.getByRole("navigation", {name: "Footer", exact: true}).getByRole("link", {name: "Docs", exact: true}).click();
+  await expect(page.getByRole("heading", {name: "Docs", exact: true})).toBeVisible();
+  await expect(page.locator("main")).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  const heading = await page.getByRole("heading", {name: "Docs", exact: true}).boundingBox();
+  const navigation = await page.locator(".topbar").boundingBox();
+  expect(heading && navigation && heading.y >= navigation.y + navigation.height).toBe(true);
+});

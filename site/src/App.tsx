@@ -173,8 +173,8 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       );
   }, [locale, path, routeDescription, routeTitle]);
   useEffect(() => {
-    window.scrollTo(0, 0);
-    if (previousPath.current !== path) document.getElementById("main")?.focus();
+    if (previousPath.current !== path) document.getElementById("main")?.focus({preventScroll: true});
+    window.scrollTo({top: 0, left: 0, behavior: "instant"});
     previousPath.current = path;
   }, [path]);
   const page = (() => {
