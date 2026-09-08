@@ -49,7 +49,7 @@ function Unavailable({error, retry}: {error: Error; retry: () => void}) {
         )}
       </p>
       <code>{error.message}</code>
-      <Diagnostics releaseId={null} error={error} />
+      <Diagnostics meta={null} error={error} />
       <div className="button-row">
         <button className="button button--primary" onClick={retry}>
           {t("common.retry")}

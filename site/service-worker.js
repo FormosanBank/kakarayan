@@ -42,6 +42,8 @@ self.addEventListener("activate", (event) => {
     const keys = (await caches.keys()).filter((key) => key.startsWith(prefix));
     const previous = keys.filter((key) => key !== cacheName).at(-1);
     await Promise.all(keys.filter((key) => key !== cacheName && key !== previous).map((key) => caches.delete(key)));
+    const legacy = (await caches.keys()).filter((key) => /^kakarayan-fb-\d{8}-[0-9a-f]{7,12}$/u.test(key));
+    await Promise.all(legacy.map((key) => caches.delete(key)));
     // Existing pages stay on the old worker until they close or explicitly update.
     // No clients.claim(): an uncontrolled first visit takes control on its next load.
   })());

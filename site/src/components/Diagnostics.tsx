@@ -1,10 +1,16 @@
 import {useMemo, useState} from "react";
 import {useI18n} from "../i18n";
+import type {Meta} from "../types";
 
 interface DiagnosticDocument {
   application: string;
   application_version: string;
   data_release: string | null;
+  source_commit: string | null;
+  publisher_commit: string | null;
+  frontend_commit: string;
+  api_image_commit: string | null;
+  read_model_version: number | null;
   failed_public_asset: string | null;
   error: {name: string; detail: string} | null;
   capabilities: Record<string, boolean>;
@@ -24,17 +30,21 @@ function publicAsset(message: string): string | null {
 
 function safeDetail(error: Error): string {
   return error.message
-    .replace(/Invalid RE2 pattern:.*/u, "Invalid RE2 pattern")
     .replace(/(?:\/Users|\/home|[A-Z]:\\Users)[^\s:]+/giu, "[local path]")
     .replace(/([?&](?:q|query)=)[^&\s]+/giu, "$1[redacted]")
     .slice(0, 500);
 }
 
-function makeDiagnostics(releaseId: string | null, error: Error | null): DiagnosticDocument {
+function makeDiagnostics(meta: Meta | null, imageCommit: string | null, error: Error | null): DiagnosticDocument {
   return {
     application: "Kakarayan",
     application_version: import.meta.env.VITE_APP_VERSION ?? "0.2.0",
-    data_release: releaseId,
+    data_release: meta?.release_id ?? null,
+    source_commit: meta?.source.commit ?? null,
+    publisher_commit: meta?.kakarayan.commit ?? null,
+    frontend_commit: import.meta.env.VITE_KAKARAYAN_FRONTEND_COMMIT,
+    api_image_commit: imageCommit,
+    read_model_version: meta?.read_model_version ?? null,
     failed_public_asset: error ? publicAsset(error.message) : null,
     error: error ? {name: error.name, detail: safeDetail(error)} : null,
     capabilities: {
@@ -62,15 +72,17 @@ function download(value: DiagnosticDocument) {
 }
 
 export function Diagnostics({
-  releaseId,
+  meta,
+  imageCommit = null,
   error = null,
 }: {
-  releaseId: string | null;
+  meta: Meta | null;
+  imageCommit?: string | null;
   error?: Error | null;
 }) {
   const {tx} = useI18n();
   const [notice, setNotice] = useState("");
-  const document = useMemo(() => makeDiagnostics(releaseId, error), [error, releaseId]);
+  const document = useMemo(() => makeDiagnostics(meta, imageCommit, error), [error, meta, imageCommit]);
   const body = `Kakarayan diagnostics\n\n\`\`\`json\n${JSON.stringify(document, null, 2)}\n\`\`\``;
   const issue = new URL("https://github.com/FormosanBank/kakarayan/issues/new");
   issue.searchParams.set("title", error ? "Public site error" : "Kakarayan problem report");

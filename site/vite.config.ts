@@ -2,9 +2,11 @@ import react from "@vitejs/plugin-react";
 import {defineConfig} from "vitest/config";
 import {loadEnv} from "vite";
 import {offlineShell} from "./shellPlugin.ts";
+import {execFileSync} from "node:child_process";
 
 export default defineConfig(({mode}) => ({
   base: process.env.KAKARAYAN_BASE_PATH ?? "/kakarayan/",
+  define: {"import.meta.env.VITE_KAKARAYAN_FRONTEND_COMMIT": JSON.stringify(execFileSync("git", ["rev-parse", "HEAD"], {encoding: "utf8"}).trim())},
   plugins: [react(), offlineShell(), {
     name: "download-frame-policy",
     transformIndexHtml(html) {

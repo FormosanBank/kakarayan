@@ -26,7 +26,7 @@ export function Research({data}: {data: AppData}) {
         <DatasetBuilder data={data} active={view === "builder"} />
       </div>
       <div role="tabpanel" id="research-summaries" aria-labelledby="research-tab-summaries" hidden={view !== "summaries"}>
-        {(visitedSummaries || view === "summaries") && <Summaries data={data} />}
+        {(visitedSummaries || view === "summaries") && <Summaries data={data} active={view === "summaries"} />}
       </div>
     </div>
   );

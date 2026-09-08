@@ -83,8 +83,18 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
 export async function loadOptionalCatalog<K extends OptionalResource>(
   resource: K, meta: Meta, signal?: AbortSignal, timeoutMs?: number,
 ): Promise<AppData[K]> {
-  const envelope = await apiEnvelope<AppData[K]>(`${base}api/v1/${resource}.json`, signal, timeoutMs);
+  return loadStaticCatalog<AppData[K]>(resource, meta, signal, timeoutMs);
+}
+
+export async function loadStaticCatalog<T>(
+  resource: OptionalResource | "downloads", meta: Meta, signal?: AbortSignal, timeoutMs?: number,
+): Promise<T> {
+  const envelope = await apiEnvelope<T>(`${base}api/v1/${resource}.json`, signal, timeoutMs);
   sameRelease(meta, envelope);
+  if (envelope.data && typeof envelope.data === "object" && "release_id" in envelope.data &&
+    envelope.data.release_id !== meta.release_id) {
+    throw new Error(`Static metadata release mismatch: ${resource}`);
+  }
   return envelope.data;
 }
 
@@ -145,15 +155,17 @@ export function useAppData() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const retry = async () => {
       let error = "";
+      let imageCommit: string | null = null;
       try {
-        await checkApiRelease(releaseId, controller.signal);
+        const ready = await checkApiRelease(releaseId, controller.signal);
+        imageCommit = ready.image_commit ?? null;
       } catch (cause) {
         error = cause instanceof Error ? cause.message : String(cause);
       }
       if (controller.signal.aborted) return;
       setState((current) => {
         if (!current.data || current.data.meta.release_id !== releaseId) return current;
-        return {...current, data: {...current.data, query: {baseUrl: apiBaseUrl, available: !error, error}}};
+        return {...current, data: {...current.data, query: {baseUrl: apiBaseUrl, available: !error, error, imageCommit}}};
       });
       if (error) timer = setTimeout(retry, 15_000 + Math.floor(Math.random() * 1_000));
     };

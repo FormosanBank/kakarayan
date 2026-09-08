@@ -103,7 +103,7 @@ test("the release-pinned shell, routes, and locale switch work", {tag: "@product
     (links) => links.map((link) => (link as HTMLAnchorElement).href),
   );
   expect(navigationUrls.every((url) => !url.includes("#/"))).toBe(true);
-  expect(navigationUrls).toContain("http://127.0.0.1:4173/kakarayan/research");
+  expect(navigationUrls).toContain(new URL("research", page.url()).href);
   await expectAccessible(page);
 
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
@@ -114,7 +114,7 @@ test("the release-pinned shell, routes, and locale switch work", {tag: "@product
   await expect(page.getByRole("heading", {level: 1})).toHaveText("研究工具");
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
-    "http://127.0.0.1:4173/kakarayan/research",
+    new URL("research", page.url()).href,
   );
   await page.reload();
   await expect(page.getByRole("heading", {level: 1})).toHaveText("研究工具");
@@ -651,6 +651,30 @@ test("research preview, finite recipe, export, and summaries share the API", asy
   }
 });
 
+test("summary scopes survive reload, history, and builder edits", async ({page}) => {
+  await page.goto("research?view=summaries&language=lang_amis&summary_dialect=Xiuguluan&summary_table=normalized");
+  await expect(page.locator(".summaries").getByRole("combobox", {name: "Language", exact: true})).toHaveValue("lang_amis");
+  await expect(page.locator(".summaries").getByRole("combobox", {name: "Dialect", exact: true})).toHaveValue("Xiuguluan");
+  const computed = page.waitForResponse(/\/summaries\?/u);
+  await page.getByRole("button", {name: "Compute summaries"}).click();
+  expect(new URL((await computed).url()).searchParams.get("dialect")).toBe("Xiuguluan");
+  await expect(page.locator(".summary-table").getByRole("columnheader", {name: "Normalized forms"})).toBeVisible();
+  await page.getByRole("tab", {name: "Distribution", exact: true}).click();
+  await expect(page).toHaveURL(/summary_table=distribution/u);
+  await page.goBack();
+  await expect(page.getByRole("tab", {name: "Normalized forms", exact: true})).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", {name: "Dataset builder", exact: true}).click();
+  await page.getByRole("combobox", {name: "File type", exact: true}).selectOption("tsv");
+  await expect(page).toHaveURL(/format=tsv/u);
+  expect(new URL(page.url()).searchParams.get("summary_dialect")).toBe("Xiuguluan");
+  await page.getByRole("tab", {name: "Linguistic summaries", exact: true}).click();
+  await page.reload();
+  await expect(page.locator(".summaries").getByRole("combobox", {name: "Dialect", exact: true})).toHaveValue("Xiuguluan");
+  await page.locator(".summaries").getByRole("combobox", {name: "Language", exact: true}).selectOption("");
+  await expect(page.locator(".summary-table")).toHaveCount(0);
+  await expect(page.getByRole("button", {name: "Compute summaries"})).toBeDisabled();
+});
+
 test("dataset previews isolate and retry one XML-level failure", async ({page}) => {
   await disableServiceWorkerForRouting(page);
   const requests = {sentence: 0, word: 0, morpheme: 0};
@@ -764,4 +788,30 @@ test("static resources remain usable when the query service is unavailable", {ta
   await expect(page.getByText("Corpus search is temporarily unavailable.")).toBeVisible();
   await page.goto("downloads");
   await expect(page.getByRole("heading", {level: 1})).toHaveText("Download public data");
+});
+
+test("tool layouts reflow in both locales and respect reduced motion", async ({page}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "Breakpoint matrix runs once; journeys cover each engine.");
+  await page.emulateMedia({reducedMotion: "reduce"});
+  for (const locale of ["en", "zh-Hant"]) {
+    await page.goto("lookup");
+    await page.getByRole("button", {name: locale === "en" ? "English" : "Traditional Chinese", exact: true}).click();
+    for (const width of [320, 375, 768, 1280]) {
+      await page.setViewportSize({width, height: 900});
+      for (const route of ["lookup", "learn", "research?language=lang_amis", "developers", "downloads"]) {
+        await page.goto(route);
+        await expect(page.getByRole("heading", {level: 1})).toBeVisible();
+        await expect(page.locator("html")).toHaveAttribute("lang", locale);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), `${locale} ${width} ${route}`).toBe(true);
+      }
+    }
+  }
+  // CSS zoom doubles control/text size while retaining the 1280px viewport.
+  await page.goto("research?language=lang_amis");
+  await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
+  await expect(page.getByRole("heading", {level: 1})).toBeVisible();
+  const overflow = await page.evaluate(() => ({width: window.innerWidth, right: document.body.getBoundingClientRect().right}));
+  expect(overflow.right).toBeLessThanOrEqual(overflow.width + 1);
+  const motion = await page.locator(".builder").evaluate((element) => getComputedStyle(element).animationDuration);
+  expect(Number.parseFloat(motion)).toBeLessThanOrEqual(0.00001);
 });

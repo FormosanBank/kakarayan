@@ -150,6 +150,7 @@ export interface QueryAvailability {
   baseUrl: string;
   available: boolean;
   error: string;
+  imageCommit?: string | null;
 }
 
 export interface OrthographyRule {

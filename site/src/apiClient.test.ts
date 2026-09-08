@@ -21,6 +21,10 @@ afterEach(() => {
 });
 
 describe("API request lifecycle", () => {
+  it("reports invalid JSON as an actionable response error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>proxy</html>")));
+    await expect(dictionary("fb-test", options)).rejects.toMatchObject({code: "invalid_response", status: 502});
+  });
   it.each([
     {release_id: "fb-test", items: [{}], next_cursor: null},
     {release_id: "fb-test", items: "broken", next_cursor: null},

@@ -42,14 +42,17 @@ export function datasetScopeFromUrl(params: URLSearchParams, data: AppData): Dat
   };
 }
 
-export function datasetScopeToUrl(scope: DatasetRecipeInput, view = "builder"): URLSearchParams {
-  return new URLSearchParams({
+export function datasetScopeToUrl(scope: DatasetRecipeInput, view = "builder", previous?: URLSearchParams): URLSearchParams {
+  const owned = new URLSearchParams({
     view, language: scope.languageId, corpus: scope.corpusId, dialect: scope.dialect,
     q: scope.query, direction: scope.direction, target: scope.translationLanguage, mode: scope.match,
     levels: scope.recordLevels.join(","), rows: String(scope.maxRows), format: scope.format,
     complete: String(scope.completeFields), sentence_fields: scope.fields.sentence.join(","),
     word_fields: scope.fields.word.join(","), morpheme_fields: scope.fields.morpheme.join(","),
   });
+  const params = new URLSearchParams(previous);
+  for (const [key, value] of owned) params.set(key, value);
+  return params;
 }
 
 export function createDatasetRecipe(input: DatasetRecipeInput) {

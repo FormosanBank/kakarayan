@@ -31,6 +31,11 @@ test("offline updates retain a complete generation until the user accepts", asyn
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture server did not start");
   const base = `http://127.0.0.1:${address.port}/kakarayan/`;
+  const stopServer = async () => {
+    if (!server.listening) return;
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  };
   const readRelease = () => page.evaluate(async () => (await (await fetch("meta.json")).json()).release);
   const askUpdate = () => page.evaluate(async () => {
     const registration = await navigator.serviceWorker.getRegistration();
@@ -44,6 +49,8 @@ test("offline updates retain a complete generation until the user accepts", asyn
   try {
     await page.goto(base);
     await page.evaluate(async () => {
+      await caches.open("kakarayan-fb-20240102-1234567");
+      await caches.open("unrelated-application");
       await navigator.serviceWorker.register("sw.js");
       await navigator.serviceWorker.ready;
     });
@@ -77,16 +84,19 @@ test("offline updates retain a complete generation until the user accepts", asyn
     expect(await page.evaluate(async () => (await fetch("models.json")).status)).toBe(503);
     optionalDown = false;
     expect(await page.evaluate(async () => (await (await fetch("models.json")).json()).models)).toBe("two");
-    await context.setOffline(true);
+    // Stop the origin itself so all browsers exercise real network failure,
+    // including WebKit where emulated offline mode rejects worker fetches too.
+    await stopServer();
+    expect(await readRelease()).toBe("two");
     for (const path of ["learn?q=one", "research?q=two", "lookup?q=three"]) {
       await page.goto(base + path);
       await expect(page.locator("main")).toHaveText("two");
     }
     expect(await page.evaluate(async () => (await (await caches.open("kakarayan-shell-two")).keys()).length)).toBe(3);
-    expect((await page.evaluate(() => caches.keys())).sort()).toEqual(["kakarayan-shell-one", "kakarayan-shell-two"]);
+    expect((await page.evaluate(() => caches.keys())).sort()).toEqual([
+      "kakarayan-shell-one", "kakarayan-shell-two", "unrelated-application",
+    ]);
   } finally {
-    await context.setOffline(false);
-    server.closeAllConnections();
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await stopServer();
   }
 });

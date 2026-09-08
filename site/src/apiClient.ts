@@ -85,7 +85,12 @@ async function request<T>(
         signal: controller.signal,
       });
       if (response.ok) {
-        const value: unknown = await response.json();
+        let value: unknown;
+        try { value = await response.json(); }
+        catch (cause) {
+          if (!(cause instanceof SyntaxError)) throw cause;
+          throw new ApiRequestError("The query service returned invalid data", "invalid_response", 502);
+        }
         if (!valid(value)) throw new ApiRequestError("The query service returned invalid data", "invalid_response", 502);
         const release = /^\/v1\/releases\/([^/]+)\//u.exec(path)?.[1];
         if (release && value && typeof value === "object" && "release_id" in value && value.release_id !== decodeURIComponent(release)) {
@@ -129,7 +134,7 @@ export async function checkApiRelease(
   releaseId: string,
   signal?: AbortSignal,
   timeoutMs = API_READINESS_TIMEOUT_MS,
-): Promise<void> {
+){
   const controller = new AbortController();
   const abort = () => controller.abort(signal?.reason);
   if (signal?.aborted) abort();
@@ -152,6 +157,7 @@ export async function checkApiRelease(
     if (ready.status !== "ready" || ready.read_model_version !== contract.read_model_version) {
       throw new Error("The query API uses an incompatible read model");
     }
+    return ready;
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
     signal?.removeEventListener("abort", abort);
@@ -236,10 +242,12 @@ export function summaries(
   releaseId: string,
   languageId: string,
   corpusId: string,
+  dialect: string,
   signal?: AbortSignal,
 ) {
   const parameters = new URLSearchParams({language_id: languageId, limit: "50"});
   if (corpusId) parameters.set("corpus_id", corpusId);
+  if (dialect) parameters.set("dialect", dialect);
   return request(`${releasePath(releaseId, "summaries")}?${parameters}`, validate.SummaryResponse, signal, {
     timeoutMs: API_ANALYTICAL_TIMEOUT_MS,
   });

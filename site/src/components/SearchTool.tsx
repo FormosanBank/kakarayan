@@ -305,7 +305,7 @@ export function SearchTool({
       {!data.query.available && data.query.error && (
         <div className="callout callout--error">
           <p>{tx("Corpus search is temporarily unavailable.", "語料搜尋暫時無法使用。")}</p>
-          <Diagnostics releaseId={data.meta.release_id} error={new Error(data.query.error)} />
+          <Diagnostics meta={data.meta} imageCommit={data.query.imageCommit ?? null} error={new Error(data.query.error)} />
         </div>
       )}
       <form className="search-form" onSubmit={submit}>

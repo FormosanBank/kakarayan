@@ -2,7 +2,7 @@ import {afterEach, vi} from "vitest";
 import {act, createElement} from "react";
 import {createRoot} from "react-dom/client";
 
-import {loadAppData, loadOptionalCatalog, useAppData} from "./data";
+import {loadAppData, loadOptionalCatalog, loadStaticCatalog, useAppData} from "./data";
 import {appFixture} from "./test/fixtures";
 
 const releaseId = "fb-20240102-3b367525";
@@ -56,6 +56,14 @@ it("times out an unresponsive optional catalogue", async () => {
   vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
   await expect(loadOptionalCatalog("models", appFixture().meta, undefined, 1))
     .rejects.toThrow("did not respond in time");
+});
+
+it("rejects a downloads payload naming another release", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json(envelope("downloads", {
+    schema_version: "1.0.0", release_id: "fb-20240102-deadbeef", artifacts: [],
+  }))));
+  await expect(loadStaticCatalog("downloads", {...appFixture().meta, release_id: releaseId}))
+    .rejects.toThrow("Static metadata release mismatch: downloads");
 });
 
 it.each(["models", "orthography", "content"] as const)("keeps %s failures local to that catalogue", async (resource) => {

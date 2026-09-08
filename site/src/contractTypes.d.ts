@@ -16,6 +16,7 @@ export interface Ready {
   status: "ready";
   release_id: string;
   read_model_version: number;
+  image_commit?: string | null;
   [k: string]: unknown;
 }
 export interface ExportReady {

@@ -35,8 +35,8 @@ export function About({data}: {data: AppData}) {
         <h2>{tx("Source and standardized spelling", "來源與標準化拼寫")}</h2>
         <p>
           {tx(
-            "Kakarayan displays original and standardized FORM values exactly as published in the XML. Search and frequency keys are separate normalized indexes, so surrounding punctuation does not split a frequency count.",
-            "Kakarayan 會如 XML 所發布，完整顯示原始及標準化 FORM 值。搜尋與頻率鍵使用分開的正規化索引，因此周圍標點不會拆分頻率計數。",
+            "Original and standardized FORM values preserve source punctuation; outer whitespace is trimmed. Separate search and frequency keys ignore surrounding punctuation.",
+            "原始及標準化 FORM 值保留來源標點，僅移除頭尾空白。搜尋與頻率鍵另行正規化，忽略頭尾標點。",
           )}
         </p>
       </section>

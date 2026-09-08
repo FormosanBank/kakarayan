@@ -4,6 +4,7 @@ import {describe, expect, it} from "vitest";
 
 import {QueryHighlight} from "./components/QueryHighlight";
 import {queryMatchRanges, queryMatchesText} from "./queryMatching";
+import semantics from "../../tests/fixtures/search-semantics.json";
 
 describe("query highlighting", () => {
   it("finds an exact term inside sentence punctuation and possessives", () => {
@@ -46,18 +47,9 @@ describe("query highlighting", () => {
   });
 
   it("maps normalized matches back to the unchanged source spelling", () => {
-    for (const [text, query, selected] of [
-      ["He saw a\u00a0deer   there.", "a deer there", "a\u00a0deer   there"],
-      ["A cafe\u0301 here", "CAFÉ", "cafe\u0301"],
-      ["Die Straße", "STRASSE", "Straße"],
-      ["a ﬂower", "flower", "ﬂower"],
-      ["這是父親的家", "父親。", "父親"],
-      ["👩🏽‍💻 cafe\u0301", "café", "cafe\u0301"],
-    ] as const) {
-      const ranges = queryMatchRanges(text, query, "contains");
-      expect(ranges.map(({start, end}) => text.slice(start, end))).toEqual([selected]);
+    for (const {value, query, selected} of semantics.highlights) {
+      const ranges = queryMatchRanges(value, query, "contains");
+      expect(ranges.map(({start, end}) => value.slice(start, end))).toEqual(selected);
     }
-    expect(queryMatchRanges("ı", "i", "contains")).toEqual([]);
-    expect(queryMatchRanges("ß", "s", "contains")).toEqual([{start: 0, end: 1}]);
   });
 });

@@ -59,7 +59,7 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
   const [urlParams, setUrlParams] = useSearchParams();
   const urlScope = useMemo(() => datasetScopeFromUrl(urlParams, data), [urlParams, data]);
   const acceptedScope = useRef(datasetScopeToUrl(urlScope).toString());
-  const currentView = useRef(urlParams.get("view") ?? "builder");
+  const currentParams = useRef(urlParams);
   const [languageId, setLanguageId] = useState(urlScope.languageId);
   const [corpusId, setCorpusId] = useState(urlScope.corpusId);
   const [dialect, setDialect] = useState(urlScope.dialect);
@@ -94,7 +94,7 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
   const [facetError, setFacetError] = useState("");
   const [facetAttempt, setFacetAttempt] = useState(0);
   useEffect(() => {
-    currentView.current = urlParams.get("view") ?? "builder";
+    currentParams.current = urlParams;
     const key = datasetScopeToUrl(urlScope).toString();
     if (acceptedScope.current === key) return;
     acceptedScope.current = key;
@@ -113,7 +113,7 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
     const timer = window.setTimeout(() => {
       const value = pendingScope.current;
       acceptedScope.current = datasetScopeToUrl(value).toString();
-      setUrlParams(datasetScopeToUrl(value, currentView.current));
+      setUrlParams(datasetScopeToUrl(value, currentParams.current.get("view") ?? "builder", currentParams.current));
     }, 300);
     return () => window.clearTimeout(timer);
   }, [scope, setUrlParams]);
