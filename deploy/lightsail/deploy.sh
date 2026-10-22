@@ -54,6 +54,9 @@ main() {
   cp .env .env.previous
 
   rollback() {
+    # Command substitutions inherit the trap; only the main shell restores, once.
+    [[ $BASHPID == "$$" ]] || exit 1
+    trap - ERR
     echo "deploy failed; restoring $previous_commit and ${previous_release:-the previous data}" >&2
     git -C "$repo" checkout -q --detach "$previous_commit"
     cp .env.previous .env
