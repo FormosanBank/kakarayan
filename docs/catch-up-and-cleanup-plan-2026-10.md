@@ -30,6 +30,20 @@ Changes from the original plan, found during implementation:
     broke the CLDF export, so it now reads the registry.
   - Reverse lookups of common glosses hit the 10 s deadline (15.9 s to 0.03 s fixed).
 
+CI dry run 39735784416 on the GitHub runner:
+
+| Check | Result |
+| --- | --- |
+| Build | 43 min |
+| Reproducibility | Identical second build, 44 min |
+| Reconciliation | 12 min, down from 49 |
+| Contract sample | 466 requests, all 200 |
+| Benchmark | Every case within budget except the new frequent-gloss reverse lookup, at 466 ms p95 |
+
+That case now has its own 750 ms budget.
+
+Follow-up: dictionary evidence orders every attestation of a very common headword before taking 20. An early-stopping index would remove that cost; it is a read-model change for a later release.
+
 Local full-data validation of FormosanBank `d7951d1`:
 
 | Check | Result |
