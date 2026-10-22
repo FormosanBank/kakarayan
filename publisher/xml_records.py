@@ -368,7 +368,7 @@ def project_xml(path: Path, repo: Path, audio_sources: AudioSources | None = Non
 
     xml_lang = root.get(XML_LANG, "").strip().casefold()
     dialect = root.get("dialect", "").strip()
-    language = resolve_language(xml_lang, dialect)
+    language = resolve_language(repo.resolve(), xml_lang, dialect)
     text_id = record_id(
         "text",
         corpus=corpus,

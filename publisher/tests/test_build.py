@@ -123,6 +123,9 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert rights["entries"][0]["redistribution"] == "allowed"
     assert catalog["corpora"][0]["metadata_variants"]["citation"] == 1
     assert catalog["corpora"][0]["language_counts"]["lang_amis"]["sentences"] == 2
+    # Language identity comes from the source's languages.csv, so new languages need no code.
+    pazeh = next(row for row in catalog["languages"] if row["name"] == "Pazeh")
+    assert (pazeh["iso639_3"], pazeh["names"]["zh-Hant"]) == ("pzh", "巴宰語")
     amis = next(row for row in catalog["languages"] if row["name"] == "Amis")
     assert amis["counts"]["sentences"] == 2
     assert amis["dialects"] == ["Xiuguluan"]

@@ -698,6 +698,7 @@ def _build_catalog(
     generated_at: str,
     application_commit: str,
     rights: dict[str, object],
+    language_catalog: list[dict[str, object]],
 ) -> dict[str, object]:
     corpus_counts, language_counts, corpus_language_counts = _scope_counts(connection)
     rights_entries = cast(list[dict[str, object]], rights["entries"])
@@ -740,7 +741,7 @@ def _build_catalog(
                 "metadata_variants": variants,
             }
         )
-    languages = language_rows()
+    languages = language_catalog
     for language in languages:
         counts = dict(language_counts[str(language["id"])])
         language["counts"] = counts
@@ -1008,6 +1009,7 @@ def build_release(
             generated_at=generated_at,
             application_commit=kakarayan_commit,
             rights=rights,
+            language_catalog=language_rows(repo),
         )
         meta = _api_envelope(
             "meta",
