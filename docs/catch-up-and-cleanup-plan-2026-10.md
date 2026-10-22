@@ -69,7 +69,9 @@ When this plan is complete:
 - The code is smaller, with fewer encodings, less duplication, and no XLSX.
 - The frontend looks and behaves as it does now.
 
-## 3. Decisions needed
+## 3. Decisions
+
+Hunter approved all five recommendations on October 21, 2026.
 
 | # | Decision | Recommendation | Why |
 | --- | --- | --- | --- |
