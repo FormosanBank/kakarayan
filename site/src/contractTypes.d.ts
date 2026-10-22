@@ -127,7 +127,7 @@ export interface Token {
   surface: string;
   normalized: string;
   position: number;
-  word_id: string;
+  word_id: string | null;
   [k: string]: unknown;
 }
 export interface SearchForm {

@@ -87,6 +87,19 @@ def test_record_summary_then_detail(client: TestClient) -> None:
     assert text.json()["sentence_count"] == 2
 
 
+def test_detail_of_sentence_without_words(client: TestClient) -> None:
+    summary = client.get(
+        release_path(client, "concordance"),
+        params={"q": "toki rima", "language_id": "lang_amis", "match": "contains"},
+    ).json()["items"][0]
+    sentence = client.get(release_path(client, f"sentences/{summary['id']}"))
+    assert sentence.status_code == 200
+    body = sentence.json()
+    assert body["words"] == []
+    assert [token["surface"] for token in body["tokens"]] == ["toki", "rima"]
+    assert all(token["word_id"] is None for token in body["tokens"])
+
+
 def test_summary_is_bounded_without_truncating_record_detail(settings: Settings) -> None:
     complete_text = "x" * 5000
     complete_gloss = "g" * 5000

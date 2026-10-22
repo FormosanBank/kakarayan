@@ -76,7 +76,8 @@ class Token(WireModel):
     surface: str
     normalized: str
     position: int
-    word_id: str
+    # Sentences without W children are tokenized from their FORM and have no word.
+    word_id: str | None
 
 
 class SearchForm(WireModel):
