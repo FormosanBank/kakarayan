@@ -5,8 +5,10 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
+from fastapi.testclient import TestClient
 
-from api.benchmark import BenchmarkError, _case, run
+from api.benchmark import BenchmarkError, _case, check_requests, run, sample_requests
+from api.config import Settings
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -94,3 +96,24 @@ def test_benchmark_measures_cases_and_followed_detail(tmp_path) -> None:
         "sentence detail",
     ]
     assert all(case["samples"] == 2 for case in report["cases"])
+
+
+def test_contract_sample_covers_every_record_shape_and_passes(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings, client: TestClient
+) -> None:
+    release_id = client.get("/readyz").json()["release_id"]
+    requests = sample_requests(settings.database_path, release_id)
+    details = [path for path, _ in requests if "/sentences/" in path]
+    # The fixture has one sentence with W children and one without.
+    assert len(details) == 2
+    assert any(path.endswith("/dictionary") for path, _ in requests)
+    assert any(query.get("direction") == "translation" for _, query in requests)
+
+    def through_app(_base_url: str, path: str, parameters: dict[str, object]):
+        response = client.get(path, params=parameters)
+        if response.status_code != 200:
+            raise BenchmarkError(f"{response.status_code} for {path}")
+        return 1.0, response.content
+
+    monkeypatch.setattr("api.benchmark._request", through_app)
+    assert check_requests("http://test", requests) == []

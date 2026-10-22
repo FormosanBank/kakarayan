@@ -240,7 +240,7 @@ jobs:
           KAKARAYAN_EXPORT_BURST=60000 \
             uv run uvicorn api.app:app \
               --host 127.0.0.1 --port 8000 --no-access-log \
-              > "$RUNNER_TEMP/kakarayan-api.log" 2>&1 &
+              > build/kakarayan-api.log 2>&1 &
           API_PID=$!
           trap 'kill "$API_PID" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
@@ -248,7 +248,7 @@ jobs:
               break
             fi
             if ! kill -0 "$API_PID" 2>/dev/null; then
-              cat "$RUNNER_TEMP/kakarayan-api.log"
+              cat build/kakarayan-api.log
               exit 1
             fi
             sleep 1
@@ -259,7 +259,8 @@ jobs:
             --cases tests/fixtures/query-benchmark.json \
             --output build/query-benchmark.json \
             --samples 30 \
-            --network-profile "GitHub Actions loopback, full release"
+            --network-profile "GitHub Actions loopback, full release" \
+            --sample-database build/verified.sqlite
           kill "$API_PID"
           wait "$API_PID" || true
           trap - EXIT
@@ -274,6 +275,7 @@ jobs:
             build/query-benchmark.json
             build/reconciliation.json
             build/*-profile.json
+            build/kakarayan-api.log
           compression-level: 0
           retention-days: 90
           if-no-files-found: error

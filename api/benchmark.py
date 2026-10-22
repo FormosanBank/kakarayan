@@ -7,6 +7,7 @@ import gzip
 import json
 import math
 import platform
+import sqlite3
 import statistics
 import time
 import urllib.error
@@ -131,6 +132,87 @@ def _case(
     return result, first_document
 
 
+def sample_requests(
+    database: Path, release_id: str, *, per_corpus: int = 12
+) -> list[tuple[str, dict[str, object]]]:
+    """Choose real records and queries that exercise every corpus and record shape."""
+    prefix = f"/v1/releases/{urllib.parse.quote(release_id, safe='')}"
+    connection = sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True)
+    try:
+        # Spread picks across each corpus and include sentences with and without W/M
+        # children, because their detail responses take different code paths.
+        sentence_ids = [
+            row[0]
+            for row in connection.execute(
+                """
+                SELECT id FROM (
+                  SELECT id,
+                         ROW_NUMBER() OVER (PARTITION BY corpus_id, segmented ORDER BY id) AS rank,
+                         COUNT(*) OVER (PARTITION BY corpus_id, segmented) AS total
+                  FROM (
+                    SELECT s.id, t.corpus_id,
+                           EXISTS (SELECT 1 FROM words w WHERE w.parent_id = s.id) AS segmented
+                    FROM sentences s JOIN texts t ON t.id = s.parent_id
+                  )
+                ) WHERE (rank - 1) % MAX(1, total / ?) = 0
+                ORDER BY id
+                """,
+                (per_corpus // 2,),
+            )
+        ]
+        terms = connection.execute(
+            """
+            SELECT language_id, headword FROM (
+              SELECT language_id, headword, ROW_NUMBER() OVER (
+                PARTITION BY language_id ORDER BY SUM(occurrences) DESC, headword
+              ) AS rank
+              FROM dictionary_terms GROUP BY language_id, headword
+            ) WHERE rank <= 3 ORDER BY language_id, rank
+            """
+        ).fetchall()
+        reverse_terms = connection.execute(
+            """
+            SELECT language_id, xml_lang, normalized FROM (
+              SELECT language_id, xml_lang, normalized, ROW_NUMBER() OVER (
+                PARTITION BY language_id, xml_lang ORDER BY SUM(occurrences) DESC, normalized
+              ) AS rank
+              FROM reverse_dictionary_terms GROUP BY language_id, xml_lang, normalized
+            ) WHERE rank = 1 ORDER BY language_id, xml_lang
+            """
+        ).fetchall()
+    finally:
+        connection.close()
+    requests: list[tuple[str, dict[str, object]]] = [
+        (f"{prefix}/sentences/{urllib.parse.quote(identifier, safe='')}", {})
+        for identifier in sentence_ids
+    ]
+    for language_id, headword in terms:
+        query = {"q": headword, "language_id": language_id, "direction": "formosan"}
+        requests.append((f"{prefix}/dictionary", {**query, "match": "exact"}))
+        requests.append((f"{prefix}/concordance", {**query, "match": "contains"}))
+    for language_id, xml_lang, normalized in reverse_terms:
+        query = {
+            "q": normalized,
+            "language_id": language_id,
+            "direction": "translation",
+            "translation_language": xml_lang,
+        }
+        requests.append((f"{prefix}/dictionary", {**query, "match": "exact"}))
+        requests.append((f"{prefix}/concordance", {**query, "match": "contains"}))
+    return requests
+
+
+def check_requests(base_url: str, requests: list[tuple[str, dict[str, object]]]) -> list[str]:
+    """Return the failures among sampled requests; any non-200 is a contract break."""
+    failures = []
+    for path, parameters in requests:
+        try:
+            _request(base_url, path, parameters)
+        except BenchmarkError as error:
+            failures.append(str(error)[:500])
+    return failures
+
+
 def run(
     base_url: str,
     cases_path: Path,
@@ -138,6 +220,7 @@ def run(
     samples: int,
     warmups: int,
     network_profile: str,
+    sample_database: Path | None = None,
 ) -> dict[str, Any]:
     if samples < 2 or warmups < 0:
         raise BenchmarkError("Samples must be at least two and warmups cannot be negative")
@@ -153,6 +236,8 @@ def run(
     cases = specification.get("cases") if isinstance(specification, dict) else None
     if not isinstance(cases, list) or not cases:
         raise BenchmarkError("The benchmark specification has no cases")
+    sampled = sample_requests(sample_database, release_id) if sample_database else []
+    sample_failures = check_requests(base_url, sampled)
 
     results = []
     documents: dict[str, dict[str, Any]] = {}
@@ -189,7 +274,8 @@ def run(
         "runtime": {"python": platform.python_version(), "platform": platform.platform()},
         "samples_per_case": samples,
         "warmups_per_case": warmups,
-        "passed": all(result["passed"] for result in results),
+        "passed": not sample_failures and all(result["passed"] for result in results),
+        "contract_sample": {"requests": len(sampled), "failures": sample_failures[:50]},
         "cases": results,
     }
 
@@ -202,6 +288,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--samples", type=int, default=20)
     parser.add_argument("--warmups", type=int, default=2)
     parser.add_argument("--network-profile", default="local-loopback")
+    parser.add_argument(
+        "--sample-database",
+        type=Path,
+        help="Release SQLite used to choose real records that must all return 200",
+    )
     args = parser.parse_args(argv)
     report = run(
         args.base_url,
@@ -209,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
         samples=args.samples,
         warmups=args.warmups,
         network_profile=args.network_profile,
+        sample_database=args.sample_database,
     )
     encoded = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
