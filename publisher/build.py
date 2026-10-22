@@ -613,6 +613,16 @@ def _add_summary_cache(connection: sqlite3.Connection) -> None:
     )
 
 
+def _corpus_licenses(connection: sqlite3.Connection) -> dict[str, list[str]]:
+    licenses: dict[str, list[str]] = {}
+    for corpus, value in connection.execute(
+        "SELECT DISTINCT substr(source_path, 9, instr(substr(source_path, 9), '/') - 1), "
+        "copyright FROM texts WHERE copyright <> '' ORDER BY 1, 2"
+    ):
+        licenses.setdefault(corpus, []).append(value)
+    return licenses
+
+
 def _validate_sqlite(connection: sqlite3.Connection) -> None:
     result = connection.execute("PRAGMA integrity_check").fetchone()
     if result != ("ok",):
@@ -955,7 +965,6 @@ def build_release(
     xml_paths = list(discover_xml(repo))
     audio_sources = load_audio_sources(repo)
     corpus_names = sorted({path.relative_to(repo).parts[1] for path in xml_paths})
-    rights = build_rights_catalog(corpus_names, overrides_path=rights_overrides)
     models = model_catalog or configured_model_catalog(generated_at)
     models = {**models, "generated_at": generated_at}
     validate_document(models, schema_dir / "model-catalog.schema.json")
@@ -1006,6 +1015,11 @@ def build_release(
         _add_summary_cache(connection)
         connection.commit()
         profile.mark("summary_materialization")
+        rights = build_rights_catalog(
+            corpus_names,
+            licenses=_corpus_licenses(connection),
+            overrides_path=rights_overrides,
+        )
         catalog = _build_catalog(
             connection,
             source=source,

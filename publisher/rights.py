@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from publisher.identifiers import dimension_id
@@ -33,13 +34,15 @@ def _load_overrides(path: Path | None) -> dict[str, dict[str, object]]:
 def build_rights_catalog(
     corpus_names: list[str],
     *,
+    licenses: Mapping[str, Sequence[str]],
     overrides_path: Path | None = None,
 ) -> dict[str, object]:
     """Build one explicit entry per corpus in the validated public source checkout.
 
     Inclusion in the canonical public FormosanBank repository is the project-level approval
-    for Kakarayan's noncommercial redistribution profile. An explicit corpus override may
-    still encode a stricter source or community requirement.
+    for Kakarayan's noncommercial redistribution. The license is the corpus's own, read from
+    the XML root `copyright` values. An explicit corpus override may still encode a
+    stricter source or community requirement.
     """
     overrides = _load_overrides(overrides_path)
     entries: list[dict[str, object]] = []
@@ -53,7 +56,7 @@ def build_rights_catalog(
                 "Cite FormosanBank and every corpus-specific or upstream source supplied "
                 "with the record."
             ),
-            "license_expression": "CC-BY-NC-4.0",
+            "license_expression": "; ".join(licenses.get(corpus, ())) or None,
             "notes": (
                 "Approved for Kakarayan's noncommercial public distribution because the "
                 "corpus is included in the canonical public FormosanBank repository. "

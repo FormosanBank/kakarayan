@@ -118,6 +118,10 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     assert catalog["source"]["commit"] == first.source.commit
     assert catalog["corpora"][0]["name"] == "TestCorpus"
     assert catalog["corpora"][0]["rights_id"] == "rights_testcorpus"
+    rights = json.loads((first.output / "rights.json").read_text(encoding="utf-8"))
+    # The license is the corpus's own XML root copyright value, not a blanket default.
+    assert rights["entries"][0]["license_expression"] == "Synthetic fixture"
+    assert rights["entries"][0]["redistribution"] == "allowed"
     assert catalog["corpora"][0]["metadata_variants"]["citation"] == 1
     assert catalog["corpora"][0]["language_counts"]["lang_amis"]["sentences"] == 2
     amis = next(row for row in catalog["languages"] if row["name"] == "Amis")
