@@ -17,8 +17,9 @@ It obtains and renews the TLS certificate and forwards to FastAPI over Docker's 
 network. The API port is bound to loopback.
 
 Releases are deployed by the **Release** or **Deploy the query API** workflows
-([publication.md](publication.md)), which run `deploy/lightsail/deploy.sh` on the host
-through a restricted SSH key. This document covers host setup and operations.
+([publication.md](publication.md)). They run `deploy/lightsail/deploy.sh`, installed on the
+host as `~ubuntu/kakarayan-deploy`, through a restricted SSH key. This document covers host
+setup and operations.
 
 ## Host layout
 
@@ -60,18 +61,23 @@ by 10001.
 
 ## Deploy key
 
-GitHub Actions deploys with a dedicated key that can only run `deploy.sh`:
+GitHub Actions deploys with a dedicated key that can only run the deploy script:
 
 ```bash
 ssh-keygen -t ed25519 -N '' -C kakarayan-deploy -f kakarayan-deploy
 ```
 
-On the host, append one line to `~/.ssh/authorized_keys`. Replace `PUBLIC_KEY` with the
-contents of `kakarayan-deploy.pub`:
+On the host, install the script from a pinned commit, then append one line to
+`~/.ssh/authorized_keys`. Replace `COMMIT` and `PUBLIC_KEY` (the contents of
+`kakarayan-deploy.pub`):
 
-```text
-restrict,command="/opt/kakarayan/deploy/lightsail/deploy.sh" PUBLIC_KEY
+```bash
+curl -fsSL https://raw.githubusercontent.com/FormosanBank/kakarayan/COMMIT/deploy/lightsail/deploy.sh \
+  -o ~/kakarayan-deploy && chmod 755 ~/kakarayan-deploy
+echo 'restrict,command="/home/ubuntu/kakarayan-deploy" PUBLIC_KEY' >> ~/.ssh/authorized_keys
 ```
+
+Every successful deploy replaces `~/kakarayan-deploy` with the deployed commit's copy.
 
 `restrict` disables shells, PTYs, forwarding, and agent use for that key. Any command sent
 with it is passed to `deploy.sh`. The script accepts only `status` or
@@ -100,8 +106,8 @@ If any step after the first change fails, it restores the previous checkout, `.e
 generation, and containers. The same command works from an SSH session on the host:
 
 ```bash
-/opt/kakarayan/deploy/lightsail/deploy.sh deploy FULL_COMMIT RELEASE_ID < api-image.tar.gz
-/opt/kakarayan/deploy/lightsail/deploy.sh status
+~/kakarayan-deploy deploy FULL_COMMIT RELEASE_ID < api-image.tar.gz
+~/kakarayan-deploy status
 ```
 
 The image is read from stdin only when it is not already loaded. Activation needs free disk
@@ -127,7 +133,7 @@ docker image rm kakarayan-api:lightsail
 
 ```bash
 cd /opt/kakarayan/deploy/lightsail
-./deploy.sh status
+~/kakarayan-deploy status
 docker compose logs --tail=100 api caddy
 docker compose logs --no-color --no-log-prefix --since 24h api |
   docker compose exec -T api .venv/bin/python -m api.log_summary
