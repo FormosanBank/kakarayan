@@ -66,7 +66,7 @@ def missing_assets(remote: dict, expected: dict[str, tuple[int, str]]) -> list[s
     return sorted(set(expected) - set(actual))
 
 
-def publish_draft(directory: Path, repository: str, commit: str) -> None:
+def publish_release(directory: Path, repository: str, commit: str) -> None:
     require_main_ci(repository, commit)
     manifest_path = directory / "release-manifest.json"
     manifest = json.loads(manifest_path.read_text())
@@ -129,7 +129,7 @@ def publish_draft(directory: Path, repository: str, commit: str) -> None:
             f"FormosanBank data {manifest['release_id']}",
             "--notes",
             f"Immutable public data from FormosanBank {manifest['source']['commit']}; "
-            f"publisher {commit}. Requires maintainer review before publication.",
+            f"publisher {commit}.",
         )
         remote = api(f"repos/{repository}/releases/tags/{tag}")
     if not remote["draft"] or remote.get("prerelease") or remote["target_commitish"] != commit:
@@ -142,7 +142,9 @@ def publish_draft(directory: Path, repository: str, commit: str) -> None:
     remote = api(f"repos/{repository}/releases/{remote['id']}")
     if missing_assets(remote, expected):
         raise ValueError("Draft upload is incomplete")
-    print(f"Verified {len(expected)} immutable draft assets for {tag}")
+    # Every asset is verified against the manifest, so the draft can become immutable.
+    gh("release", "edit", tag, "--repo", repository, "--draft=false", "--latest")
+    print(f"Published {tag} with {len(expected)} verified assets")
 
 
 def main() -> None:
@@ -152,7 +154,7 @@ def main() -> None:
     parser.add_argument("--release", type=Path)
     args = parser.parse_args()
     if args.release:
-        publish_draft(args.release, args.repository, args.commit)
+        publish_release(args.release, args.repository, args.commit)
     else:
         print(require_main_ci(args.repository, args.commit))
 

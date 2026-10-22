@@ -4,7 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       release_id:
-        description: Approved published data release ID already active on the API
+        description: Published data release ID already active on the API
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      release_id:
         required: true
         type: string
 

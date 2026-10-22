@@ -9,7 +9,9 @@ from publisher.github_release import missing_assets, require_main_ci
 
 
 @pytest.mark.parametrize("wrong_tag", [False, True])
-def test_draft_resume_uploads_only_missing_identical_assets(tmp_path, monkeypatch, wrong_tag):
+def test_resume_uploads_only_missing_identical_assets_then_publishes(
+    tmp_path, monkeypatch, wrong_tag
+):
     from publisher import github_release as publication
 
     directory = tmp_path / "release"
@@ -38,7 +40,7 @@ def test_draft_resume_uploads_only_missing_identical_assets(tmp_path, monkeypatc
         "target_commitish": commit,
         "assets": [],
     }
-    calls, created = [], []
+    calls, created, published = [], [], []
 
     def api(path, **_kwargs):
         if "/matching-refs/" in path:
@@ -53,7 +55,10 @@ def test_draft_resume_uploads_only_missing_identical_assets(tmp_path, monkeypatc
 
     def gh(*arguments):
         nonlocal fail_once
-        if arguments[1] == "create":
+        if arguments[1] == "edit":
+            published.append(arguments)
+            remote["draft"] = False
+        elif arguments[1] == "create":
             created.append(arguments)
             assert arguments[arguments.index("--target") + 1] == commit
         elif arguments[1] == "upload":
@@ -77,18 +82,19 @@ def test_draft_resume_uploads_only_missing_identical_assets(tmp_path, monkeypatc
     monkeypatch.setattr(publication, "gh", gh)
     if wrong_tag:
         with pytest.raises(ValueError, match="another commit"):
-            publication.publish_draft(directory, "FormosanBank/kakarayan", commit)
+            publication.publish_release(directory, "FormosanBank/kakarayan", commit)
         assert not calls and not created
         return
     with pytest.raises(subprocess.CalledProcessError):
-        publication.publish_draft(directory, "FormosanBank/kakarayan", commit)
+        publication.publish_release(directory, "FormosanBank/kakarayan", commit)
     assert calls[0] == "release-manifest.json"
-    publication.publish_draft(directory, "FormosanBank/kakarayan", commit)
+    publication.publish_release(directory, "FormosanBank/kakarayan", commit)
     assert len(created) == 1
     assert sorted(calls) == ["SHA256SUMS", "payload.zip", "release-manifest.json"]
-    remote["draft"] = False
+    assert [call[3:5] for call in published] == [("--repo", "FormosanBank/kakarayan")]
+    assert "--draft=false" in published[0]
     with pytest.raises(ValueError, match="Only a draft"):
-        publication.publish_draft(directory, "FormosanBank/kakarayan", commit)
+        publication.publish_release(directory, "FormosanBank/kakarayan", commit)
     assert len(calls) == 3
 
 

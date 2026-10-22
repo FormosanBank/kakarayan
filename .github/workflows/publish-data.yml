@@ -1,4 +1,4 @@
-name: Build and publish a data release
+name: Release
 
 on:
   workflow_dispatch:
@@ -9,7 +9,7 @@ on:
         default: main
         type: string
       dry_run:
-        description: Build and validate without creating a GitHub release
+        description: Build and validate without publishing or deploying
         required: true
         default: true
         type: boolean
@@ -300,7 +300,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Create a draft GitHub data release
+    name: Publish the data release
     if: ${{ !inputs.dry_run }}
     needs:
       - prepare
@@ -351,8 +351,36 @@ jobs:
             --require-publishable-scope release-core \
             --require-publishable-scope prepared-download
 
-      - name: Upload or resume the immutable draft
+      - name: Upload, verify, and publish the release
         run: |
           uv run python -m publisher.github_release \
             --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
             --release build/data-release
+
+  deploy-api:
+    name: Deploy the query API
+    if: ${{ !inputs.dry_run }}
+    needs:
+      - build
+      - publish
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/deploy-api.yml
+    with:
+      release_id: ${{ needs.build.outputs.release_id }}
+    secrets: inherit
+
+  deploy-pages:
+    name: Deploy GitHub Pages
+    needs:
+      - build
+      - deploy-api
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/deploy-pages.yml
+    with:
+      release_id: ${{ needs.build.outputs.release_id }}
