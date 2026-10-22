@@ -68,10 +68,8 @@ assets are uploaded. Published releases, differing identities, and unverifiable 
 are rejected without overwriting anything.
 
 `build-profile.json` and `reconciliation-profile.json` record stage times, process peak RSS,
-and sizes outside the immutable release. Full-row semantic digests compare SQLite, CSV,
-TSV, flat JSONL, and Parquet; XLSX compares counts and up to 32 evenly spaced records per
-table with its documented escaping/cell limits. Hierarchical counts account for excluded
-text-owned tiers. A transferred release is fully verified again in the publish job.
+and sizes outside the immutable release. Full-row semantic digests compare SQLite, CSV, and
+Parquet. Hierarchical counts account for excluded text-owned tiers. A transferred release is fully verified again in the publish job.
 
 Inspect the draft before publication:
 

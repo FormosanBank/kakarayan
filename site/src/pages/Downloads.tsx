@@ -34,15 +34,12 @@ interface DownloadsCatalog {
 const CURATED_DOWNLOAD_PATHS = [
   "formosanbank.sqlite.gz",
   "prepared/csv-tables.zip",
-  "prepared/flat-jsonl-tables.zip",
   "prepared/hierarchical-jsonl.zip",
   "prepared/formosanbank-cldf.zip",
-  "prepared/formosanbank.xlsx",
   "prepared/metadata-and-audio.zip",
   "prepared/parquet-tables.zip",
   "prepared/text-exports.zip",
   "prepared/time-aligned.zip",
-  "prepared/tsv-tables.zip",
 ] as const;
 
 const curatedOrder = new Map<string, number>(
@@ -113,8 +110,6 @@ export function Downloads({data}: {data: AppData}) {
     parquet: tx("Parquet tables", "Parquet 表格"),
     sqlite: tx("SQLite database", "SQLite 資料庫"),
     text: tx("plain-text exports", "純文字匯出"),
-    tsv: tx("TSV tables", "TSV 表格"),
-    xlsx: tx("Excel workbook", "Excel 活頁簿"),
     xml: tx("canonical XML", "權威 XML"),
   };
   const tierNames: Record<string, string> = {
@@ -132,7 +127,6 @@ export function Downloads({data}: {data: AppData}) {
   };
 
   function localizedArtifactTitle(artifact: Artifact): string {
-    if (artifact.path === "prepared/flat-jsonl-tables.zip") return tx("Flat table JSONL", "平面表格 JSONL");
     if (artifact.path === "prepared/hierarchical-jsonl.zip") return tx("Nested sentence JSONL", "巢狀句子 JSONL");
     const formatName = formatNames[artifact.format] ?? artifact.format.toUpperCase();
     return formatName;

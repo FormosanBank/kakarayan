@@ -14,7 +14,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from jsonschema import ValidationError
-from openpyxl import load_workbook
 
 from publisher import PUBLIC_DOWNLOAD_PATHS
 from publisher.build import BuildError, Source, _release_id, build_release
@@ -155,13 +154,6 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
 
     with zipfile.ZipFile(first.output / "prepared" / "parquet-tables.zip") as archive:
         assert pq.read_table(pa.BufferReader(archive.read("tokens.parquet"))).num_rows == 4
-    workbook = load_workbook(
-        first.output / "prepared" / "formosanbank.xlsx",
-        read_only=True,
-    )
-    assert "README" in workbook.sheetnames
-    assert "RIGHTS" in workbook.sheetnames
-    workbook.close()
     canonical = next((first.output / "prepared" / "canonical").glob("*.zip"))
     with zipfile.ZipFile(canonical) as archive:
         source_path = "Corpora/TestCorpus/XML/fixture.xml"
@@ -318,7 +310,7 @@ def test_database_can_be_packaged_for_github_releases(
     assert not (release.output / "tables").exists()
     asset_names = [item["asset_name"] for item in manifest["artifacts"]]
     assert len(asset_names) == len(set(asset_names))
-    assert len(asset_names) == 12
+    assert len(asset_names) == 9
     assert not (release.output / "prepared" / "canonical").exists()
     assert not (release.output / "prepared" / "jsonl").exists()
     with zipfile.ZipFile(release.output / "prepared" / "hierarchical-jsonl.zip") as archive:
