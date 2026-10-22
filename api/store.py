@@ -103,6 +103,20 @@ class DatasetStream:
     rows: Iterator[dict[str, Any]]
 
 
+@dataclass(frozen=True)
+class SearchScope:
+    """The records a search or dataset selects, before fields, limits, and cursors."""
+
+    language_id: str
+    corpus_id: str | None = None
+    dialect: str | None = None
+    q: str | None = None
+    direction: SearchDirection = "formosan"
+    translation_language: str | None = None
+    match: MatchMode = "exact"
+    requirements: tuple[TierRequirement, ...] = ()
+
+
 def _bounded_text(value: object, maximum: int) -> tuple[str, bool]:
     text = str(value)
     if len(text) <= maximum:
@@ -373,38 +387,30 @@ class CorpusStore:
             parameters.append(dialect)
         return clauses, parameters
 
-    def _candidate_sentences(
-        self,
-        *,
-        normalized: str,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        direction: SearchDirection,
-        translation_language: str | None,
-        match: MatchMode,
-    ) -> tuple[str, tuple[object, ...]]:
+    @staticmethod
+    def _candidate_sentences(normalized: str, scope: SearchScope) -> tuple[str, tuple[object, ...]]:
+        direction = scope.direction
         table = (
             "formosan_sentence_terms" if direction == "formosan" else "translation_sentence_terms"
         )
         term_clauses = ["term.language_id = ?"]
-        term_parameters: list[object] = [language_id]
-        if direction == "translation" and translation_language:
+        term_parameters: list[object] = [scope.language_id]
+        if direction == "translation" and scope.translation_language:
             term_clauses.append("term.xml_lang = ?")
-            term_parameters.append(translation_language)
-        if corpus_id:
+            term_parameters.append(scope.translation_language)
+        if scope.corpus_id:
             term_clauses.append("t.corpus_id = ?")
-            term_parameters.append(corpus_id)
-        if dialect:
+            term_parameters.append(scope.corpus_id)
+        if scope.dialect:
             term_clauses.append("t.dialect = ?")
-            term_parameters.append(dialect)
+            term_parameters.append(scope.dialect)
         match_parameters: tuple[str, ...]
-        if match == "contains" and len(normalized) < 3:
+        if scope.match == "contains" and len(normalized) < 3:
             term_clause = "term.normalized LIKE ? ESCAPE '\\'"
             match_parameters = (f"%{_like(normalized)}%",)
         else:
             term_clause, match_parameters = _predicate(
-                "term.normalized", normalized, match, direction
+                "term.normalized", normalized, scope.match, direction
             )
         term_clauses.append(term_clause)
         term_parameters.extend(match_parameters)
@@ -420,27 +426,20 @@ class CorpusStore:
         )
 
     def _candidate_tier_records(
-        self,
-        *,
-        normalized: str,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        direction: SearchDirection,
-        translation_language: str | None,
-        match: MatchMode,
-        record_level: Literal["word", "morpheme"],
+        self, normalized: str, scope: SearchScope, record_level: RecordLevel
     ) -> tuple[str, tuple[object, ...]]:
-        table = "forms" if direction == "formosan" else "translations"
+        table = "forms" if scope.direction == "formosan" else "translations"
         predicate, predicate_parameters = _predicate(
-            "term.normalized", normalized, match, direction
+            "term.normalized", normalized, scope.match, scope.direction
         )
         clauses = [f"term.owner_type = '{record_level}'", predicate]
         parameters: list[object] = list(predicate_parameters)
-        if direction == "translation" and translation_language:
+        if scope.direction == "translation" and scope.translation_language:
             clauses.append("term.xml_lang = ?")
-            parameters.append(translation_language)
-        scope_clauses, scope_parameters = self._scope(language_id, corpus_id, dialect)
+            parameters.append(scope.translation_language)
+        scope_clauses, scope_parameters = self._scope(
+            scope.language_id, scope.corpus_id, scope.dialect
+        )
         clauses.extend(scope_clauses)
         parameters.extend(scope_parameters)
         return (
@@ -898,13 +897,15 @@ class CorpusStore:
         )
         position = _cursor_position(cursor, fingerprint, 3)
         candidates, candidate_parameters = self._candidate_sentences(
-            normalized=normalized,
-            language_id=language_id,
-            corpus_id=corpus_id,
-            dialect=dialect,
-            direction=direction,
-            translation_language=translation_language,
-            match=match,
+            normalized,
+            SearchScope(
+                language_id=language_id,
+                corpus_id=corpus_id,
+                dialect=dialect,
+                direction=direction,
+                translation_language=translation_language,
+                match=match,
+            ),
         )
         clauses: list[str] = []
         parameters: list[object] = []
@@ -1154,71 +1155,36 @@ class CorpusStore:
         return {"release_id": self.release_id, **result.model_dump()}
 
     def _dataset_clauses(
-        self,
-        *,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        q: str | None,
-        direction: SearchDirection,
-        translation_language: str | None,
-        match: MatchMode,
-        requirements: Sequence[TierRequirement],
-        record_level: RecordLevel,
+        self, scope: SearchScope, record_level: RecordLevel
     ) -> tuple[str | None, list[str], list[object]]:
-        normalized = (
-            normalize_surface(q or "") if direction == "formosan" else normalize_text(q or "")
-        )
-        if q is not None and not normalized:
+        normalize = normalize_surface if scope.direction == "formosan" else normalize_text
+        normalized = normalize(scope.q or "")
+        if scope.q is not None and not normalized:
             raise ApiError(422, "invalid_parameter", "The query is empty after normalization")
         if normalized:
-            if record_level == "sentence":
-                candidates, candidate_parameters = self._candidate_sentences(
-                    normalized=normalized,
-                    language_id=language_id,
-                    corpus_id=corpus_id,
-                    dialect=dialect,
-                    direction=direction,
-                    translation_language=translation_language,
-                    match=match,
-                )
-            else:
-                candidates, candidate_parameters = self._candidate_tier_records(
-                    normalized=normalized,
-                    language_id=language_id,
-                    corpus_id=corpus_id,
-                    dialect=dialect,
-                    direction=direction,
-                    translation_language=translation_language,
-                    match=match,
-                    record_level=record_level,
-                )
+            candidates, candidate_parameters = (
+                self._candidate_sentences(normalized, scope)
+                if record_level == "sentence"
+                else self._candidate_tier_records(normalized, scope, record_level)
+            )
             clauses: list[str] = []
             parameters = list(candidate_parameters)
         else:
             candidates = None
-            clauses, parameters = self._scope(language_id, corpus_id, dialect)
-        self._tier_requirements(clauses, requirements)
+            clauses, parameters = self._scope(scope.language_id, scope.corpus_id, scope.dialect)
+        self._tier_requirements(clauses, scope.requirements)
         return candidates, clauses, parameters
 
     def dataset_query(
         self,
-        *,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        q: str | None,
-        direction: SearchDirection,
-        translation_language: str | None,
-        match: MatchMode,
-        requirements: Sequence[TierRequirement],
+        scope: SearchScope,
         fields: Sequence[DatasetField],
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
     ) -> DatasetQuery:
-        self.language(language_id)
-        if corpus_id:
-            self.corpus(corpus_id)
+        self.language(scope.language_id)
+        if scope.corpus_id:
+            self.corpus(scope.corpus_id)
         supported = allowed_dataset_fields(record_level)
         if not fields or any(field not in supported for field in fields):
             raise ApiError(
@@ -1228,17 +1194,7 @@ class CorpusStore:
             )
         if len(fields) != len(set(fields)):
             raise ApiError(422, "invalid_parameter", "Choose each dataset field once")
-        candidates, clauses, parameters = self._dataset_clauses(
-            language_id=language_id,
-            corpus_id=corpus_id,
-            dialect=dialect,
-            q=q,
-            direction=direction,
-            translation_language=translation_language,
-            match=match,
-            requirements=requirements,
-            record_level=record_level,
-        )
+        candidates, clauses, parameters = self._dataset_clauses(scope, record_level)
         if complete_fields:
             clauses.extend(dataset_completeness_clauses(record_level, fields))
         where = " AND ".join(clauses) if clauses else "1 = 1"
@@ -1295,35 +1251,16 @@ class CorpusStore:
 
     def stream_dataset(
         self,
-        *,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        q: str | None,
-        direction: SearchDirection,
-        translation_language: str | None,
-        match: MatchMode,
-        requirements: Sequence[TierRequirement],
+        scope: SearchScope,
         fields: Sequence[DatasetField],
+        *,
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
         max_rows: int,
         schema_rows: int | None = None,
     ) -> DatasetStream:
         budget = _ACTIVE_QUERY_BUDGET.get()
-        query = self.dataset_query(
-            language_id=language_id,
-            corpus_id=corpus_id,
-            dialect=dialect,
-            q=q,
-            direction=direction,
-            translation_language=translation_language,
-            match=match,
-            requirements=requirements,
-            fields=fields,
-            record_level=record_level,
-            complete_fields=complete_fields,
-        )
+        query = self.dataset_query(scope, fields, record_level, complete_fields)
         with self.connect(budget) as connection:
             estimated_rows = int(
                 connection.execute(
@@ -1363,31 +1300,17 @@ class CorpusStore:
 
     def dataset(
         self,
-        *,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        q: str | None,
-        direction: SearchDirection,
-        translation_language: str | None,
-        match: MatchMode,
-        requirements: Sequence[TierRequirement],
+        scope: SearchScope,
         fields: Sequence[DatasetField],
+        *,
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
         max_rows: int,
         selection_rows: int | None = None,
     ) -> dict[str, Any]:
         stream = self.stream_dataset(
-            language_id=language_id,
-            corpus_id=corpus_id,
-            dialect=dialect,
-            q=q,
-            direction=direction,
-            translation_language=translation_language,
-            match=match,
-            requirements=requirements,
-            fields=fields,
+            scope,
+            fields,
             record_level=record_level,
             complete_fields=complete_fields,
             max_rows=min(max_rows, selection_rows or max_rows),

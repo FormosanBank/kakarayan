@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, Path, Query, Request, Response
+from fastapi import Depends, FastAPI, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -50,6 +50,7 @@ from api.store import (
     QueryBudget,
     QueryWorkload,
     SearchDirection,
+    SearchScope,
     TierRequirement,
     use_query_budget,
 )
@@ -80,6 +81,37 @@ def _cache(response: Response) -> None:
 
 def _record(event: str, **values: object) -> None:
     LOGGER.info(json.dumps({"event": event, **values}, separators=(",", ":"), sort_keys=True))
+
+
+def dataset_scope(
+    language_id: LanguageId,
+    corpus_id: OptionalCorpus = None,
+    dialect: OptionalDialect = None,
+    q: OptionalQueryText = None,
+    direction: SearchDirection = "formosan",
+    translation_language: Annotated[str | None, Query(max_length=32)] = None,
+    match: MatchMode = "exact",
+    requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+) -> SearchScope:
+    return SearchScope(
+        language_id=language_id,
+        corpus_id=corpus_id,
+        dialect=dialect,
+        q=q,
+        direction=direction,
+        translation_language=translation_language,
+        match=match,
+        requirements=tuple(requirement or ()),
+    )
+
+
+Scope = Annotated[SearchScope, Depends(dataset_scope)]
+
+
+def _ready_for_export(release_id: str) -> JSONResponse:
+    return JSONResponse(
+        {"release_id": release_id, "status": "ready"}, headers={"Cache-Control": "no-store"}
+    )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -513,39 +545,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             workload="analytical",
         )
 
-    def dataset_result(
-        request: Request,
-        release_id: str,
-        language_id: str,
-        corpus_id: str | None,
-        dialect: str | None,
-        q: str | None,
-        direction: SearchDirection,
-        translation_language: str | None,
-        match: MatchMode,
-        requirement: list[TierRequirement] | None,
-        field: list[DatasetField] | None,
-        record_level: RecordLevel,
-        complete_fields: bool,
-        max_rows: int,
-        selection_rows: int,
-    ) -> dict:
-        return release_store(request, release_id).dataset(
-            language_id=language_id,
-            corpus_id=corpus_id,
-            dialect=dialect,
-            q=q,
-            direction=direction,
-            translation_language=translation_language,
-            match=match,
-            requirements=requirement or (),
-            fields=field or default_dataset_fields(record_level),
-            record_level=record_level,
-            complete_fields=complete_fields,
-            max_rows=max_rows,
-            selection_rows=selection_rows,
-        )
-
     @app.get(
         "/v1/releases/{release_id}/datasets/preview",
         tags=["datasets"],
@@ -555,14 +554,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request,
         response: Response,
         release_id: ReleaseId,
-        language_id: LanguageId,
-        corpus_id: OptionalCorpus = None,
-        dialect: OptionalDialect = None,
-        q: OptionalQueryText = None,
-        direction: SearchDirection = "formosan",
-        translation_language: Annotated[str | None, Query(max_length=32)] = None,
-        match: MatchMode = "exact",
-        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        scope: Scope,
         field: Annotated[list[DatasetField] | None, Query()] = None,
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
@@ -570,24 +562,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         selection_rows: Annotated[int, Query(ge=1, le=DATASET_EXPORT_MAX_ROWS)] = 1000,
     ) -> dict:
         _cache(response)
+        current = release_store(request, release_id)
         return await run_query(
             request,
-            lambda: dataset_result(
-                request,
-                release_id,
-                language_id,
-                corpus_id,
-                dialect,
-                q,
-                direction,
-                translation_language,
-                match,
-                requirement,
-                field,
-                record_level,
-                complete_fields,
-                max_rows,
-                selection_rows,
+            lambda: current.dataset(
+                scope,
+                field or default_dataset_fields(record_level),
+                record_level=record_level,
+                complete_fields=complete_fields,
+                max_rows=max_rows,
+                selection_rows=selection_rows,
             ),
             timeout_seconds=configured.dataset_preview_timeout_seconds,
             workload="analytical",
@@ -601,14 +585,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def dataset_export(
         request: Request,
         release_id: ReleaseId,
-        language_id: LanguageId,
-        corpus_id: OptionalCorpus = None,
-        dialect: OptionalDialect = None,
-        q: OptionalQueryText = None,
-        direction: SearchDirection = "formosan",
-        translation_language: Annotated[str | None, Query(max_length=32)] = None,
-        match: MatchMode = "exact",
-        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        scope: Scope,
         field: Annotated[list[DatasetField] | None, Query()] = None,
         record_level: RecordLevel = "sentence",
         complete_fields: bool = False,
@@ -617,24 +594,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         preflight: bool = False,
     ) -> Response:
         current = release_store(request, release_id)
-        current.assert_export_allowed(language_id, corpus_id)
+        current.assert_export_allowed(scope.language_id, scope.corpus_id)
+        fields = field or default_dataset_fields(record_level)
         if preflight:
-            current.dataset_query(
-                language_id=language_id,
-                corpus_id=corpus_id,
-                dialect=dialect,
-                q=q,
-                direction=direction,
-                translation_language=translation_language,
-                match=match,
-                requirements=requirement or (),
-                fields=field or default_dataset_fields(record_level),
-                record_level=record_level,
-                complete_fields=complete_fields,
-            )
-            return JSONResponse(
-                {"release_id": release_id, "status": "ready"}, headers={"Cache-Control": "no-store"}
-            )
+            current.dataset_query(scope, fields, record_level, complete_fields)
+            return _ready_for_export(release_id)
         budget = QueryBudget.for_timeout(
             configured.dataset_export_timeout_seconds,
             workload="analytical",
@@ -642,15 +606,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         result = await run_query(
             request,
             lambda: current.stream_dataset(
-                language_id=language_id,
-                corpus_id=corpus_id,
-                dialect=dialect,
-                q=q,
-                direction=direction,
-                translation_language=translation_language,
-                match=match,
-                requirements=requirement or (),
-                fields=field or default_dataset_fields(record_level),
+                scope,
+                fields,
                 record_level=record_level,
                 complete_fields=complete_fields,
                 max_rows=max_rows,
@@ -685,14 +642,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def dataset_export_package(
         request: Request,
         release_id: ReleaseId,
-        language_id: LanguageId,
-        corpus_id: OptionalCorpus = None,
-        dialect: OptionalDialect = None,
-        q: OptionalQueryText = None,
-        direction: SearchDirection = "formosan",
-        translation_language: Annotated[str | None, Query(max_length=32)] = None,
-        match: MatchMode = "exact",
-        requirement: Annotated[list[TierRequirement] | None, Query()] = None,
+        scope: Scope,
         record_level: Annotated[list[RecordLevel] | None, Query()] = None,
         sentence_field: Annotated[list[DatasetField] | None, Query()] = None,
         word_field: Annotated[list[DatasetField] | None, Query()] = None,
@@ -703,33 +653,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         preflight: bool = False,
     ) -> Response:
         current = release_store(request, release_id)
-        current.assert_export_allowed(language_id, corpus_id)
+        current.assert_export_allowed(scope.language_id, scope.corpus_id)
         levels = list(dict.fromkeys(record_level or ()))
         if not levels:
             raise ApiError(422, "invalid_parameter", "Choose at least one XML record level")
-        field_map = {
+        selected = {
             "sentence": sentence_field,
             "word": word_field,
             "morpheme": morpheme_field,
         }
+        fields = {level: selected[level] or default_dataset_fields(level) for level in levels}
         if preflight:
             for level in levels:
-                current.dataset_query(
-                    language_id=language_id,
-                    corpus_id=corpus_id,
-                    dialect=dialect,
-                    q=q,
-                    direction=direction,
-                    translation_language=translation_language,
-                    match=match,
-                    requirements=requirement or (),
-                    fields=field_map[level] or default_dataset_fields(level),
-                    record_level=level,
-                    complete_fields=complete_fields,
-                )
-            return JSONResponse(
-                {"release_id": release_id, "status": "ready"}, headers={"Cache-Control": "no-store"}
-            )
+                current.dataset_query(scope, fields[level], level, complete_fields)
+            return _ready_for_export(release_id)
         budget = QueryBudget.for_timeout(
             configured.dataset_export_timeout_seconds,
             workload="analytical",
@@ -738,15 +675,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request,
             lambda: [
                 current.stream_dataset(
-                    language_id=language_id,
-                    corpus_id=corpus_id,
-                    dialect=dialect,
-                    q=q,
-                    direction=direction,
-                    translation_language=translation_language,
-                    match=match,
-                    requirements=requirement or (),
-                    fields=field_map[level] or default_dataset_fields(level),
+                    scope,
+                    fields[level],
                     record_level=level,
                     complete_fields=complete_fields,
                     max_rows=max_rows,
