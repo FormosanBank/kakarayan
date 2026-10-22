@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import gzip
 import hashlib
 import json
+import lzma
 import shutil
 import sqlite3
 import tempfile
@@ -16,6 +16,7 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
+from api.limits import DATABASE_MAX_EXPANDED_BYTES
 from api.release import REQUIRED_DATABASE_TABLES
 
 
@@ -98,14 +99,14 @@ def _verify_compressed_database(
     size = 0
     created = False
     expected_bytes = artifact.get("content_bytes", 0)
-    if not 0 < expected_bytes <= 8 * 1024**3:
+    if not 0 < expected_bytes <= DATABASE_MAX_EXPANDED_BYTES:
         raise VerificationError("Expanded SQLite size is outside the supported bound")
     if shutil.disk_usage(destination.parent).free < expected_bytes + 256 * 1024**2:
         raise VerificationError("Insufficient space to verify the SQLite release")
     try:
         with destination.open("xb") as output:
             created = True
-            with gzip.open(path, "rb") as source:
+            with lzma.open(path, "rb") as source:
                 while chunk := source.read(1024 * 1024):
                     size += len(chunk)
                     if size > expected_bytes:
@@ -209,18 +210,18 @@ def verify_release(
         raise VerificationError(f"Rights review blocks publication: {details}")
 
     database = by_path.get("formosanbank.sqlite")
-    compressed_database = by_path.get("formosanbank.sqlite.gz")
+    compressed_database = by_path.get("formosanbank.sqlite.xz")
     if database and compressed_database:
         raise VerificationError("Release contains both compressed and uncompressed SQLite")
     if compressed_database:
         if database_output is not None:
             _verify_compressed_database(
-                root / "formosanbank.sqlite.gz", compressed_database, database_output, manifest
+                root / "formosanbank.sqlite.xz", compressed_database, database_output, manifest
             )
         else:
             with tempfile.TemporaryDirectory(prefix="kakarayan-verify-") as temporary:
                 _verify_compressed_database(
-                    root / "formosanbank.sqlite.gz",
+                    root / "formosanbank.sqlite.xz",
                     compressed_database,
                     Path(temporary) / "verified.sqlite",
                     manifest,

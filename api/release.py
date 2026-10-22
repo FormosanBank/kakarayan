@@ -149,13 +149,13 @@ def load_release(settings: Settings) -> ReleaseState:
         (
             item
             for item in manifest.get("artifacts", [])
-            if item.get("path") in {"formosanbank.sqlite", "formosanbank.sqlite.gz"}
+            if item.get("path") in {"formosanbank.sqlite", "formosanbank.sqlite.xz"}
         ),
         {},
     )
     manifest_checksum = (
         artifact.get("content_sha256")
-        if artifact.get("compression") == "gzip"
+        if artifact.get("compression") == "xz"
         else artifact.get("sha256")
     )
     if configured_checksum and manifest_checksum != configured_checksum:

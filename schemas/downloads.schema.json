@@ -40,7 +40,7 @@
           "language_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
           "corpus_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
           "tiers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
-          "compression": {"enum": ["gzip"]},
+          "compression": {"enum": ["xz"]},
           "content_media_type": {"type": "string"},
           "content_bytes": {"type": "integer", "minimum": 1},
           "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}

@@ -9,7 +9,7 @@ One full publication contains three groups.
 
 ### Query read model
 
-`formosanbank.sqlite.gz` is the compressed read-only database activated by the query
+`formosanbank.sqlite.xz` is the compressed read-only database activated by the query
 service. Its manifest records both compressed and expanded sizes and SHA-256 values. It is
 not downloaded by ordinary browsers.
 

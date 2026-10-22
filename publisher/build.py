@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import gzip
 import hashlib
 import json
 import os
@@ -806,7 +805,7 @@ def _artifact(
             ".zip": "application/zip",
             ".txt": "text/plain",
             ".sql": "application/sql",
-            ".gz": "application/gzip",
+            ".xz": "application/x-xz",
         }.get(path.suffix, "application/octet-stream"),
         "bytes": path.stat().st_size,
         "sha256": digest.hexdigest(),
@@ -838,7 +837,7 @@ def _artifact_facets(
         }
     )
     name = Path(relative).name
-    if relative == "formosanbank.sqlite.gz":
+    if relative == "formosanbank.sqlite.xz":
         export_format = "sqlite"
     elif "/canonical/" in relative:
         export_format = "xml"
@@ -885,26 +884,26 @@ def _artifact_facets(
 
 
 def _compress_database(path: Path) -> tuple[Path, dict[str, object]]:
-    destination = path.with_suffix(f"{path.suffix}.gz")
+    destination = path.with_suffix(f"{path.suffix}.xz")
     temporary = destination.with_suffix(f"{destination.suffix}.tmp")
     digest = hashlib.sha256()
-    size = 0
-    with path.open("rb") as source, temporary.open("wb") as raw_output:
-        with gzip.GzipFile(
-            filename="",
-            mode="wb",
-            compresslevel=6,
-            fileobj=raw_output,
-            mtime=0,
-        ) as output:
-            while chunk := source.read(1024 * 1024):
-                digest.update(chunk)
-                size += len(chunk)
-                output.write(chunk)
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    size = path.stat().st_size
+    # Multithreaded xz splits fixed 24 MiB blocks, so the bytes do not depend on the
+    # thread count. One thread would switch xz to single-block output.
+    threads = max(2, os.cpu_count() or 2)
+    with temporary.open("wb") as output:
+        subprocess.run(
+            ["xz", "-6", f"--threads={threads}", "--block-size=24MiB", "--stdout", str(path)],
+            stdout=output,
+            check=True,
+        )
     temporary.replace(destination)
     path.unlink()
     return destination, {
-        "compression": "gzip",
+        "compression": "xz",
         "content_media_type": "application/vnd.sqlite3",
         "content_bytes": size,
         "content_sha256": digest.hexdigest(),

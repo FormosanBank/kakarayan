@@ -5,7 +5,7 @@ API_VERSION = "v1"
 APPLICATION_VERSION = "0.2.0"
 
 PUBLIC_DOWNLOAD_PATHS = (
-    "formosanbank.sqlite.gz",
+    "formosanbank.sqlite.xz",
     "prepared/csv-tables.zip",
     "prepared/hierarchical-jsonl.zip",
     "prepared/formosanbank-cldf.zip",

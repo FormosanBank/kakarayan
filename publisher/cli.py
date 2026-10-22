@@ -42,7 +42,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--compress-database",
         action="store_true",
-        help="Package SQLite as deterministic gzip for a GitHub data release",
+        help="Package SQLite as deterministic xz for a GitHub data release",
     )
     result.add_argument(
         "--release-only",

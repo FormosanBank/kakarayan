@@ -144,7 +144,7 @@ def test_fixture_release_is_valid_and_deterministic(public_repo: Path, tmp_path:
     )["data"]
     assert downloads["release_id"] == first.release_id
     assert {item["path"] for item in downloads["artifacts"]} == (
-        set(PUBLIC_DOWNLOAD_PATHS) - {"formosanbank.sqlite.gz"}
+        set(PUBLIC_DOWNLOAD_PATHS) - {"formosanbank.sqlite.xz"}
     )
     assert all(item["publishable"] for item in downloads["artifacts"])
     assert all(not item["blocked_reasons"] for item in downloads["artifacts"])
@@ -295,16 +295,16 @@ def test_database_can_be_packaged_for_github_releases(
         release_only=True,
     )
     assert not (release.output / "formosanbank.sqlite").exists()
-    compressed = release.output / "formosanbank.sqlite.gz"
-    assert compressed.read_bytes()[:2] == b"\x1f\x8b"
+    compressed = release.output / "formosanbank.sqlite.xz"
+    assert compressed.read_bytes()[:6] == b"\xfd7zXZ\x00"
     manifest = verify_release(release.output, max_artifact_bytes=2 * 1024**3)
     artifact = next(
-        item for item in manifest["artifacts"] if item["path"] == "formosanbank.sqlite.gz"
+        item for item in manifest["artifacts"] if item["path"] == "formosanbank.sqlite.xz"
     )
-    assert artifact["compression"] == "gzip"
+    assert artifact["compression"] == "xz"
     assert artifact["content_media_type"] == "application/vnd.sqlite3"
-    assert artifact["asset_name"] == "formosanbank.sqlite.gz"
-    assert artifact["download_url"].endswith(f"/data-{release.release_id}/formosanbank.sqlite.gz")
+    assert artifact["asset_name"] == "formosanbank.sqlite.xz"
+    assert artifact["download_url"].endswith(f"/data-{release.release_id}/formosanbank.sqlite.xz")
     assert not (release.output / "api").exists()
     assert (release.output / "site-metadata.zip").is_file()
     with zipfile.ZipFile(release.output / "site-metadata.zip") as archive:

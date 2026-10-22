@@ -21,7 +21,7 @@ interface Artifact {
   language_ids: string[];
   corpus_ids: string[];
   tiers: string[];
-  compression?: "gzip";
+  compression?: "xz";
   content_bytes?: number;
   content_sha256?: string;
 }
@@ -32,7 +32,7 @@ interface DownloadsCatalog {
 }
 
 const CURATED_DOWNLOAD_PATHS = [
-  "formosanbank.sqlite.gz",
+  "formosanbank.sqlite.xz",
   "prepared/csv-tables.zip",
   "prepared/hierarchical-jsonl.zip",
   "prepared/formosanbank-cldf.zip",
