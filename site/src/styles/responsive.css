@@ -145,7 +145,6 @@
   .explore-toolbar,
   .download-toolbar,
   .deck-toolbar,
-  .results-heading,
   .model-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -166,7 +165,6 @@
 
   .catalog-grid,
   .model-grid,
-  .client-grid,
   .form-grid,
   .tool-grid,
   .asr-comparison {
@@ -289,11 +287,6 @@
     overflow-x: auto;
   }
 
-  .result-export {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .dictionary-entry,
   .result-card,
   .reviewed-content article,
@@ -338,7 +331,6 @@
     border-left: 0;
   }
 
-  .builder__scope-options,
   .builder__schema dl,
   .dataset-fields,
   .builder__level-options {
@@ -346,11 +338,6 @@
   }
 
   .builder__level-columns > header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .builder__field-heading {
     align-items: flex-start;
     flex-direction: column;
   }

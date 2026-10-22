@@ -447,62 +447,6 @@
   font: 600 12px/1 var(--font-body);
 }
 
-.results-heading {
-  display: flex;
-  gap: 20px;
-  align-items: end;
-  justify-content: space-between;
-  padding: 48px 0 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.result-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 28px;
-  margin: 0;
-}
-
-.result-summary div {
-  display: grid;
-  gap: 2px;
-}
-
-.result-summary dt {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.result-summary dd {
-  margin: 0;
-  color: var(--body);
-  font-size: 13px;
-}
-
-.result-summary strong {
-  color: var(--ink);
-  font: 600 16px/1.2 var(--font-mono);
-}
-
-.result-export {
-  display: flex;
-  gap: 8px;
-  align-items: end;
-}
-
-.result-export label {
-  display: grid;
-  gap: 5px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.result-export select {
-  min-height: 36px;
-  padding-block: 6px;
-  font-size: 13px;
-}
-
 .candidate-groups,
 .result-list,
 .reviewed-content {
@@ -930,13 +874,6 @@
   font-weight: 600;
 }
 
-.builder__section-title,
-.builder__field-heading {
-  padding-top: 36px;
-  margin-top: 36px;
-  border-top: 1px solid var(--line);
-}
-
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1029,58 +966,6 @@
   font-weight: 650;
 }
 
-.builder__scope-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-
-.builder__scope-options fieldset > small {
-  display: block;
-  margin-bottom: 10px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.builder__field-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
-  padding: 3px;
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.builder__field-heading {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.builder__field-heading h2 {
-  margin: 0;
-}
-
-.builder__field-actions .text-button {
-  min-height: 30px;
-  padding: 5px 9px;
-  border-radius: 6px;
-  color: var(--muted);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.builder__field-actions .text-button:hover {
-  color: var(--ink);
-  background: var(--line);
-}
-
-.builder__field-actions .text-button[aria-pressed="true"] {
-  color: white;
-  background: var(--ink);
-}
-
 .dataset-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1137,11 +1022,6 @@
   font-size: 12px;
   font-weight: 400;
   line-height: 1.35;
-}
-
-.builder__file-title {
-  margin: 0;
-  font-size: 18px;
 }
 
 .builder__preview,
