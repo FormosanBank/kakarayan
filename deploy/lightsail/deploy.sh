@@ -15,6 +15,7 @@ main() {
   cd "$repo/deploy/lightsail"
   api=http://127.0.0.1:7860
   releases=${KAKARAYAN_RELEASES_URL:-https://github.com/FormosanBank/kakarayan/releases/download}
+  smoke=${KAKARAYAN_SMOKE_QUERY:-mama}
   read -r -a args <<< "${SSH_ORIGINAL_COMMAND:-$*}"
 
   status() {
@@ -93,9 +94,9 @@ main() {
 
   echo "running smoke queries"
   query="$api/v1/releases/$release"
-  curl -fsS --max-time 15 "$query/dictionary?q=mama&language_id=lang_amis&match=exact" > /dev/null
+  curl -fsS --max-time 15 "$query/dictionary?q=$smoke&language_id=lang_amis&match=exact" > /dev/null
   sentence=$(curl -fsS --max-time 15 \
-    "$query/concordance?q=mama&language_id=lang_amis&match=contains&limit=1" | jq -er '.items[0].id')
+    "$query/concordance?q=$smoke&language_id=lang_amis&match=contains&limit=1" | jq -er '.items[0].id')
   curl -fsS --max-time 15 "$query/sentences/$sentence" > /dev/null
 
   trap - ERR
