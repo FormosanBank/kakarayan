@@ -129,8 +129,9 @@ does not build a browser search engine or a second source projection.
 - Its immutable SQLite read model includes language-scoped Formosan sentence, translation
   sentence, and reverse-dictionary terms so lookup does not scan complete tier inventories.
 - Hugging Face model services provide optional MT and ASR.
-- The FormosanBank GitBook remains the maintained long-form documentation source embedded
-  by the Docs route.
+- The FormosanBank documentation site (`formosanbank.github.io/FormosanBank`) is the
+  maintained long-form documentation, embedded by the Docs route in English or Traditional
+  Chinese.
 
 These boundaries are independent. Model failure cannot affect corpus lookup. Query failure
 cannot remove static catalogues, prepared downloads, documentation, or local study cards.

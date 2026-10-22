@@ -2,7 +2,7 @@ import {useState} from "react";
 
 import {PageIntro, StatusBadge} from "../components/Layout";
 import {useI18n} from "../i18n";
-import {GITBOOK_CORPUS_PAGES} from "../gitbook";
+import {DOCS_CORPUS_PAGES} from "../docs";
 import {Link} from "../routing";
 import type {AppData, Corpus, Counts, Language} from "../types";
 
@@ -174,7 +174,7 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
         <Link className="button button--quiet" to={`/research?corpus=${corpus.id}&language=${searchLanguageId}`}>
           {tx("Build corpus dataset", "建立語料庫資料集")}
         </Link>
-        {GITBOOK_CORPUS_PAGES[corpus.id] && (
+        {DOCS_CORPUS_PAGES[corpus.id] && (
           <Link className="button button--quiet" to={`/docs?corpus=${corpus.id}`}>
             {tx("Read corpus docs", "閱讀語料庫文件")}
           </Link>

@@ -11,7 +11,7 @@ export default defineConfig(({mode}) => ({
     name: "download-frame-policy",
     transformIndexHtml(html) {
       const apiOrigin = new URL(loadEnv(mode, process.cwd(), "VITE_").VITE_KAKARAYAN_API_URL || "http://127.0.0.1:8000").origin;
-      return html.replace("frame-src https://ai4commsci.gitbook.io;", `frame-src 'self' https://ai4commsci.gitbook.io ${apiOrigin};`);
+      return html.replace("frame-src https://formosanbank.github.io/FormosanBank/;", `frame-src 'self' https://formosanbank.github.io/FormosanBank/ ${apiOrigin};`);
     },
   }],
   build: {
