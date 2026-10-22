@@ -1,125 +1,79 @@
 # Publication and deployment
 
-Kakarayan publishes one immutable data release, activates that exact release in the required
-query API, and then deploys the matching static site. The order is intentional:
+Kakarayan publishes one immutable data release, activates that exact release in the query
+API, and then deploys the matching static site. One workflow does all three:
 
 ```text
-FormosanBank commit -> draft data release -> published data release
-                    -> query API ready on that release
+FormosanBank commit -> build and verify -> published data release
+                    -> query API on that release (approval required)
                     -> Pages built against that API release
 ```
 
-Pages must not deploy a site that points at a missing or different query release.
+Pages never deploys a site that points at a missing or different query release.
 
 ## Repository configuration
 
-An administrator configures these once:
+Configured once by an administrator:
 
-1. Set **Settings > Pages > Build and deployment > Source** to **GitHub Actions**.
-2. Create the `data-release` and `github-pages` environments.
-3. Restrict both environments to `main` and configure the intended required reviewers.
-4. Deploy the query API on the Tokyo Lightsail host using [lightsail.md](lightsail.md).
-5. After the selected API is ready, set repository variable `KAKARAYAN_API_URL` to its
-   public HTTPS base URL.
-6. Enable the dependency graph when an administrator is available. It improves dependency
-   review but is not a runtime deployment requirement.
-
-The software license must remain present as `LICENSE` or `LICENSE.md`. Environment
-reviewers are repository settings, not supplied by these workflow files. An administrator
-must verify them; a branch restriction alone is not a human approval gate.
+1. **Settings > Pages > Source** is **GitHub Actions**.
+2. Environments `data-release` and `github-pages` are limited to `main`.
+3. Environment `production` is limited to `main`, requires a maintainer's approval, and
+   holds two secrets:
+   - `LIGHTSAIL_DEPLOY_KEY`: the private half of the restricted deploy key
+     ([lightsail.md](lightsail.md#deploy-key)).
+   - `LIGHTSAIL_KNOWN_HOSTS`: the host's pinned SSH host key line.
+4. Repository variables:
+   - `KAKARAYAN_API_URL`: the API's public HTTPS base URL, no trailing slash.
+   - `LIGHTSAIL_HOST`: the host's static IP.
+5. The software license stays present as `LICENSE.md`.
 
 ## Pull request checks
 
 `.github/workflows/ci.yml` runs:
-
-- Python formatting, lint, typing, API and publisher tests, and dependency audit;
-- an API Docker image build and fixture readiness test, retained by exact commit after main CI;
+- Python formatting, lint, typing, tests, and dependency audit;
+- an API image build and fixture readiness test;
 - frontend audit, lint, typing, unit tests, production build, and site verification;
 - one Chromium contract and accessibility journey;
-- pull-request dependency review when repository metadata is available.
+- dependency review.
 
-The full Chromium, Firefox, WebKit, and mobile matrix runs on the scheduled check rather
-than duplicating platform-neutral routes on every pull request. Full corpus publication and
-performance evidence belong to release validation, not ordinary PR CI.
+On `main` it keeps the tested API image as an artifact for 90 days. The scheduled weekly run
+adds Firefox, WebKit, mobile, and the constrained performance profile.
 
-## Build and publish a data release
+## Release
 
-Dispatch **Build and publish a data release** on `main` with:
+Dispatch **Release** on `main` with:
 
-- `source_ref`: the exact intended FormosanBank ref or 40-character commit;
-- `dry_run: true` for a validation-only build, or `false` to prepare a draft release.
-- `verify_determinism: true` only for publisher or schema changes that require a second
-  complete build; leave it `false` for routine releases.
-
-The workflow resolves the source ref once, captures one model catalogue, parses the source
-once, and builds one complete release. It verifies schemas, SQLite, checksums, artifact
-inventory, source identity, and rights. When `verify_determinism` is enabled, it rebuilds and compares complete manifests first.
-One same-job verification then checks checksums, identity, rights, SQLite integrity, and
-prepared formats. It retains those verified database bytes for the 30-sample query benchmark;
-it does not download, expand, or integrity-check that same file again for each caller.
-Indexed searches retain a 300 ms loopback p95 budget. The one- and two-character Chinese
-substring cases have a 400 ms budget because trigram indexes require at least three characters. A real
-run transfers the already verified output to the protected `data-release` job and creates
-`data-<release-id>` as a draft GitHub release. The release ID includes both the source and
-Kakarayan publisher revisions. Real publication requires successful CI for the exact
-main commit and pins the draft tag to it. A matching partial draft can resume: every
-existing asset must have the expected name, size, and SHA-256 digest. Only missing
-assets are uploaded. Published releases, differing identities, and unverifiable assets
-are rejected without overwriting anything.
-
-`build-profile.json` and `reconciliation-profile.json` record stage times, process peak RSS,
-and sizes outside the immutable release. Full-row semantic digests compare SQLite, CSV, and
-Parquet. Hierarchical counts account for excluded text-owned tiers. A transferred release is fully verified again in the publish job.
-
-Inspect the draft before publication:
-
-- source and Kakarayan commits;
-- counts and warnings;
-- rights decisions and blocked artifacts;
-- `release-manifest.json` and `SHA256SUMS`;
-- `formosanbank.sqlite.gz` compressed and expanded identity;
-- `site-metadata.zip`;
-- curated prepared downloads and sizes.
-
-Publish the draft without changing or replacing its assets. An existing release tag must
-never be reused for different bytes.
-
-## Deploy the query API
-
-For the supported Tokyo Lightsail deployment, follow
-[the Lightsail runbook](lightsail.md). It loads the CI-tested image by commit and digest, activates
-the published release into a host-mounted data directory, and puts Caddy HTTPS in front
-of the service. Continue with Pages only after `/readyz` reports the selected release.
-
-Wait until:
-
-```bash
-curl --fail --silent "$KAKARAYAN_API_URL/readyz"
-```
-
-returns the selected release ID.
-
-## Deploy Pages
-
-Dispatch **Deploy GitHub Pages** from `main` with the same explicit release ID after
-that frontend commit passes CI. There is no automatic push deployment and no selection
-of a guessed "latest compatible" release. Frontend-only updates can use the ready API's
-existing approved release when the read-model contract still matches.
+- `source_ref`: the FormosanBank branch, tag, or commit, usually `main`;
+- `dry_run`: `true` to build and validate only;
+- `verify_determinism`: `true` only for publisher or schema changes. It repeats the complete
+  build and compares manifests.
 
 The workflow:
 
-1. Selects a published release containing `site-metadata.zip`.
-2. Downloads only its manifest and static metadata package.
-3. Verifies the package checksum, safe ZIP paths, size limits, schemas, and release IDs.
-4. Assembles `site/public/api` plus curated download metadata.
-5. Requires the API release and read-model version to match the selected metadata and frontend contract.
-6. Builds and verifies the site under a 10 MiB total and 2 MiB per-file budget.
-7. Runs focused production lookup, dataset, locale, accessibility, and degradation smoke
-   checks. The full fixture-backed browser suite remains in CI.
-8. Uploads and deploys the exact verified Pages artifact.
-9. Tests the actual public Pages deployment, API identity, and browser journeys after cutover.
+1. Resolves the source ref once and requires successful main CI for the dispatched commit.
+2. Builds the release, verifies schemas, SQLite, checksums, inventory, source identity, and
+   rights, and reconciles every prepared format against the database.
+3. Starts the API on the verified database. Every sampled real record and query
+   (`api/benchmark.py --sample-database`) must return 200, then the query benchmark must
+   meet its budgets. The API log is kept with the measurements.
+4. Uploads the assets, verifies each one against the manifest, and publishes the release.
+   A partially uploaded draft from an interrupted run resumes only when every existing asset
+   matches. Published releases are never changed.
+5. Waits for approval of the `production` environment, then deploys the API
+   (**Deploy the query API**).
+6. Deploys Pages for the same release (**Deploy GitHub Pages**) and verifies the live site.
 
-Pages contains no corpus index, record shard, query database, or prepared bulk dataset.
+A routine release takes about an hour of runner time. Lookups show as unavailable for the
+few minutes between the API switching releases and Pages finishing, because the site
+refuses to mix releases. Release during quiet hours.
+
+## Smaller deploys
+
+- **Frontend only:** dispatch **Deploy GitHub Pages** with the release the API already
+  serves. No data is rebuilt.
+- **API code only:** dispatch **Deploy the query API** with the current release, then
+  Pages if the frontend changed. The read-model version must still match the release.
+- **Publisher or schema changes:** run a full **Release**.
 
 ## Local full-release rehearsal
 
@@ -141,62 +95,39 @@ uv run python -m publisher.verify_release \
   --max-artifact-mib 2048
 ```
 
-Activate it outside the release directory:
-
-```bash
-uv run python -m api.prepare_release \
-  --manifest build/data-release/release-manifest.json \
-  --data-root build/active
-```
-
-Start the API with `build/active/current/formosanbank.sqlite` and
-`build/active/current/release-manifest.json`, extract `site-metadata.zip` with
-`publisher.extract_metadata`, assemble Pages with `publisher.assemble_site`, and require
-`/readyz` to match before building the site. The concise invented-data commands are in the
-root [README](../README.md).
-
-## Verification commands
-
-```bash
-uv run python -m publisher.verify_release --release build/data-release
-uv run python -m publisher.verify_site --site site/dist
-uv run pytest api/tests publisher/tests
-npm --prefix site test
-npm --prefix site run test:e2e -- --project=desktop-chromium
-```
-
-Release verification checks exact file inventory, safe paths, schemas, sizes, checksums,
-SQLite identity, and requested rights scopes. Static-site verification checks required
-shell files, every static metadata envelope, and strict size budgets.
+To try the release locally:
+1. Activate it outside the release directory:
+   ```bash
+   uv run python -m api.prepare_release \
+     --manifest build/data-release/release-manifest.json \
+     --data-root build/active
+   ```
+2. Start the API with `build/active/current/formosanbank.sqlite` and its manifest.
 
 ## Rollback
 
-Data releases are immutable. Keep the prior current-schema release available.
+Data releases are immutable, and the host keeps the previous generation.
 
-1. Activate the prior release on Lightsail using [lightsail.md](lightsail.md).
-2. Wait for `/readyz` to report that ID.
-3. Dispatch Pages with the same prior release ID.
-4. Verify lookup, record detail, downloads, and static release metadata.
+1. Dispatch **Deploy the query API** with the prior release ID, from a `main` commit whose
+   read model matches that release. `deploy.sh` reselects the retained generation without
+   downloading it again.
+2. Dispatch **Deploy GitHub Pages** with the same prior release ID.
 
-Do not deploy Pages first and do not replace assets under an existing release tag.
+`deploy.sh` also rolls back by itself when activation, readiness, or its smoke queries fail.
 
 ## Failure recovery
 
-- A failed data build creates no published release.
-- A failed draft can be inspected or deleted through GitHub; do not reuse its tag with
-  changed bytes.
-- A failed Lightsail activation leaves the previous database in place until the atomic
-  replacement succeeds.
-- A failed Pages build does not replace the current Pages deployment.
-- A release mismatch makes the API unready or stops Pages before upload.
+- A failed build publishes nothing.
+- A failed API deploy leaves the previous image, settings, and data serving.
+- A failed Pages build leaves the current site in place.
+- A release mismatch makes Pages stop before upload.
 - Generated local `build/` output is disposable; source XML and published releases are not.
 
-## Routine update
+## Monitoring
 
-1. Review the intended FormosanBank commit and any changed rights evidence.
-2. Run one real data publication, using dry run only when separate policy review needs it.
-3. Inspect and publish the draft unchanged.
-4. Deploy the API to that release and confirm readiness.
-5. Deploy Pages to that release.
-6. Verify English and Traditional Chinese routes, both lookup directions, detail expansion,
-   research preview/export, downloads, local cards, and MT/ASR consent boundaries.
+**Monitor** runs every 30 minutes against the public API. It checks readiness, release
+identity, and one real query, opens an issue when they fail, and closes it on recovery.
+
+Weekly, it opens an issue when the live data is more than 30 days behind FormosanBank `main`.
+
+GitHub pauses scheduled workflows after 60 days without repository activity.
