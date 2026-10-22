@@ -5,20 +5,11 @@ import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
 import type {AppData} from "../types";
 
-export function Lookup({
-  data,
-  initialKind = "dictionary",
-}: {
-  data: AppData;
-  initialKind?: LookupKind;
-}) {
+export function Lookup({data}: {data: AppData}) {
   const {tx} = useI18n();
   const [params, setParams] = useSearchParams();
   const requestedKind = params.get("type");
-  const kind: LookupKind =
-    requestedKind === "dictionary" || requestedKind === "sentences"
-      ? requestedKind
-      : initialKind;
+  const kind: LookupKind = requestedKind === "sentences" ? "sentences" : "dictionary";
 
   function selectKind(nextKind: LookupKind) {
     if (nextKind === kind) return;
