@@ -15,10 +15,11 @@ from jsonschema import Draft202012Validator
 from api.config import Settings
 from api.dataset_fields import DatasetField, RecordLevel
 from api.exports import dataset_chunks, zip_chunks
+from api.lookup import SearchDirection, SearchScope, TierRequirement
 from api.prepare_release import prepare_release
 from api.release import load_release
 from api.search import MatchMode
-from api.store import CorpusStore, DatasetStream, SearchDirection, SearchScope, TierRequirement
+from api.store import CorpusStore, DatasetStream
 from publisher.build import BuildError, build_release
 
 ExportFormat = Literal["csv", "tsv", "jsonl"]

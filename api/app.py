@@ -41,6 +41,7 @@ from api.limits import (
     SEARCH_PAGE_MAX_ROWS,
     SUMMARY_MAX_ROWS,
 )
+from api.lookup import SearchDirection, SearchScope, TierRequirement
 from api.release import ReleaseError, load_release
 from api.search import MatchMode
 from api.security import PerIpRateLimiter, RateDecision, RatePolicy
@@ -49,9 +50,6 @@ from api.store import (
     FrequencySort,
     QueryBudget,
     QueryWorkload,
-    SearchDirection,
-    SearchScope,
-    TierRequirement,
     use_query_budget,
 )
 from api.streaming import StreamProgress, controlled_chunks
