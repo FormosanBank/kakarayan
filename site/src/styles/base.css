@@ -294,7 +294,6 @@ h3 {
   background: var(--ink-deep);
 }
 
-.button--paper,
 .button--quiet {
   color: var(--ink);
   background: var(--canvas);
@@ -333,8 +332,7 @@ h3 {
 .field select,
 .field textarea,
 .search-form input,
-.search-form select,
-.result-export select {
+.search-form select {
   width: 100%;
   min-height: 42px;
   padding: 9px 14px;
