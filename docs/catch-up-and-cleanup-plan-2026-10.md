@@ -5,6 +5,41 @@ behind FormosanBank, buggy, slow and manual to release) to a current, reliable, 
 release service. It keeps the architecture and the frontend design. It does not rewrite
 the application.
 
+## Progress
+
+Updated October 22, 2026.
+
+| Phase | Status |
+| --- | --- |
+| 1. Release blockers | Done in #98, CI green, awaiting merge |
+| 2. Release pipeline | Done in #99, CI green, awaiting merge |
+| 3. Catch-up release | Waiting on the merges and the host's deploy-key bootstrap |
+| 4. Operations | Monitor workflow and `production` environment done; alarms and budget need a notification email |
+| 5. Cleanup | Done in draft #100, to merge after the catch-up release |
+
+Changes from the original plan, found during implementation:
+
+- **No container registry.** New org packages default to private, so the deploy job pipes
+  the CI-tested image to the host over the restricted SSH key instead.
+- **Cutover gap stays at a few minutes.** Pages' production smoke test needs the new API
+  live, so Pages still builds after the API switches.
+- **xz was needed.** The current corpus compresses to 1,775 MiB with gzip. Deterministic
+  multithreaded xz brings it to 1.2 GB.
+- **Two more full-data bugs.**
+  - FormosanBank's new `languages.csv` registry added Pazeh. Kakarayan's hardcoded copy
+    broke the CLDF export, so it now reads the registry.
+  - Reverse lookups of common glosses hit the 10 s deadline (15.9 s to 0.03 s fixed).
+
+Local full-data validation of FormosanBank `d7951d1`:
+
+| Check | Result |
+| --- | --- |
+| Build | 16 min |
+| Reconciliation | 6 min, down from 49 |
+| Contract sample | 466 real requests, all 200 |
+| Benchmark | Every case within budget |
+| Activation | 132 s with 57 MB of memory |
+
 ## 1. Where things stand
 
 Evidence gathered October 21, 2026.
