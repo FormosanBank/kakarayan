@@ -18,7 +18,7 @@ from api.exports import dataset_chunks, zip_chunks
 from api.prepare_release import prepare_release
 from api.release import load_release
 from api.search import MatchMode
-from api.store import CorpusStore, DatasetStream, SearchDirection, TierRequirement
+from api.store import CorpusStore, DatasetStream, SearchDirection, SearchScope, TierRequirement
 from publisher.build import BuildError, build_release
 
 ExportFormat = Literal["csv", "tsv", "jsonl"]
@@ -75,18 +75,20 @@ def _recipe_streams(store: CorpusStore, recipe: dict[str, Any]) -> list[DatasetS
         raise BuildError("Recipe language_ids must contain exactly one value")
     if selection["record_ids"]:
         raise BuildError("Current recipes select records by query and scope, not explicit IDs")
-    query = str(selection["query"]).strip() or None
+    scope = SearchScope(
+        language_id=language_ids[0],
+        corpus_id=_single_scope(cast(list[str], selection["corpus_ids"]), "corpus_ids"),
+        dialect=_single_scope(cast(list[str], selection["dialects"]), "dialects"),
+        q=str(selection["query"]).strip() or None,
+        direction=cast(SearchDirection, selection["query_field"]),
+        translation_language=str(selection["translation_language"]) or None,
+        match=cast(MatchMode, selection["match"]),
+        requirements=tuple(cast(list[TierRequirement], selection["requirements"])),
+    )
     return [
         store.stream_dataset(
-            language_id=language_ids[0],
-            corpus_id=_single_scope(cast(list[str], selection["corpus_ids"]), "corpus_ids"),
-            dialect=_single_scope(cast(list[str], selection["dialects"]), "dialects"),
-            q=query,
-            direction=cast(SearchDirection, selection["query_field"]),
-            translation_language=str(selection["translation_language"]) or None,
-            match=cast(MatchMode, selection["match"]),
-            requirements=cast(list[TierRequirement], selection["requirements"]),
-            fields=fields[level],
+            scope,
+            fields[level],
             record_level=level,
             complete_fields=bool(selection["complete_fields"]),
             max_rows=int(selection["max_rows"]),

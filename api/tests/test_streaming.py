@@ -30,7 +30,7 @@ def test_export_preflight_validates_without_scanning_or_consuming_export_bucket(
         params = {"language_id": "lang_amis", "field": "id", "max_rows": 2}
         original = store.stream_dataset
         monkeypatch.setattr(
-            store, "stream_dataset", lambda **_kwargs: pytest.fail("preflight scanned")
+            store, "stream_dataset", lambda *_args, **_kwargs: pytest.fail("preflight scanned")
         )
         for _ in range(3):
             assert (
