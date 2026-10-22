@@ -15,13 +15,13 @@ publisher = [
     "jsonschema>=4.23",
     "lxml>=5.0",
     "openpyxl>=3.1,<4",
-    "pyarrow>=20,<26",
+    "pyarrow>=20,<27",
     "pycldf>=1.43,<3",
 ]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=6.0",
-    "ruff>=0.9,<0.17",
+    "ruff>=0.9,<0.18",
     "mypy>=1.13",
     "httpx>=0.28,<1",
     "pip-audit>=2.9,<3",

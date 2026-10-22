@@ -105,7 +105,7 @@ jobs:
           PY
 
       - name: Transfer immutable publication inputs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: publication-inputs-${{ github.run_id }}
           path: build/publication-inputs/models.json
@@ -145,7 +145,7 @@ jobs:
           python-version: "3.13"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
 
@@ -158,7 +158,7 @@ jobs:
           git -C build/formosanbank checkout --detach FETCH_HEAD
 
       - name: Download immutable publication inputs
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: publication-inputs-${{ github.run_id }}
           path: build/publication-inputs
@@ -268,7 +268,7 @@ jobs:
 
       - name: Preserve query and publication measurements
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: query-benchmark-${{ steps.release.outputs.release_id }}
           path: |
@@ -291,7 +291,7 @@ jobs:
 
       - name: Transfer validated release output
         if: ${{ !inputs.dry_run }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: data-release-${{ steps.release.outputs.release_id }}
           path: build/data-release.tar
@@ -328,13 +328,13 @@ jobs:
           python-version: "3.13"
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
 
       - name: Install locked dependencies
         run: uv sync --locked --all-groups
 
       - name: Download the validated publication
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: data-release-${{ needs.build.outputs.release_id }}
           path: build
