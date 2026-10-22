@@ -22,7 +22,8 @@ from api.limits import (
     QUERY_MAX_CHARS,
     SEARCH_PAGE_MAX_ROWS,
 )
-from api.store import CorpusStore, SearchScope
+from api.lookup import SearchScope
+from api.store import CorpusStore
 
 
 def release_path(client: TestClient, path: str) -> str:
