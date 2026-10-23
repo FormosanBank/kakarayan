@@ -100,7 +100,7 @@ def _load_manifest(path: Path) -> dict[str, Any]:
 
 
 def _fast_database_check(path: Path) -> dict[str, Any]:
-    """Check release identity and schema only. Full integrity belongs to activation."""
+    """Check release identity and schema only. Activation checks every byte."""
     if not path.is_file():
         raise ReleaseError(f"SQLite release does not exist: {path}")
     try:

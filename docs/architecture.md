@@ -100,9 +100,9 @@ shell key regardless of query parameters. Optional catalogue failures remain ret
 1. Read a local or HTTPS manifest.
 2. Select exactly one SQLite artifact.
 3. Enforce download and expansion limits.
-4. Verify compressed and expanded checksums and sizes.
-5. Run SQLite integrity verification.
-6. Atomically select the directory containing both validated files.
+4. Verify compressed and expanded checksums and sizes. Matching bytes are the database
+   that passed SQLite integrity checks in the build and in release verification.
+5. Atomically select the directory containing both validated files.
 
 Runtime startup performs no network access, decompression, or full integrity scan. It opens
 the database as immutable and read-only, checks required tables and embedded release
