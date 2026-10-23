@@ -66,6 +66,13 @@ def missing_assets(remote: dict, expected: dict[str, tuple[int, str]]) -> list[s
     return sorted(set(expected) - set(actual))
 
 
+def find_release(repository: str, tag: str) -> dict | None:
+    # Drafts have no tag yet, so releases/tags/{tag} cannot find them; the list can.
+    pages = api(f"repos/{repository}/releases?per_page=100", paginate=True)
+    matches = (release for page in pages for release in page if release["tag_name"] == tag)
+    return next(matches, None)
+
+
 def publish_release(directory: Path, repository: str, commit: str) -> None:
     require_main_ci(repository, commit)
     manifest_path = directory / "release-manifest.json"
@@ -97,12 +104,7 @@ def publish_release(directory: Path, repository: str, commit: str) -> None:
     )
     for name in ("release-manifest.json", "SHA256SUMS"):
         expected[name] = (files[name].stat().st_size, digest(files[name]))
-    releases = [
-        release
-        for page in api(f"repos/{repository}/releases?per_page=100", paginate=True)
-        for release in page
-    ]
-    remote = next((release for release in releases if release["tag_name"] == tag), None)
+    remote = find_release(repository, tag)
     # Inventory refs as well: a pre-existing tag must not point somewhere else.
     refs = [
         ref
@@ -131,7 +133,9 @@ def publish_release(directory: Path, repository: str, commit: str) -> None:
             f"Immutable public data from FormosanBank {manifest['source']['commit']}; "
             f"publisher {commit}.",
         )
-        remote = api(f"repos/{repository}/releases/tags/{tag}")
+        remote = find_release(repository, tag)
+        if remote is None:
+            raise ValueError(f"Created draft {tag} is not listed")
     if not remote["draft"] or remote.get("prerelease") or remote["target_commitish"] != commit:
         raise ValueError("Only a draft pinned to this exact publisher commit can be resumed")
     missing = missing_assets(remote, expected)
