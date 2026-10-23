@@ -22,6 +22,7 @@ from api.limits import (
     QUERY_MAX_CHARS,
     SEARCH_PAGE_MAX_ROWS,
 )
+from api.lookup import SearchScope
 from api.store import CorpusStore
 
 
@@ -769,15 +770,14 @@ def test_word_and_morpheme_translation_searches_start_from_indexed_candidates(
     store = cast(FastAPI, client.app).state.store
     assert isinstance(store, CorpusStore)
     query = store.dataset_query(
-        language_id="lang_amis",
-        corpus_id=None,
-        dialect=None,
-        q="ive",
-        direction="translation",
-        translation_language="eng",
-        match="contains",
-        requirements=(),
-        fields=("id", "form", "translations"),
+        SearchScope(
+            language_id="lang_amis",
+            q="ive",
+            direction="translation",
+            translation_language="eng",
+            match="contains",
+        ),
+        ("id", "form", "translations"),
         record_level="word",
         complete_fields=True,
     )
