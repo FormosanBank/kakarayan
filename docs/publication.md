@@ -45,8 +45,8 @@ Dispatch **Release** on `main` with:
 
 - `source_ref`: the FormosanBank branch, tag, or commit, usually `main`;
 - `dry_run`: `true` to build and validate only;
-- `verify_determinism`: `true` only for publisher or schema changes. It repeats the complete
-  build and compares manifests.
+- `verify_determinism`: `true` only for publisher or schema changes. A second job repeats
+  the complete build in parallel, and publication waits for identical manifests.
 
 The workflow:
 
