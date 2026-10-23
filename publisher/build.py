@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import gzip
 import hashlib
 import json
 import os
@@ -17,7 +16,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TextIO, cast
+from typing import Any, cast
 
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
@@ -197,19 +196,12 @@ def _insert_projection(connection: sqlite3.Connection, projection: Projection) -
             )
 
 
-def _write_projection(
-    projection: Projection,
-    csv_writers: dict[str, csv.DictWriter],
-    jsonl_files: Mapping[str, TextIO],
-) -> None:
+def _write_projection(projection: Projection, csv_writers: dict[str, csv.DictWriter]) -> None:
     for table, rows in projection.rows.items():
         columns = TABLE_COLUMNS[table]
         for row in rows:
             csv_writers[table].writerow(
                 {column: delimited_cell(row.get(column)) for column in columns}
-            )
-            jsonl_files[table].write(
-                json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
             )
 
 
@@ -705,6 +697,7 @@ def _build_catalog(
     generated_at: str,
     application_commit: str,
     rights: dict[str, object],
+    language_catalog: list[dict[str, object]],
 ) -> dict[str, object]:
     corpus_counts, language_counts, corpus_language_counts = _scope_counts(connection)
     rights_entries = cast(list[dict[str, object]], rights["entries"])
@@ -747,7 +740,7 @@ def _build_catalog(
                 "metadata_variants": variants,
             }
         )
-    languages = language_rows()
+    languages = language_catalog
     for language in languages:
         counts = dict(language_counts[str(language["id"])])
         language["counts"] = counts
@@ -807,14 +800,12 @@ def _artifact(
             ".json": "application/json",
             ".jsonl": "application/x-ndjson",
             ".csv": "text/csv",
-            ".tsv": "text/tab-separated-values",
             ".sqlite": "application/vnd.sqlite3",
             ".parquet": "application/vnd.apache.parquet",
-            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             ".zip": "application/zip",
             ".txt": "text/plain",
             ".sql": "application/sql",
-            ".gz": "application/gzip",
+            ".xz": "application/x-xz",
         }.get(path.suffix, "application/octet-stream"),
         "bytes": path.stat().st_size,
         "sha256": digest.hexdigest(),
@@ -846,7 +837,7 @@ def _artifact_facets(
         }
     )
     name = Path(relative).name
-    if relative == "formosanbank.sqlite.gz":
+    if relative == "formosanbank.sqlite.xz":
         export_format = "sqlite"
     elif "/canonical/" in relative:
         export_format = "xml"
@@ -856,10 +847,6 @@ def _artifact_facets(
         export_format = "aligned"
     elif "parquet" in name:
         export_format = "parquet"
-    elif name.endswith(".xlsx"):
-        export_format = "xlsx"
-    elif "tsv" in name:
-        export_format = "tsv"
     elif "csv" in name:
         export_format = "csv"
     elif "jsonl" in name or "/jsonl/" in relative:
@@ -868,7 +855,7 @@ def _artifact_facets(
         export_format = "text"
     else:
         export_format = "metadata"
-    if export_format in {"sqlite", "xml", "csv", "tsv", "jsonl", "parquet", "xlsx"}:
+    if export_format in {"sqlite", "xml", "csv", "jsonl", "parquet"}:
         tiers = [
             "text",
             "sentence",
@@ -897,26 +884,26 @@ def _artifact_facets(
 
 
 def _compress_database(path: Path) -> tuple[Path, dict[str, object]]:
-    destination = path.with_suffix(f"{path.suffix}.gz")
+    destination = path.with_suffix(f"{path.suffix}.xz")
     temporary = destination.with_suffix(f"{destination.suffix}.tmp")
     digest = hashlib.sha256()
-    size = 0
-    with path.open("rb") as source, temporary.open("wb") as raw_output:
-        with gzip.GzipFile(
-            filename="",
-            mode="wb",
-            compresslevel=6,
-            fileobj=raw_output,
-            mtime=0,
-        ) as output:
-            while chunk := source.read(1024 * 1024):
-                digest.update(chunk)
-                size += len(chunk)
-                output.write(chunk)
+    with path.open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    size = path.stat().st_size
+    # Multithreaded xz splits fixed 24 MiB blocks, so the bytes do not depend on the
+    # thread count. One thread would switch xz to single-block output.
+    threads = max(2, os.cpu_count() or 2)
+    with temporary.open("wb") as output:
+        subprocess.run(
+            ["xz", "-6", f"--threads={threads}", "--block-size=24MiB", "--stdout", str(path)],
+            stdout=output,
+            check=True,
+        )
     temporary.replace(destination)
     path.unlink()
     return destination, {
-        "compression": "gzip",
+        "compression": "xz",
         "content_media_type": "application/vnd.sqlite3",
         "content_bytes": size,
         "content_sha256": digest.hexdigest(),
@@ -990,12 +977,6 @@ def build_release(
                 )
                 for table in TABLE_COLUMNS
             }
-            jsonl_files = {
-                table: stack.enter_context(
-                    (tables_dir / f"{table}.jsonl").open("w", encoding="utf-8", newline="\n")
-                )
-                for table in TABLE_COLUMNS
-            }
             csv_writers = {
                 table: csv.DictWriter(stream, fieldnames=TABLE_COLUMNS[table])
                 for table, stream in csv_files.items()
@@ -1005,7 +986,7 @@ def build_release(
             for path in xml_paths:
                 projection = project_xml(path, repo, audio_sources)
                 _insert_projection(connection, projection)
-                _write_projection(projection, csv_writers, jsonl_files)
+                _write_projection(projection, csv_writers)
                 warnings.extend(
                     f"{projection.source_path}: {warning}" for warning in projection.warnings
                 )
@@ -1027,6 +1008,7 @@ def build_release(
             generated_at=generated_at,
             application_commit=kakarayan_commit,
             rights=rights,
+            language_catalog=language_rows(repo),
         )
         meta = _api_envelope(
             "meta",

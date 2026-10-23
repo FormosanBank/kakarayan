@@ -30,17 +30,9 @@ def test_fixture_reconciles_across_primary_representations(
 
     assert counts["sentences"] == 2
     assert counts["tokens"] == 4
-    assert result["representations"] == [
-        "csv",
-        "flat_jsonl",
-        "hierarchical_jsonl",
-        "parquet",
-        "sqlite",
-        "tsv",
-        "xlsx",
-    ]
+    assert result["representations"] == ["csv", "hierarchical_jsonl", "parquet", "sqlite"]
     assert result["canonical_files_verified"] == 1
-    assert result["semantic_formats"] == ["csv", "flat_jsonl", "parquet", "sqlite", "tsv"]
+    assert result["semantic_formats"] == ["csv", "parquet", "sqlite"]
 
     database_counts, samples, duration, _, _, digests = _database_state(
         release.output / "formosanbank.sqlite"

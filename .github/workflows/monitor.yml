@@ -1,0 +1,74 @@
+name: Monitor
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  uptime:
+    name: Public API answers real queries
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '*/30 * * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      API: ${{ vars.KAKARAYAN_API_URL }}
+      TITLE: Kakarayan API is not answering
+    steps:
+      - name: Query the live API
+        id: check
+        shell: bash
+        run: |
+          set +e
+          release=$(curl -fsS --max-time 20 https://formosanbank.github.io/kakarayan/api/v1/meta.json | jq -er .release_id) \
+            && curl -fsS --max-time 20 "$API/readyz" | jq -e --arg r "$release" '.status == "ready" and .release_id == $r' \
+            && curl -fsS --max-time 20 "$API/v1/releases/$release/dictionary?q=mama&language_id=lang_amis&match=exact" > /dev/null
+          echo "healthy=$([[ $? == 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Open, update, or close the outage issue
+        shell: bash
+        env:
+          HEALTHY: ${{ steps.check.outputs.healthy }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if [[ "$HEALTHY" == true ]]; then
+            [[ -z "$issue" ]] || gh issue close "$issue" --repo "$GITHUB_REPOSITORY" --comment "Recovered: $RUN"
+          elif [[ -n "$issue" ]]; then
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "Still failing: $RUN"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" \
+              --body "The scheduled check could not complete readiness, release identity, and one dictionary query against $API. $RUN"
+          fi
+          [[ "$HEALTHY" == true ]]
+
+  freshness:
+    name: Live data is no more than 30 days behind FormosanBank
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 6 * * 1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TITLE: Kakarayan data is more than 30 days behind FormosanBank
+    steps:
+      - name: Compare the live source with FormosanBank main
+        shell: bash
+        run: |
+          live=$(curl -fsS --max-time 20 https://formosanbank.github.io/kakarayan/api/v1/meta.json | jq -er .source.commit)
+          live_date=$(gh api "repos/FormosanBank/FormosanBank/commits/$live" --jq .commit.committer.date)
+          main_date=$(gh api repos/FormosanBank/FormosanBank/commits/main --jq .commit.committer.date)
+          behind=$(( ($(date -d "$main_date" +%s) - $(date -d "$live_date" +%s)) / 86400 ))
+          echo "Live source $live is $behind days behind FormosanBank main."
+          issue=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if (( behind <= 30 )); then
+            [[ -z "$issue" ]] || gh issue close "$issue" --repo "$GITHUB_REPOSITORY" --comment "Now $behind days behind."
+          elif [[ -z "$issue" ]]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" \
+              --body "The live release is built from FormosanBank $live, $behind days older than main. Dispatch the Release workflow."
+          fi

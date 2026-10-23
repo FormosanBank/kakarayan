@@ -9,7 +9,7 @@ One full publication contains three groups.
 
 ### Query read model
 
-`formosanbank.sqlite.gz` is the compressed read-only database activated by the query
+`formosanbank.sqlite.xz` is the compressed read-only database activated by the query
 service. Its manifest records both compressed and expanded sizes and SHA-256 values. It is
 not downloaded by ordinary browsers.
 
@@ -30,16 +30,15 @@ set includes normalized tabular packages, the SQLite read model, and specialist 
 produced by `publisher/prepared.py`. Canonical XML remains available in FormosanBank. The
 Downloads page shows sizes, checksums, included tiers, rights, and citation evidence.
 
-The production release exposes 11 curated downloads. Hierarchical JSONL partitions are
+The production release exposes 8 curated downloads. Hierarchical JSONL partitions are
 bundled into one archive. Corpus-specific canonical XML is not duplicated in the Kakarayan
 release.
 
-Flat table JSONL contains the relational tables separately. Nested sentence JSONL contains
-S records with their W/M children and tiers; text-owned tiers and texts without S are excluded.
-Prepared CSV/TSV use `\N` for null. A source string starting with a backslash gains one
-leading backslash, which consumers remove when decoding. Empty strings remain distinct from
-null. XLSX protects formula-like strings and has Excel's 32,767-character cell limit; use
-XML, SQLite, Parquet, or JSONL for source-faithful long fields.
+Nested sentence JSONL contains S records with their W/M children and tiers; text-owned tiers
+and texts without S are excluded. Prepared CSV uses `\N` for null. A source string starting
+with a backslash gains one leading backslash, which consumers remove when decoding. Empty
+strings remain distinct from null. CSV opens in spreadsheet software; use SQLite or Parquet
+for typed relational analysis.
 
 The time-alignment package stores every valid sentence timing and media reference in one
 JSONL table. It also includes EAF, WebVTT, and SRT files for media with multiple cues, plus

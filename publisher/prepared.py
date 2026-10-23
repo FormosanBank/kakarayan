@@ -19,8 +19,6 @@ from publisher.format_tabular import (
     write_hierarchical_jsonl,
     write_parquet,
     write_plain_text,
-    write_tsv,
-    write_xlsx,
 )
 from publisher.profiling import StageProfile
 from publisher.release_db import open_release
@@ -131,13 +129,6 @@ def _package_core_tables(output: Path, metadata: list[tuple[str, Path]]) -> None
             metadata,
         ),
     )
-    write_zip(
-        prepared / "flat-jsonl-tables.zip",
-        chain(
-            ((path.name, path) for path in sorted(tables.glob("*.jsonl"))),
-            metadata,
-        ),
-    )
     shutil.rmtree(tables)
 
 
@@ -190,7 +181,6 @@ def build_prepared_formats(
 ) -> tuple[dict[str, list[str]], dict[str, object]]:
     prepared = output / "prepared"
     profile = profile or StageProfile()
-    tsv = prepared / "tsv"
     parquet = prepared / "parquet"
     text = prepared / "text"
     prepared.mkdir(parents=True, exist_ok=True)
@@ -204,8 +194,8 @@ def build_prepared_formats(
         f"Source commit: {source_commit}\n\n"
         "Canonical XML is authoritative. Prepared data preserves repeated tiers and stable "
         "source locators. Translation tiers retain owner_type and owner_id: sentence, word, "
-        "and morpheme translations must be joined only to the matching owner. CSV and TSV "
-        "use \\N for null. XLSX guards formula-like strings. "
+        "and morpheme translations must be joined only to the matching owner. CSV uses \\N "
+        "for null. "
         "Parquet uses Zstandard compression and 50,000-row groups. CLDF is a conservative "
         "Generic ExampleTable projection. Time-aligned files contain references, not audio. "
         "Consult rights.json and each corpus notice before reuse.\n",
@@ -219,10 +209,7 @@ def build_prepared_formats(
     ]
 
     _package_core_tables(output, package_metadata)
-    profile.mark("csv_jsonl_compression")
-    write_tsv(database, tsv)
-    _package_directory(tsv, prepared / "tsv-tables.zip", package_metadata)
-    profile.mark("tsv")
+    profile.mark("csv_compression")
     arrow_schemas = write_parquet(database, parquet, release_id)
     _package_directory(parquet, prepared / "parquet-tables.zip", package_metadata)
     profile.mark("parquet")
@@ -244,14 +231,6 @@ def build_prepared_formats(
     _package_directory(text, prepared / "text-exports.zip", package_metadata)
     write_audio_manifest(database, prepared / "audio-manifest.tsv")
     profile.mark("text_and_audio_manifests")
-    write_xlsx(
-        database,
-        prepared / "formosanbank.xlsx",
-        release_id,
-        source_commit,
-        rights,
-    )
-    profile.mark("xlsx")
     cldf_counts = write_cldf_package(
         database,
         prepared / "formosanbank-cldf.zip",

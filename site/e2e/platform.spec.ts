@@ -817,17 +817,15 @@ test("tool layouts reflow in both locales and respect reduced motion", async ({p
   expect(Number.parseFloat(motion)).toBeLessThanOrEqual(0.00001);
 });
 
-test("prepared downloads keep flat and nested tables distinct", async ({page}) => {
+test("prepared downloads list the curated formats", async ({page}) => {
   await page.goto("downloads");
-  await expect(page.getByRole("heading", {name: "Flat table JSONL", exact: true})).toBeVisible();
   await expect(page.getByRole("heading", {name: "Nested sentence JSONL", exact: true})).toBeVisible();
-  expect(await page.locator(".artifact-card").count()).toBeGreaterThanOrEqual(10);
-  const flat = page.locator(".artifact-card").filter({has: page.getByRole("heading", {name: "Flat table JSONL", exact: true})});
-  await expect(flat.getByRole("link", {name: "Download", exact: true})).toHaveAttribute("href", /\/flat-jsonl-tables\.zip$/u);
-  await flat.getByText("Technical details", {exact: true}).click();
-  await expect(flat).toContainText("SHA-256");
+  expect(await page.locator(".artifact-card").count()).toBeGreaterThanOrEqual(7);
+  const nested = page.locator(".artifact-card").filter({has: page.getByRole("heading", {name: "Nested sentence JSONL", exact: true})});
+  await expect(nested.getByRole("link", {name: "Download", exact: true})).toHaveAttribute("href", /\/hierarchical-jsonl\.zip$/u);
+  await nested.getByText("Technical details", {exact: true}).click();
+  await expect(nested).toContainText("SHA-256");
   await page.getByRole("button", {name: "Traditional Chinese"}).click();
-  await expect(page.getByRole("heading", {name: "平面表格 JSONL", exact: true})).toBeVisible();
   await expect(page.getByRole("heading", {name: "巢狀句子 JSONL", exact: true})).toBeVisible();
 });
 

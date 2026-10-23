@@ -625,6 +625,7 @@ class CorpusStore:
                   OR (tr.owner_type = 'word' AND EXISTS (
                     SELECT 1 FROM tokens matched_token
                     WHERE matched_token.word_id = tr.owner_id
+                      AND matched_token.sentence_id = s.id
                       AND matched_token.normalized = mt.headword
                   ))
                   OR (tr.owner_type = 'sentence' AND s.token_count = 1 AND EXISTS (

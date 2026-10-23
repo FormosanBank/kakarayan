@@ -49,10 +49,10 @@ export function About({data}: {data: AppData}) {
           )}
         </p>
         <p>
-          <a href="https://github.com/FormosanBank/kakarayan/blob/main/docs/publication.md#routine-update">
+          <a href="https://github.com/FormosanBank/kakarayan/blob/main/docs/publication.md#release">
             {tx("Publication steps", "發布步驟")}
           </a>{" · "}
-          <a href="https://github.com/FormosanBank/kakarayan/blob/main/docs/lightsail.md#routine-release-update">
+          <a href="https://github.com/FormosanBank/kakarayan/blob/main/docs/lightsail.md#what-a-deploy-does">
             {tx("Server update steps", "伺服器更新步驟")}
           </a>
         </p>

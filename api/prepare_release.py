@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import argparse
 import fcntl
-import gzip
 import hashlib
 import json
+import lzma
 import os
 import re
 import shutil
@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Any, BinaryIO, cast
 
 from api.config import Settings
+from api.limits import DATABASE_MAX_COMPRESSED_BYTES, DATABASE_MAX_EXPANDED_BYTES
 from api.release import ReleaseError, load_release
 
 _BUFFER_SIZE = 1024 * 1024
-_MAX_ARTIFACT_BYTES = 2_000_000_000
-_MAX_DATABASE_BYTES = 8 * 1024 * 1024 * 1024
+_MAX_ARTIFACT_BYTES = DATABASE_MAX_COMPRESSED_BYTES
+_MAX_DATABASE_BYTES = DATABASE_MAX_EXPANDED_BYTES
 
 
 def _sha256(path: Path) -> str:
@@ -70,7 +71,7 @@ def _artifact(manifest: dict[str, Any]) -> dict[str, Any]:
     matches = [
         item
         for item in manifest.get("artifacts", [])
-        if item.get("path") in {"formosanbank.sqlite", "formosanbank.sqlite.gz"}
+        if item.get("path") in {"formosanbank.sqlite", "formosanbank.sqlite.xz"}
     ]
     if len(matches) != 1:
         raise ReleaseError("Release manifest must contain one SQLite artifact")
@@ -139,8 +140,8 @@ def _stage_release(
         expanded = 0
         with os.fdopen(handle, "wb") as output:
             source_stream: BinaryIO
-            if artifact.get("compression") == "gzip":
-                source_stream = cast(BinaryIO, gzip.open(artifact_path, "rb"))
+            if artifact.get("compression") == "xz":
+                source_stream = cast(BinaryIO, lzma.open(artifact_path, "rb"))
             else:
                 source_stream = artifact_path.open("rb")
             with source_stream:

@@ -57,7 +57,7 @@
           "blocked_reasons": {"type": "array", "items": {"type": "string"}},
           "asset_name": {"type": "string", "pattern": "^[^/]+$"},
           "download_url": {"type": "string", "format": "uri"},
-          "compression": {"enum": ["gzip"]},
+          "compression": {"enum": ["xz"]},
           "content_media_type": {"type": "string"},
           "content_bytes": {"type": "integer", "minimum": 1},
           "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},

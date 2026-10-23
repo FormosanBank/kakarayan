@@ -4,40 +4,28 @@ from __future__ import annotations
 
 import csv
 import json
-import re
 import sqlite3
 import tempfile
-import zipfile
 from collections import defaultdict
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 import pyarrow.parquet as pq
-from openpyxl import Workbook
-from openpyxl.utils import get_column_letter
 
 from publisher import SCHEMA_VERSION
-from publisher.archive import directory_entries, repack_zip, write_zip
+from publisher.archive import directory_entries, write_zip
 from publisher.release_db import open_release
-from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS, delimited_cell
+from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS
 
 _BATCH_SIZE = 50_000
 _HIERARCHY_BATCH_SIZE = 500
-_XLSX_ROWS_PER_SHEET = 1_000_000
 
 
 def _json(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def _safe_spreadsheet(value: object) -> object:
-    if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
-        return f"'{value}"
-    return value
 
 
 def _arrow_schema(table: str, release_id: str) -> pa.Schema:
@@ -59,24 +47,6 @@ def _arrow_schema(table: str, release_id: str) -> pa.Schema:
             b"source_representation": b"FormosanBank canonical XML",
         },
     )
-
-
-def write_tsv(database: Path, output: Path) -> None:
-    output.mkdir(parents=True, exist_ok=True)
-    with open_release(database) as connection:
-        for table, columns in TABLE_COLUMNS.items():
-            with (output / f"{table}.tsv").open(
-                "w",
-                encoding="utf-8",
-                newline="",
-            ) as stream:
-                writer = csv.writer(stream, delimiter="\t", lineterminator="\n")
-                writer.writerow(columns)
-                cursor = connection.execute(
-                    f'SELECT {", ".join(columns)} FROM "{table}" ORDER BY rowid'
-                )
-                for row in cursor:
-                    writer.writerow([delimited_cell(value) for value in row])
 
 
 def write_parquet(database: Path, output: Path, release_id: str) -> dict[str, object]:
@@ -405,88 +375,6 @@ def write_audio_manifest(database: Path, output: Path) -> None:
             writer.writerow([r"\N" if value is None else value for value in row])
 
 
-def write_xlsx(
-    database: Path,
-    path: Path,
-    release_id: str,
-    source_commit: str,
-    rights: dict[str, object],
-) -> None:
-    raw = path.with_suffix(".raw.xlsx")
-    workbook = Workbook(write_only=True)
-    workbook.properties.created = datetime(1980, 1, 1, tzinfo=UTC)
-    workbook.properties.modified = datetime(1980, 1, 1, tzinfo=UTC)
-    readme = workbook.create_sheet("README")
-    for row in (
-        ("Kakarayan FormosanBank research workbook",),
-        ("release_id", release_id),
-        ("source_commit", source_commit),
-        ("schema_version", SCHEMA_VERSION),
-        ("null representation", "blank cell"),
-        ("formula safety", "text beginning = + - @ tab or CR is prefixed with apostrophe"),
-        ("canonical representation", "Use the pinned FormosanBank XML for archival work."),
-        ("rights", "See the RIGHTS sheet. Public visibility does not imply uniform reuse."),
-    ):
-        readme.append(row)
-    rights_sheet = workbook.create_sheet("RIGHTS")
-    rights_columns = (
-        "id",
-        "corpus",
-        "review_status",
-        "redistribution",
-        "commercial_use",
-        "derivatives",
-        "notice",
-    )
-    rights_sheet.append(rights_columns)
-    rights_entries = rights.get("entries")
-    if not isinstance(rights_entries, list):
-        raise ValueError("Rights metadata has no entries")
-    for entry in rights_entries:
-        if not isinstance(entry, dict):
-            continue
-        rights_sheet.append([_safe_spreadsheet(entry.get(column)) for column in rights_columns])
-    with open_release(database) as connection:
-        for table, columns in TABLE_COLUMNS.items():
-            cursor = connection.execute(
-                f'SELECT {", ".join(columns)} FROM "{table}" ORDER BY rowid'
-            )
-            part = 1
-            row_number = 0
-            worksheet = None
-            for row in cursor:
-                if worksheet is None or row_number >= _XLSX_ROWS_PER_SHEET:
-                    title = table[:25] if part == 1 else f"{table[:25]}_{part}"
-                    worksheet = workbook.create_sheet(title)
-                    worksheet.freeze_panes = "A2"
-                    worksheet.auto_filter.ref = (
-                        f"A1:{get_column_letter(len(columns))}{_XLSX_ROWS_PER_SHEET + 1}"
-                    )
-                    for index, column in enumerate(columns, 1):
-                        worksheet.column_dimensions[get_column_letter(index)].width = min(
-                            max(len(column) + 2, 12),
-                            36,
-                        )
-                    worksheet.append(columns)
-                    part += 1
-                    row_number = 0
-                worksheet.append([_safe_spreadsheet(value) for value in row])
-                row_number += 1
-            if worksheet is None:
-                worksheet = workbook.create_sheet(table[:25])
-                worksheet.freeze_panes = "A2"
-                worksheet.append(columns)
-    workbook.save(raw)
-    with zipfile.ZipFile(raw) as source:
-        core = re.sub(
-            rb"(<dcterms:modified[^>]*>).*?(</dcterms:modified>)",
-            rb"\g<1>1980-01-01T00:00:00Z\g<2>",
-            source.read("docProps/core.xml"),
-        )
-    repack_zip(path, raw, replacements={"docProps/core.xml": core})
-    raw.unlink()
-
-
 def data_dictionary() -> dict[str, object]:
     return {
         "schema_version": SCHEMA_VERSION,
@@ -494,7 +382,6 @@ def data_dictionary() -> dict[str, object]:
             "csv_tsv": r"\N",
             "json": None,
             "sqlite": "NULL",
-            "xlsx": "blank cell",
         },
         "csv_tsv_escaping": (
             "A source string beginning with backslash gains one leading backslash; "

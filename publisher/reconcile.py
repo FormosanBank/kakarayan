@@ -18,9 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pyarrow.parquet as pq
-from openpyxl import load_workbook
 
-from publisher.format_tabular import _safe_spreadsheet
 from publisher.profiling import StageProfile
 from publisher.tables import INTEGER_COLUMNS, REAL_COLUMNS, TABLE_COLUMNS
 from publisher.verify_release import VerificationError, verify_release
@@ -188,30 +186,6 @@ def _delimited_archive(
     return counts, found, duration, digests
 
 
-def _jsonl_archive(
-    path: Path,
-    samples: Mapping[str, Mapping[str, Any]],
-) -> tuple[dict[str, int], dict[str, dict[str, Any]], float, dict[str, str]]:
-    counts: dict[str, int] = {}
-    found: dict[str, dict[str, Any]] = {}
-    duration = 0.0
-    digests: dict[str, str] = {}
-    with zipfile.ZipFile(path) as archive:
-        for table in TABLE_COLUMNS:
-            name = f"{table}.jsonl"
-            if name not in archive.namelist():
-                raise ReconciliationError(f"{path.name} has no {name}")
-            sample_id = samples.get(table, {}).get("id")
-            with archive.open(name) as stream:
-                counts[table], digests[table], sample, total = _scan(
-                    table, (json.loads(line) for line in stream), sample_id
-                )
-            if sample is not None:
-                found[table] = sample
-            duration += total
-    return counts, found, duration, digests
-
-
 def _parquet_archive(
     path: Path,
     samples: Mapping[str, Mapping[str, Any]],
@@ -250,62 +224,6 @@ def _parquet_archive(
             duration += total
             member_path.unlink()
     return counts, found, duration, digests
-
-
-def _xlsx_samples(database: Path) -> dict[str, dict[str, tuple[object, ...]]]:
-    samples: dict[str, dict[str, tuple[object, ...]]] = {}
-    with closing(sqlite3.connect(f"file:{database}?mode=ro&immutable=1", uri=True)) as connection:
-        for table, columns in TABLE_COLUMNS.items():
-            maximum = connection.execute(f'SELECT MAX(rowid) FROM "{table}"').fetchone()[0] or 0
-            positions = (
-                sorted({1 + (maximum - 1) * index // 31 for index in range(32)}) if maximum else []
-            )
-            rows = connection.execute(
-                f'SELECT {", ".join(columns)} FROM "{table}" '
-                "WHERE rowid IN (SELECT value FROM json_each(?))",
-                (json.dumps(positions),),
-            )
-            samples[table] = {}
-            for row in rows:
-                cells = [_safe_spreadsheet(value) for value in row]
-                samples[table][row[0]] = tuple(
-                    None
-                    if value == ""
-                    else value[:32767]
-                    if isinstance(value, str)
-                    else float(format(value, ".16g"))
-                    if isinstance(value, float)
-                    else value
-                    for value in cells
-                )
-    return samples
-
-
-def _xlsx_counts(path: Path, samples: dict[str, dict[str, tuple[object, ...]]]) -> dict[str, int]:
-    counts = {table: 0 for table in TABLE_COLUMNS}
-    workbook = load_workbook(path, read_only=True, data_only=True)
-    try:
-        for table in TABLE_COLUMNS:
-            sheets = [
-                sheet
-                for sheet in workbook.worksheets
-                if sheet.title == table or sheet.title.startswith(f"{table}_")
-            ]
-            if not sheets:
-                raise ReconciliationError(f"{path.name} has no {table} sheet")
-            for sheet in sheets:
-                rows = sheet.iter_rows(values_only=True)
-                _require_equal(f"xlsx {sheet.title} header", next(rows), TABLE_COLUMNS[table])
-                for row in rows:
-                    counts[table] += 1
-                    if row[0] in samples[table]:
-                        expected = samples[table].pop(str(row[0]))
-                        _require_equal(f"xlsx {table} {row[0]}", row, expected)
-            if samples[table]:
-                raise ReconciliationError(f"XLSX lost sampled {table} identifiers")
-    finally:
-        workbook.close()
-    return counts
 
 
 def _hierarchical_counts(root: Path) -> tuple[dict[str, int], float]:
@@ -411,7 +329,6 @@ def reconcile_release(
             hierarchical_expected_duration,
             database_digests,
         ) = _database_state(database)
-        spreadsheet_samples = _xlsx_samples(database)
         profile.mark("sqlite_semantic_scan")
     _require_equal("release manifest counts", manifest["counts"], database_counts)
 
@@ -421,7 +338,6 @@ def reconcile_release(
     digests: dict[str, dict[str, str]] = {"sqlite": database_digests}
     for name, path, suffix, delimiter in (
         ("csv", root / "prepared" / "csv-tables.zip", "csv", ","),
-        ("tsv", root / "prepared" / "tsv-tables.zip", "tsv", "\t"),
     ):
         counts, found, duration, digests[name] = _delimited_archive(
             path,
@@ -433,14 +349,6 @@ def reconcile_release(
         sample_sets[name] = found
         duration_totals[name] = duration
         profile.mark(f"reconcile_{name}")
-    jsonl_counts, jsonl_samples, jsonl_duration, digests["flat_jsonl"] = _jsonl_archive(
-        root / "prepared" / "flat-jsonl-tables.zip",
-        samples,
-    )
-    representations["flat_jsonl"] = jsonl_counts
-    sample_sets["flat_jsonl"] = jsonl_samples
-    duration_totals["flat_jsonl"] = jsonl_duration
-    profile.mark("reconcile_flat_jsonl")
     parquet_counts, parquet_samples, parquet_duration, digests["parquet"] = _parquet_archive(
         root / "prepared" / "parquet-tables.zip",
         samples,
@@ -449,10 +357,6 @@ def reconcile_release(
     sample_sets["parquet"] = parquet_samples
     duration_totals["parquet"] = parquet_duration
     profile.mark("reconcile_parquet")
-    representations["xlsx"] = _xlsx_counts(
-        root / "prepared" / "formosanbank.xlsx", spreadsheet_samples
-    )
-    profile.mark("reconcile_xlsx")
     hierarchical_counts, hierarchical_duration = _hierarchical_counts(root)
     representations["hierarchical_jsonl"] = hierarchical_counts
     duration_totals["hierarchical_jsonl"] = hierarchical_duration
@@ -499,7 +403,6 @@ def reconcile_release(
         "sample_ids": {table: row["id"] for table, row in samples.items()},
         "semantic_sha256": database_digests,
         "semantic_formats": sorted(digests),
-        "xlsx_samples": "up to 32 evenly spaced rows per table, including first and last",
         "canonical_files_verified": canonical_files,
     }
 

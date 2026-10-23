@@ -1,10 +1,8 @@
-# Lightsail query API deployment
+# Lightsail query API
 
-This runbook deploys the Kakarayan query API and its read-only SQLite database to
-one Ubuntu Lightsail instance in Tokyo. GitHub Pages continues to serve the
-React site. GitHub Releases continues to store immutable data-release files.
-
-The deployed request path is:
+The Kakarayan query API and its read-only SQLite database run on one Ubuntu Lightsail
+instance in Tokyo. GitHub Pages serves the React site, and GitHub Releases stores the
+immutable data releases.
 
 ```text
 browser
@@ -14,473 +12,168 @@ browser
   -> Lightsail SQLite: one local immutable read model
 ```
 
-SQLite is a file inside the API host. It is not exposed to the internet and it is
-not a separate database server. Caddy is the only public process. It obtains and
-renews the TLS certificate, then forwards HTTPS requests to FastAPI over Docker's
-private network.
+SQLite is a file on the host, not a database server. Caddy is the only public process.
+It obtains and renews the TLS certificate and forwards to FastAPI over Docker's private
+network. The API port is bound to loopback.
 
-## Required deployment order
+Releases are deployed by the **Release** or **Deploy the query API** workflows
+([publication.md](publication.md)). They run `deploy/lightsail/deploy.sh`, installed on the
+host as `~ubuntu/kakarayan-deploy`, through a restricted SSH key. This document covers host
+setup and operations.
 
-Prepare the instance before merging, but do not point Pages at it yet:
-
-1. Attach a static IP, configure the firewall, add swap, and install Docker.
-2. Clone the repository and prepare the host configuration.
-3. Merge the pull request into `main`, wait for CI, and load its tested API image.
-4. Build and publish one current-schema data release from `main`.
-5. Activate that exact release on Lightsail and verify `/readyz`.
-6. Set `KAKARAYAN_API_URL` to the Lightsail HTTPS URL.
-7. Deploy Pages with the same release ID.
-
-The `data-release` environment accepts only `main`, so the official current-schema
-release cannot be published from the pull-request branch. Pages also refuses to
-deploy when its release and the API release differ. These checks prevent a partial
-cutover.
-
-## 1. Prepare Lightsail networking
-
-In the Lightsail console:
-
-1. Open **Networking**, choose **Create static IP**, select the Tokyo instance,
-   name the address, and attach it.
-2. Copy the new static IPv4 address. Do not keep using the instance's original
-   dynamic address because that address changes after a stop and start.
-3. On the instance's **Networking** tab, allow inbound IPv4 TCP 80 and TCP 443.
-4. Keep TCP 22 for SSH. Prefer restricting it to the administrator's current IP
-   while allowing the Lightsail browser SSH client.
-5. Do not add a public rule for port 7860. Compose binds that port to loopback.
-
-For the initial deployment, create a free hostname by replacing the dots in the
-static IP with dashes and appending `.sslip.io`. For example:
+## Host layout
 
 ```text
-Static IP: 203.0.113.10
-Hostname:  203-0-113-10.sslip.io
-API URL:   https://203-0-113-10.sslip.io
+/opt/kakarayan                        repository checkout, detached at the deployed commit
+/opt/kakarayan/deploy/lightsail/.env  host settings, including the pinned image
+/opt/kakarayan/deploy/lightsail/data  generations/<release-id>/, current, previous
 ```
 
-Use a project-owned domain later by pointing an A record such as
-`api.kakarayan.example` to the same static IP. The server configuration does not
-otherwise change.
+The API container runs as UID 10001 with a read-only root filesystem. `data/` must be owned
+by 10001.
 
-## 2. Connect and inspect the instance
+## One-time host setup
 
-The easiest first connection is **Connect using SSH** in the Lightsail console.
-The shell should open as `ubuntu`. A local SSH client is also valid:
+1. In the Lightsail console:
+   - Attach a static IP.
+   - Allow inbound TCP 22, 80, and 443.
+   - Do not open 7860.
+2. Make a hostname from the static IP, such as `203-0-113-10.sslip.io` for `203.0.113.10`.
+   A project-owned domain can replace it later with an A record. Nothing else changes.
+3. Add 2 GiB of swap as a safety net for deployment spikes:
+   ```bash
+   sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+   sudo mkswap /swapfile && sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+   ```
+4. Install Docker Engine and the Compose plugin from Docker's Ubuntu repository, plus
+   `git`, `jq`, and `curl`. Then add `ubuntu` to the `docker` group and reconnect.
+5. Clone the repository and create the host settings:
+   ```bash
+   sudo install -d -o ubuntu -g ubuntu /opt/kakarayan
+   git clone https://github.com/FormosanBank/kakarayan.git /opt/kakarayan
+   cd /opt/kakarayan/deploy/lightsail
+   cp .env.example .env
+   mkdir -p data && sudo chown 10001:10001 data
+   ```
+   Set `KAKARAYAN_HOSTNAME` in `.env`. Keep the 2 GiB host defaults.
+6. Install the deploy key (below), then run the Release workflow.
+
+## Deploy key
+
+GitHub Actions deploys with a dedicated key that can only run the deploy script:
 
 ```bash
-chmod 600 /absolute/path/to/lightsail-key.pem
-ssh -i /absolute/path/to/lightsail-key.pem ubuntu@STATIC_IP
+ssh-keygen -t ed25519 -N '' -C kakarayan-deploy -f kakarayan-deploy
 ```
 
-Inspect the machine before changing it:
+On the host, install the script from a pinned commit, then append one line to
+`~/.ssh/authorized_keys`. Replace `COMMIT` and `PUBLIC_KEY` (the contents of
+`kakarayan-deploy.pub`):
 
 ```bash
-uname -a
-free -h
-swapon --show
-df -h /
+curl -fsSL https://raw.githubusercontent.com/FormosanBank/kakarayan/COMMIT/deploy/lightsail/deploy.sh \
+  -o ~/kakarayan-deploy && chmod 755 ~/kakarayan-deploy
+echo 'restrict,command="/home/ubuntu/kakarayan-deploy" PUBLIC_KEY' >> ~/.ssh/authorized_keys
 ```
 
-The production 2 GiB host gives the API a 1,400 MiB ceiling and Caddy a 128 MiB
-ceiling. The remaining memory is available to Ubuntu, Docker, filesystem cache,
-and deployment work. Add a 2 GiB swap file once as protection against short
-deployment spikes:
+Every successful deploy replaces `~/kakarayan-deploy` with the deployed commit's copy.
+
+`restrict` disables shells, PTYs, forwarding, and agent use for that key. Any command sent
+with it is passed to `deploy.sh`. The script accepts only `status` or
+`deploy <40-character commit> <release-id>`.
+
+In the `production` environment on GitHub:
+- Store the private key as `LIGHTSAIL_DEPLOY_KEY`.
+- Store the output of `ssh-keyscan -t ed25519 STATIC_IP` as `LIGHTSAIL_KNOWN_HOSTS`, after
+  checking its fingerprint against the host's own
+  `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`.
+
+Delete the local key files after storing them.
+
+## What a deploy does
+
+`deploy.sh deploy <commit> <release-id>`, with the CI image on stdin:
+
+1. Loads the image if needed and checks its revision label.
+2. Checks out that commit and pins `KAKARAYAN_API_IMAGE` in `.env`.
+3. Downloads, verifies, and atomically selects the release generation while the old
+   container keeps serving its own files.
+4. Restarts the API and waits until `/readyz` reports the release and image commit.
+5. Runs a dictionary query, a sentence search, and a sentence detail request.
+
+If any step after the first change fails, it restores the previous checkout, `.env`, data
+generation, and containers. The same command works from an SSH session on the host:
 
 ```bash
-if [ ! -f /swapfile ]; then
-  sudo fallocate -l 2G /swapfile
-  sudo chmod 600 /swapfile
-  sudo mkswap /swapfile
-fi
-sudo swapon /swapfile
-grep -qF '/swapfile none swap sw 0 0' /etc/fstab \
-  || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-free -h
+~/kakarayan-deploy deploy FULL_COMMIT RELEASE_ID < api-image.tar.gz
+~/kakarayan-deploy status
 ```
 
-Swap is slower than RAM. It is a safety net for deployment spikes, not a way to
-make slow queries fast. If normal traffic uses swap continuously, inspect the
-active query workload and memory use before increasing concurrency or host size.
+The image is read from stdin only when it is not already loaded. Activation needs free disk
+for the compressed and expanded database plus 256 MiB. The current corpus needs about 10 GB.
 
-## 3. Install Docker Engine and Compose
+## First deploy from the flat layout
 
-Use Docker's Ubuntu package repository so Engine and the Compose plugin update
-through `apt`:
+Hosts deployed before October 2026 serve `data/formosanbank.sqlite` and
+`data/active-release.json` from image `kakarayan-api:lightsail`. The first `deploy.sh` run
+leaves those files and that image in place, activates `data/current`, and switches to the
+pinned image. If the deploy fails, rollback restores the old checkout and `.env`, so the old
+container keeps serving them.
 
-```bash
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl git jq tmux
-sudo install -m 0755 -d /etc/apt/keyrings
-sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-  -o /etc/apt/keyrings/docker.asc
-sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
-Types: deb
-URIs: https://download.docker.com/linux/ubuntu
-Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
-Components: stable
-Architectures: $(dpkg --print-architecture)
-Signed-By: /etc/apt/keyrings/docker.asc
-EOF
-
-sudo apt-get update
-sudo apt-get install -y \
-  docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo systemctl enable --now docker
-sudo usermod -aG docker ubuntu
-```
-
-Adding `ubuntu` to the Docker group gives that account root-equivalent control of
-containers. End the SSH session and reconnect so the new group takes effect, then
-verify the installation:
-
-```bash
-docker version
-docker compose version
-docker run --rm hello-world
-```
-
-## 4. Stage the application
-
-Clone the public repository:
-
-```bash
-sudo install -d -o ubuntu -g ubuntu /opt/kakarayan
-git clone https://github.com/FormosanBank/kakarayan.git /opt/kakarayan
-cd /opt/kakarayan
-git status --short --branch
-```
-
-Create the host-only configuration:
+After the new release has served cleanly for a week, remove them:
 
 ```bash
 cd /opt/kakarayan/deploy/lightsail
-cp .env.example .env
-nano .env
+sudo rm data/formosanbank.sqlite data/active-release.json
+docker image rm kakarayan-api:lightsail
 ```
 
-Set `KAKARAYAN_HOSTNAME` to the hostname made from the attached static IP. Leave
-the production and local frontend origins in `KAKARAYAN_CORS_ORIGINS`. The `.env`
-file contains no password and is ignored by Git, but it remains host-specific.
-Keep the 2 GiB host defaults of `1400m` for the API and `128m` for Caddy. The default
-`KAKARAYAN_QUERY_STEP_LIMIT=2000000` permits substantial analytical queries. Keep
-the initial request controls at 60 requests per minute, 5 exports per minute, and
-2 concurrent SQLite queries. Only one dataset or aggregate query may run at once,
-which leaves one lane available for dictionary, sentence, and record-detail requests.
-The API reuses both read-only connections with a 64 MiB SQLite cache per connection
-and a 1 GiB immutable-file mapping ceiling. The instance has two vCPUs, so a request
-waits at most one second for a slot. Normal queries, previews, and exports have
-separate 10, 15, and 120 second deadlines. These values can be tuned in `.env`
-without changing code.
-
-The application keys its limits from Uvicorn's resolved client address. Caddy supplies the
-client address through proxy headers, and Uvicorn trusts those headers because the API port
-is reachable only from loopback and Docker's private network. Do not expose port 7860 or
-place an untrusted proxy on that network while `--forwarded-allow-ips=*` is configured.
-
-Validate the Compose model and fetch Caddy:
-
-```bash
-docker compose config --quiet
-docker compose pull caddy
-```
-
-Do not start the stack before loading the tested API image and activating a compatible release.
-
-## 5. Merge and publish a current-schema data release
-
-After pull-request checks pass, merge into `main` and wait for that commit's complete
-CI run to succeed. On a trusted workstation, select the exact commit and download
-the tested image. The gate rejects PR runs, failed runs, and commits outside main:
-
-```bash
-KAKARAYAN_COMMIT=FULL_MAIN_COMMIT
-KAKARAYAN_CI_RUN=$(uv run python -m publisher.github_release \
-  --repository FormosanBank/kakarayan --commit "$KAKARAYAN_COMMIT")
-gh run download "$KAKARAYAN_CI_RUN" --repo FormosanBank/kakarayan \
-  --name "api-image-$KAKARAYAN_COMMIT" --dir "build/image-$KAKARAYAN_COMMIT"
-scp -i /absolute/path/to/lightsail-key.pem -r "build/image-$KAKARAYAN_COMMIT" \
-  ubuntu@STATIC_IP:/opt/kakarayan/
-```
-
-On the server, set `KAKARAYAN_COMMIT` to the same full commit. Verify the transferred
-bytes and image identity, then update the checkout to that commit, not a moving branch:
-
-```bash
-cd /opt/kakarayan
-git fetch origin
-git checkout --detach "$KAKARAYAN_COMMIT"
-git log -1 --oneline
-cd "image-$KAKARAYAN_COMMIT"
-sha256sum --check SHA256SUMS
-docker load --input api-image.tar.gz
-test "$(docker image inspect "kakarayan-api:$KAKARAYAN_COMMIT" --format '{{.Id}}')" = "$(cat image-id.txt)"
-cd /opt/kakarayan
-cd deploy/lightsail
-nano .env
-docker compose config --quiet
-```
-
-Set `KAKARAYAN_API_IMAGE=kakarayan-api:FULL_MAIN_COMMIT` in `.env`. Keep the previous
-image for rollback. CI retains image artifacts for 14 days; if one expires, rerun CI
-for the selected trusted main commit and repeat these checks. Do not rebuild an
-unversioned image independently on the production host.
-
-Choose the exact current public FormosanBank commit from a trusted workstation:
-
-```bash
-gh api repos/FormosanBank/FormosanBank/commits/main --jq .sha
-```
-
-In `FormosanBank/kakarayan` on GitHub:
-
-1. Open **Actions** and choose **Build and publish a data release**.
-2. Choose **Run workflow** and select branch `main`.
-3. Set `source_ref` to the full FormosanBank commit from the prior command.
-4. Set `dry_run` to `false` and run it.
-5. Approve the waiting `data-release` environment job when requested.
-6. Inspect the resulting draft release, its source commit, manifest, checksums,
-   rights decisions, counts, and asset sizes.
-7. Publish the draft without changing its assets.
-
-The workflow performs schema checks, SQLite checks, rights enforcement, reconciliation,
-and query benchmarks. Leave `verify_determinism` disabled for a routine release. Enable it
-before material publisher or schema changes when a second complete build is worth the time.
-
-Record the release ID shown in `release-manifest.json`. It has a form like
-`fb-YYYYMMDD-abcdef12`. The public manifest URL is:
-
-```text
-https://github.com/FormosanBank/kakarayan/releases/download/data-RELEASE_ID/release-manifest.json
-```
-
-## 6. Activate the release on Lightsail
-
-Activation keeps the serving generation while downloading and validating a candidate.
-It checks free space against the candidate's compressed and expanded sizes plus
-256 MiB. For the current corpus, allow at least 8 GB **additional** free space:
+## Operations
 
 ```bash
 cd /opt/kakarayan/deploy/lightsail
-df -h .
-mkdir -p data
-sudo chown 10001:10001 data
-```
-
-Run activation inside `tmux` so it continues if the browser SSH session drops:
-
-```bash
-tmux new -s kakarayan-activate
-```
-
-Inside the tmux session, replace `RELEASE_ID` and run:
-
-```bash
-docker compose run --rm --no-deps api \
-  .venv/bin/python -m api.prepare_release \
-  --manifest "https://github.com/FormosanBank/kakarayan/releases/download/data-RELEASE_ID/release-manifest.json" \
-  --data-root /data
-```
-
-Activation downloads the compressed database, verifies its size and SHA-256,
-expands it, verifies the expanded size and SHA-256, runs SQLite integrity checking,
-and puts both files in `data/generations/RELEASE_ID/`. One atomic `data/current`
-symlink selects the validated generation; `data/previous` retains the prior target.
-A writer lock prevents concurrent activations. The serving process stays pinned to
-its original files until restarted. No corpus build runs on the Lightsail instance.
-
-For the first upgrade from the old flat-file layout, leave `data/formosanbank.sqlite`
-and `data/active-release.json` intact while the old container runs. Activate the new
-generation, restart, and verify it before manually retiring those two old files.
-Do not mix a new image with an old read-model version. Staging failures leave the
-current selector unchanged; do not delete a serving or rollback generation to make room.
-
-Press `Ctrl-b`, then `d`, to detach from tmux. Reconnect later with:
-
-```bash
-tmux attach -t kakarayan-activate
-```
-
-When activation exits successfully, start both services:
-
-```bash
-set -a
-. ./.env
-set +a
-docker compose up -d
-docker compose ps
+~/kakarayan-deploy status
 docker compose logs --tail=100 api caddy
-curl --fail --silent http://127.0.0.1:7860/readyz | jq .
-```
-
-The local readiness response must contain the selected release ID. Caddy may need
-a short period to obtain its first certificate. Then test the public URL:
-
-```bash
-curl --fail --silent "https://$KAKARAYAN_HOSTNAME/readyz" | jq .
-```
-
-Test a real bounded lookup, replacing `RELEASE_ID`:
-
-```bash
-curl --fail --silent --get \
-  "https://$KAKARAYAN_HOSTNAME/v1/releases/RELEASE_ID/dictionary" \
-  --data-urlencode 'q=fangcalay' \
-  --data-urlencode 'language_id=lang_amis' \
-  --data-urlencode 'direction=formosan' \
-  --data-urlencode 'match=exact' \
-  --data-urlencode 'limit=5' | jq .
-```
-
-## 7. Connect GitHub Pages to the API
-
-Only do this after the public `/readyz` response reports the intended release.
-
-1. Open Kakarayan **Settings > Secrets and variables > Actions > Variables**.
-2. Set repository variable `KAKARAYAN_API_URL` to the HTTPS API URL with no
-   trailing slash, such as `https://203-0-113-10.sslip.io`.
-3. Open **Actions > Deploy GitHub Pages > Run workflow**.
-4. Select `main` and enter the same `RELEASE_ID`.
-5. Approve the `github-pages` environment if requested.
-6. Wait for the production browser checks and Pages deployment to finish.
-
-The Pages workflow downloads the matching static metadata, checks Lightsail
-`/readyz`, and stops before deployment if the IDs differ.
-
-## 8. Verify the complete system
-
-Open `https://formosanbank.github.io/kakarayan/` and check:
-
-1. Formosan-to-translation dictionary lookup.
-2. Translation-to-Formosan dictionary lookup.
-3. Sentence search and one expanded record.
-4. Research preview and one small export.
-5. English and Traditional Chinese interface modes.
-
-Inspect the instance after several requests:
-
-```bash
-cd /opt/kakarayan/deploy/lightsail
-docker compose ps
-docker stats --no-stream
-free -h
-df -h /
-docker compose logs --tail=100 api caddy
-```
-
-The API disables Uvicorn access logs, so raw user search queries are not written to
-the container log. A rate-limited request returns HTTP 429 with `Retry-After`. Limit headers
-identify the active request or export bucket without logging the client IP.
-
-### Request and host health
-
-Summarize the available logs without collecting search text or client addresses:
-
-```bash
 docker compose logs --no-color --no-log-prefix --since 24h api |
   docker compose exec -T api .venv/bin/python -m api.log_summary
-docker inspect "$(docker compose ps -q api)" --format '{{.RestartCount}} {{.Image}}'
-openssl s_client -connect "$KAKARAYAN_HOSTNAME:443" -servername "$KAKARAYAN_HOSTNAME" </dev/null 2>/dev/null |
-  openssl x509 -noout -enddate
 ```
 
-The report groups requests by route and status, including HTTP errors, incomplete
-responses, bytes, rows, and p95 timing **upper bounds** from fixed histogram buckets.
-Queue wait is separate from time holding a database slot. Slot time includes
-serialization and is not pure SQL execution. `completed` means the server sent the
-final response body, not that the user saved a download. These counts cannot identify
-unique people. Hugging Face delays are outside this API and are not in these logs.
+`api.log_summary` groups requests by route and status, with bytes, rows, and p95 timing upper
+bounds. Logs exclude client IPs, query text, recordings, and model input, so they cannot count
+unique people. Both containers rotate three 10 MB log files.
 
-Both containers rotate three 10 MB log files. A busy host may retain less than 24
-hours; `--since` does not restore rotated records. Use `docker stats`, `free -h`, and
-`df -h /` above alongside latency, 429/503/504 counts, incomplete exports, restart
-count, and certificate expiry. Diagnose the failing route before raising limits.
-Keep one API worker: rate and concurrency limits are process-local.
-
-Diagnostics on the site distinguish the public source commit, publisher commit,
-frontend commit, API image commit, data release, and read-model version. `/readyz`
-reports the API image commit when running the CI-built container. A matching data
-release alone does not prove that the intended application image was started.
-
-## Routine release update
-
-For later FormosanBank updates:
-
-1. Publish a new immutable release from a pinned FormosanBank commit.
-2. Check that at least 8 GB is free on Lightsail.
-3. Load the verified image from the selected successful main CI run; pin the checkout and `.env` to it.
-4. Activate the new manifest with the same command used above.
-5. Restart with `docker compose up -d` and verify `/readyz`.
-6. Deploy Pages with that same release ID.
-
-Keep the previous generation and its compatible API image for rollback. Failed
-staging directories are cleaned automatically. Prune only explicitly identified
-older generations after checking that neither `current` nor `previous` selects them.
+Keep one API worker. Rate and concurrency limits are process-local. Watch memory, swap,
+disk, latency, and 429/503/504 counts before changing limits in `.env`. The **Monitor**
+workflow checks the public API every 30 minutes and opens an issue when it fails.
 
 ## Rollback
 
-Select the prior compatible image in `.env`, run activation with its prior manifest,
-then restart and confirm `/readyz` and real queries. A retained generation is checked
-and selected without another download. If restart fails, keep Pages unchanged and
-repeat this rollback; activation success alone is not a successful deployment.
-Then deploy Pages with that prior release ID. Keep the image's read-model contract
-matched to the database. GitHub Releases are the durable data source; application
-rollback does not require a server snapshot.
+Dispatch **Deploy the query API** with the previous release ID, from a `main` commit whose
+read-model version matches it. The retained `previous` generation is reselected without a
+download. Then deploy Pages with the same ID. GitHub Releases remain the durable data
+source; application rollback does not need a snapshot.
 
-### Snapshot restore rehearsal
+## Snapshots and host replacement
 
-Automatic snapshot success is not proof of a working restore. Before relying on a
-snapshot for recovery, a maintainer should approve and perform this rehearsal:
+Automatic daily snapshots are enabled. Before relying on one, rehearse a restore:
 
-1. Create a disposable instance from a recent snapshot. Do not transfer the production
-   static IP, change Pages, or stop the serving host.
-2. Verify its SSH host fingerprint, expected disk, image digest, generation selectors,
-   and database/manifest identity. Check local `/readyz` and bounded lookup/export.
-3. If testing HTTPS, use the disposable instance's own hostname and certificate, not
-   the production hostname. Verify Caddy and an audio range request separately.
-4. Activate a compatible second release there, then restore the previous generation
-   and image. Verify readiness and actual queries after each restart.
-5. Record the snapshot ID, release/image identities, results, and recovery duration.
-   Remove only that explicitly identified rehearsal instance after review.
+1. Create a disposable instance from a snapshot. Leave the production static IP in place.
+2. Verify its disk, image, generation selectors, and local `/readyz`.
+3. Delete that instance.
 
-The automated activation tests exercise interrupted staging, an unchanged serving
-process, and application rollback in temporary directories. They do not test an AWS
-snapshot restore. Restrict SSH sources with maintainers only after testing a second
-administrative connection; preserve browser-SSH access if it is part of recovery.
-
-## Resizing or replacing the host
-
-The current production host was created from a Lightsail snapshot and kept the
-same static IP. A replacement VM has a new SSH host key even when it receives the
-old IP. Verify the new fingerprint before trusting it, then confirm all of the
-following before considering the migration complete:
-
-1. `hostname`, `free -h`, and `df -h /` show the intended new machine.
-2. `docker compose ps` shows healthy API and Caddy services.
-3. `docker inspect` shows the intended container memory limits.
-4. `/readyz` reports the same immutable release ID as GitHub Pages.
-5. One real dictionary query and one sentence query succeed over HTTPS.
-
-Moving the static IP preserves the public API URL and TLS hostname. Caddy obtains
-or renews the certificate on the replacement host. No Pages configuration or
-release identity changes are required.
+A replacement host gets a new SSH host key even when it receives the old static IP. Update
+`LIGHTSAIL_KNOWN_HOSTS` after verifying the new fingerprint. Then confirm:
+- `docker compose ps` shows both services healthy;
+- `/readyz` reports the same release as Pages;
+- one dictionary query and one sentence query succeed over HTTPS.
 
 ## Cost and capacity
 
-Production uses the 2 GiB RAM, 2 vCPU, and 60 GB SSD general-purpose Lightsail
-bundle in Tokyo. At the listed plan rate when this runbook was updated, it costs
-$12 per month and includes 3 TB monthly transfer. The attached static IP has no
-added charge while attached, and Caddy certificates are free. Optional Lightsail
-snapshots are billed separately per stored GB.
+Production uses the 2 GiB RAM, 2 vCPU, 60 GB general-purpose bundle in Tokyo, listed at
+$12 per month with 3 TB transfer. The attached static IP and Caddy certificates are free.
+Snapshots are billed per stored GB.
 
-The API permits 100,000 export rows per selected XML level. Its 1,400 MiB container
-budget gives the persistent SQLite caches and mapped database pages room to reuse
-the indexed data without allowing one process to consume the whole host. Caddy has
-a 128 MiB ceiling. Keep total query concurrency at two and analytical concurrency at
-one because this plan still has two vCPUs. Watch memory, swap, disk, latency, queue
-rejections, and request deadlines before changing those values.
-
-This host does not run MT or ASR models. Those remain independent Hugging Face calls,
-so deploying the lookup API improves corpus tools but does not remove model warm-up
-latency.
+The API container gets 1,400 MiB and Caddy 128 MiB. Query concurrency stays at two, with one
+analytical lane, because the plan has two vCPUs. Upsize only if latency, swap use, or memory
+pressure regress. The host does not run MT or ASR models; those stay on Hugging Face.
