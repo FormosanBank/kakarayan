@@ -7,14 +7,14 @@ the application.
 
 ## Progress
 
-Updated October 22, 2026.
+Updated October 23, 2026.
 
 | Phase | Status |
 | --- | --- |
-| 1. Release blockers | Done in #98, CI green, awaiting merge |
-| 2. Release pipeline | Done in #99, CI green, awaiting merge |
-| 3. Catch-up release | Waiting on the merges and the host's deploy-key bootstrap |
-| 4. Operations | Monitor workflow and `production` environment done; alarms and budget need a notification email |
+| 1. Release blockers | Merged in #98 |
+| 2. Release pipeline | Merged in #99 |
+| 3. Catch-up release | Release run 39887163242 dispatched from main with determinism checks |
+| 4. Operations | Done: Monitor workflow, `production` environment, three Lightsail alarms, $20 budget, SSH key-only and unattended upgrades confirmed. Project domain (D5) is an owner action |
 | 5. Cleanup | Done in draft #100, to merge after the catch-up release |
 
 Changes from the original plan, found during implementation:
