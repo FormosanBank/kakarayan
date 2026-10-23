@@ -13,9 +13,17 @@ Updated October 23, 2026.
 | --- | --- |
 | 1. Release blockers | Merged in #98 |
 | 2. Release pipeline | Merged in #99 |
-| 3. Catch-up release | Release run 39887163242 dispatched from main with determinism checks |
+| 3. Catch-up release | Live: `fb-20261018-d7951d7b8b82` (FormosanBank `d7951d1`), API image `7b8b82e`, verified by Pages cutover and Monitor. Two fixes in #102 |
 | 4. Operations | Done: Monitor workflow, `production` environment, three Lightsail alarms, $20 budget, SSH key-only and unattended upgrades confirmed. Project domain (D5) is an owner action |
 | 5. Cleanup | Done in draft #100, to merge after the catch-up release |
+
+Catch-up release run 39887163242:
+
+- Build and verify with determinism took 77 min, publish 20 min.
+- Publish failed once: `releases/tags/{tag}` never returns drafts. The resumed run passed.
+- Host activation took 46 min, almost all in `PRAGMA integrity_check` on the Lightsail
+  disk. #102 removes that check; the checksum match already proves the verified bytes.
+- #101 runs the determinism build in parallel.
 
 Changes from the original plan, found during implementation:
 
