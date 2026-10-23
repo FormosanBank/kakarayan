@@ -6,7 +6,7 @@ import {LoadingState} from "./components/LoadingState";
 import {ResourceRetryContext, useAppData} from "./data";
 import {StudyDeck} from "./components/StudyDeck";
 import {SiteUpdate} from "./components/SiteUpdate";
-import {GITBOOK_BASE_URL} from "./gitbook";
+import {DOCS_BASE_URL} from "./docs";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
 import {CorpusDetail, LanguageDetail} from "./pages/CatalogueDetail";
@@ -60,7 +60,7 @@ function Unavailable({error, retry}: {error: Error; retry: () => void}) {
         <button className="button button--quiet" onClick={() => setShowDeck((value) => !value)}>
           {tx("Local study deck", "本機學習牌組")}
         </button>
-        <a className="button button--quiet" href={GITBOOK_BASE_URL}>
+        <a className="button button--quiet" href={`${DOCS_BASE_URL}/`}>
           {tx("Docs", "文件")}
         </a>
       </div>

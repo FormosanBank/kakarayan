@@ -2,11 +2,7 @@ import {useEffect, useState} from "react";
 
 import {PageIntro} from "../components/Layout";
 import {LoadingState} from "../components/LoadingState";
-import {
-  GITBOOK_CORPUS_PAGES,
-  GITBOOK_TOPICS,
-  gitBookPageUrl,
-} from "../gitbook";
+import {DOCS_CORPUS_PAGES, DOCS_TOPICS, docsPageUrl} from "../docs";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
 import type {AppData} from "../types";
@@ -16,16 +12,16 @@ export function Guide({data}: {data: AppData}) {
   const [params] = useSearchParams();
   const selectedCorpusId = params.get("corpus") ?? "";
   const selectedCorpus = data.corpora.find(
-    (corpus) => corpus.id === selectedCorpusId && GITBOOK_CORPUS_PAGES[corpus.id],
+    (corpus) => corpus.id === selectedCorpusId && DOCS_CORPUS_PAGES[corpus.id],
   );
   const requestedTopic = params.get("topic");
-  const selectedTopic = GITBOOK_TOPICS.find((topic) => topic.id === requestedTopic)
-    ?? GITBOOK_TOPICS[0];
-  const selectedPage = (selectedCorpus ? GITBOOK_CORPUS_PAGES[selectedCorpus.id] : undefined)
+  const selectedTopic = DOCS_TOPICS.find((topic) => topic.id === requestedTopic)
+    ?? DOCS_TOPICS[0];
+  const selectedPage = (selectedCorpus ? DOCS_CORPUS_PAGES[selectedCorpus.id] : undefined)
     ?? selectedTopic;
   const selectedLabel = selectedCorpus?.name
     ?? (locale === "zh-Hant" ? selectedTopic.labelZh : selectedTopic.labelEn);
-  const pageUrl = gitBookPageUrl(selectedPage, locale);
+  const pageUrl = docsPageUrl(selectedPage, locale);
   const canEmbed = window.location.protocol === "https:";
   const [loadedUrl, setLoadedUrl] = useState("");
   const [failedUrl, setFailedUrl] = useState("");
@@ -44,7 +40,7 @@ export function Guide({data}: {data: AppData}) {
           <h2 id="guide-reader-title">{selectedLabel}</h2>
           {locale === "zh-Hant" && !("zh" in selectedPage && selectedPage.zh) && <small>英文文件</small>}
           <a href={pageUrl} target="_blank" rel="noreferrer">
-            {tx("Open in GitBook ↗", "在 GitBook 開啟 ↗")}
+            {tx("Open in new tab ↗", "在新分頁開啟 ↗")}
           </a>
         </header>
         {canEmbed && failedUrl !== pageUrl ? (
@@ -73,12 +69,6 @@ export function Guide({data}: {data: AppData}) {
         ) : (
           <div className="guide-frame-fallback">
             <h3>{tx("Open documentation", "開啟文件")}</h3>
-            <p>
-              {tx(
-                "Open this page directly in GitBook.",
-                "請直接在 GitBook 開啟此頁面。",
-              )}
-            </p>
             <a className="button button--primary" href={pageUrl} target="_blank" rel="noreferrer">
               {tx("Open docs", "開啟文件")}
             </a>

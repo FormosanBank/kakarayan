@@ -4,13 +4,22 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: npm
     directory: /site
     schedule:
       interval: weekly
+    groups:
+      site:
+        patterns: ["*"]
 
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
