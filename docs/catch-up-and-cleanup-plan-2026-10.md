@@ -7,15 +7,24 @@ the application.
 
 ## Progress
 
-Updated October 23, 2026.
+Completed November 6, 2026.
 
 | Phase | Status |
 | --- | --- |
 | 1. Release blockers | Merged in #98 |
-| 2. Release pipeline | Merged in #99 |
-| 3. Catch-up release | Live: `fb-20261018-d7951d7b8b82` (FormosanBank `d7951d1`), API image `7b8b82e`, verified by Pages cutover and Monitor. Two fixes in #102 |
-| 4. Operations | Done: Monitor workflow, `production` environment, three Lightsail alarms, $20 budget, SSH key-only and unattended upgrades confirmed. Project domain (D5) is an owner action |
-| 5. Cleanup | Done in draft #100, to merge after the catch-up release |
+| 2. Release pipeline | Merged in #99, fixed in #102 and #111 |
+| 3. Catch-up release | Live: `fb-20261106-a2f72c5805a1` (FormosanBank `a2f72cd`), API image `5805a1d`, Pages from `e3002c4`. Verified by the Pages cutover check and the Monitor |
+| 4. Operations | Done: Monitor workflow, `production` environment, three Lightsail alarms, $20 budget, SSH key-only and unattended upgrades confirmed |
+| 5. Cleanup | Merged in #100. Dependencies current in #109 and #110 |
+
+Left for owners: the project domain (D5), and removing the pre-October flat database and
+`kakarayan-api:lightsail` image from the host (`docs/lightsail.md`).
+
+Release run 42167093478, the first with every fix:
+
+- Build and verify, with the determinism build in parallel: 50 min, down from 77.
+- API deploy: 4 min, down from 51, now that activation skips `integrity_check`.
+- Publish needed one rerun: the release list lagged the new draft. #111 waits for it.
 
 Catch-up release run 39887163242:
 
