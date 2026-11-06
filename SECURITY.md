@@ -24,8 +24,13 @@ For a corpus correction, attribution concern, rights request, or takedown, follo
 - The site has no Kakarayan account, session, or privileged write API.
 - Saved cards and recordings stay in browser storage unless a user explicitly invokes a
   named third-party model service.
-- The query API is read-only and starts only from an explicitly activated release. Full
-  checksum and SQLite integrity verification occur before process startup.
+- The query API is read-only and starts only from an explicitly activated release. Its
+  database must match the release checksum, and those bytes passed SQLite integrity checks
+  when the release was built and verified.
+- The site refuses to run inside another page's frame, so its recorder, consent, copy, and
+  deck controls cannot be clickjacked. GitHub Pages cannot send `frame-ancestors` or
+  `X-Frame-Options` headers, so the check is in `site/src/main.tsx`. Add those headers too
+  if the site moves behind a host or CDN that can set them.
 - Query work, page size, custom export rows, and export bytes are bounded.
 - Operational records contain route templates and durations, not raw queries, sentence
   text, recordings, or model input.
