@@ -10,7 +10,6 @@ import lzma
 import os
 import re
 import shutil
-import sqlite3
 import tempfile
 import urllib.parse
 import urllib.request
@@ -155,14 +154,10 @@ def _stage_release(
             os.fsync(output.fileno())
         expected_bytes = int(artifact.get("content_bytes", artifact["bytes"]))
         expected_sha256 = artifact.get("content_sha256", artifact["sha256"])
+        # Matching bytes are the database that passed integrity_check in the build and in
+        # release verification. Repeating it here reads 7 GB at random on a slow disk.
         if expanded != expected_bytes or digest.hexdigest() != expected_sha256:
             raise ReleaseError("Expanded database does not match the release manifest")
-        connection = sqlite3.connect(candidate)
-        try:
-            if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                raise ReleaseError("SQLite integrity check failed during activation")
-        finally:
-            connection.close()
         candidate.replace(stage / "formosanbank.sqlite")
         with (stage / "release-manifest.json").open("x", encoding="utf-8") as output:
             json.dump(manifest, output, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

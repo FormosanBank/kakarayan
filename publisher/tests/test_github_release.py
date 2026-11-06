@@ -49,6 +49,8 @@ def test_resume_uploads_only_missing_identical_assets_then_publishes(
             return {"sha": "c" * 40}
         if "releases?" in path:
             return [[remote]] if created else [[]]
+        # GitHub's releases/tags endpoint never returns drafts, so only lookups by ID work.
+        assert path.endswith(f"/releases/{remote['id']}"), path
         return remote
 
     fail_once = True
