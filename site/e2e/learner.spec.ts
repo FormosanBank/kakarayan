@@ -52,7 +52,7 @@ test("learn keeps one language context across its tools", async ({page}) => {
   await expect(page.getByRole("combobox", {name: "Translations in"})).toBeVisible();
   await expect(page.getByText("Corpus sentences", {exact: true})).toHaveCount(0);
 
-  await page.getByRole("button", {name: "Sentence lookup"}).click();
+  await page.getByRole("button", {name: /^Sentences /u}).click();
   await page.getByText("Search options", {exact: true}).click();
   await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveCount(1);
 

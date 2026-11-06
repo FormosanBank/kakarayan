@@ -12,17 +12,15 @@ export function LookupKindToggle({
   const options = [
     {
       id: "dictionary",
-      ariaLabel: tx("Dictionary lookup", "單詞釋義查詢"),
       label: tx("Dictionary", "單詞釋義"),
       description: tx("word to meaning", "從單詞查釋義"),
     },
     {
       id: "sentences",
-      ariaLabel: tx("Sentence lookup", "語境例句查詢"),
       label: tx("Sentences", "語境例句"),
       description: tx("word or phrase in context", "在語境中查單詞或片語"),
     },
-  ] satisfies Array<{id: LookupKind; ariaLabel: string; label: string; description: string}>;
+  ] satisfies Array<{id: LookupKind; label: string; description: string}>;
 
   return (
     <div
@@ -34,7 +32,6 @@ export function LookupKindToggle({
         <button
           type="button"
           key={option.id}
-          aria-label={option.ariaLabel}
           aria-pressed={kind === option.id}
           aria-controls="lookup-results"
           onClick={() => onChange(option.id)}
@@ -44,7 +41,7 @@ export function LookupKindToggle({
             <strong>{option.label}</strong>
             <small>{option.description}</small>
           </span>
-          <span className="lookup-kind-toggle__state">
+          <span className="lookup-kind-toggle__state" aria-hidden="true">
             {kind === option.id ? tx("Selected", "已選擇") : tx("Choose", "選擇")}
           </span>
         </button>

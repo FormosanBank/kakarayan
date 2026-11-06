@@ -30,9 +30,10 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
       </a>
       <header className="topbar">
         <div className="topbar__inner">
-          <NavLink className="brand" to="/" aria-label={tx("Kakarayan home", "Kakarayan 首頁")}>
+          <NavLink className="brand" to="/">
             <span className="brand-mark" aria-hidden="true">K</span>
             <strong>Kakarayan</strong>
+            <span className="sr-only"> {tx("home", "首頁")}</span>
           </NavLink>
           <nav className="primary-nav" aria-label={tx("Primary", "主要導覽")}>
             {navigation.map(([to, key]) => (
@@ -47,19 +48,17 @@ export function Layout({data, children}: {data: AppData; children: ReactNode}) {
             >
               <button
                 type="button"
-                aria-label={tx("English", "英文")}
                 aria-pressed={locale === "en"}
                 onClick={() => setLocale("en")}
               >
-                EN
+                EN<span className="sr-only"> {tx("English", "英文")}</span>
               </button>
               <button
                 type="button"
-                aria-label={tx("Traditional Chinese", "繁體中文")}
                 aria-pressed={locale === "zh-Hant"}
                 onClick={() => setLocale("zh-Hant")}
               >
-                繁中
+                繁中<span className="sr-only"> {tx("Traditional Chinese", "繁體中文")}</span>
               </button>
             </div>
             <a className="button button--primary topbar-github" href="https://github.com/FormosanBank/FormosanBank">
