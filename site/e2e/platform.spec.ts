@@ -175,7 +175,7 @@ test("dialect scope is optional and consistent in lookup and learn", async ({pag
   const learnResponse = page.waitForResponse(/\/dictionary\?/u);
   await page.getByRole("button", {name: "Search", exact: true}).click();
   expect(new URL((await learnResponse).url()).searchParams.get("dialect")).toBe("Xiuguluan");
-  await page.getByRole("button", {name: /^Sentences /u}).click();
+  await page.getByRole("button", {name: "Sentences", exact: true}).click();
   await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveValue("Xiuguluan");
 });
 
@@ -435,7 +435,7 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
   const sentenceRequest = new URL((await sentenceResponse).url());
 
   await expect(page).toHaveURL(/\/kakarayan\/learn\?/u);
-  await expect(page.getByRole("button", {name: /^Sentences /u})).toHaveAttribute(
+  await expect(page.getByRole("button", {name: "Sentences", exact: true})).toHaveAttribute(
     "aria-pressed",
     "true",
   );
