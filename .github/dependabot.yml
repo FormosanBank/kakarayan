@@ -15,6 +15,13 @@ updates:
     groups:
       site:
         patterns: ["*"]
+    ignore:
+      # Types follow the Node 22 runtime used in CI and Pages builds.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint supports TypeScript below 6.1.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
     directory: /
