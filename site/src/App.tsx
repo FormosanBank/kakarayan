@@ -1,4 +1,4 @@
-import {Component, useEffect, useRef, useState, type PropsWithChildren} from "react";
+import {Component, useEffect, useRef, useState, type PropsWithChildren, type ReactNode} from "react";
 
 import {Layout} from "./components/Layout";
 import {Diagnostics} from "./components/Diagnostics";
@@ -104,54 +104,55 @@ export function App() {
   </RoutingProvider>;
 }
 
+interface Route {
+  title: string;
+  description?: string;
+  page: ReactNode;
+}
+
 function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["data"]>}) {
   const path = useRoutePath();
   const previousPath = useRef(path);
   const {locale, t, tx} = useI18n();
-  const detailName = path.startsWith("/languages/")
-    ? data.languages.find(
-        (item) => item.id === decodedId(path.slice("/languages/".length)),
-      )?.name
-    : path.startsWith("/corpora/")
-      ? data.corpora.find(
-          (item) => item.id === decodedId(path.slice("/corpora/".length)),
-        )?.name
-      : undefined;
-  const routeTitle =
-    detailName ??
-    ({
-      "/": t("home.title"),
-      "/learn": t("learn.title"),
-      "/explore": t("explore.title"),
-      "/lookup": tx("Dictionary and sentences", "單詞釋義與語境例句"),
-      "/dictionary": tx("Dictionary and sentences", "單詞釋義與語境例句"),
-      "/sentences": tx("Dictionary and sentences", "單詞釋義與語境例句"),
-      "/search": tx("Dictionary and sentences", "單詞釋義與語境例句"),
-      "/research": tx("Research tools", "研究工具"),
-      "/docs": tx("Docs", "文件"),
-      "/guide": tx("Docs", "文件"),
-      "/downloads": t("download.title"),
-      "/developers": t("developers.title"),
-      "/models": t("models.title"),
-      "/about": t("about.title"),
-    }[path] ??
-      tx("Page not found", "找不到頁面"));
-  const routeDescription =
-    ["/lookup", "/dictionary", "/sentences", "/search"].includes(path)
-      ? tx(
-          "Switch between dictionary meanings and sentences in context over the same public corpus data.",
-          "在同一套公開語料資料中切換單詞釋義與語境例句。",
-        )
-      : path === "/learn"
-        ? t("learn.lede")
-        : path === "/docs" || path === "/guide"
-          ? tx(
-              "Browse FormosanBank corpus, format, rights, and developer documentation.",
-              "瀏覽 FormosanBank 語料、格式、權利與開發者文件。",
-            )
-        : path === "/downloads"
-          ? t("download.lede")
-          : t("home.lede");
+  const routes: Record<string, Route> = {
+    "/": {title: t("home.title"), page: <Home data={data} />},
+    "/learn": {title: t("learn.title"), description: t("learn.lede"), page: <Learn data={data} />},
+    "/explore": {title: t("explore.title"), page: <Explore data={data} />},
+    "/lookup": {
+      title: tx("Dictionary and sentences", "單詞釋義與語境例句"),
+      description: tx(
+        "Switch between dictionary meanings and sentences in context over the same public corpus data.",
+        "在同一套公開語料資料中切換單詞釋義與語境例句。",
+      ),
+      page: <Lookup data={data} />,
+    },
+    "/research": {title: tx("Research tools", "研究工具"), page: <Research data={data} />},
+    "/docs": {
+      title: tx("Docs", "文件"),
+      description: tx(
+        "Browse FormosanBank corpus, format, rights, and developer documentation.",
+        "瀏覽 FormosanBank 語料、格式、權利與開發者文件。",
+      ),
+      page: <Guide data={data} />,
+    },
+    "/downloads": {title: t("download.title"), description: t("download.lede"), page: <Downloads data={data} />},
+    "/developers": {title: t("developers.title"), page: <Developers data={data} />},
+    "/models": {title: t("models.title"), page: <Models data={data} />},
+    "/about": {title: t("about.title"), page: <About data={data} />},
+  };
+  const language = path.startsWith("/languages/")
+    ? data.languages.find((item) => item.id === decodedId(path.slice("/languages/".length)))
+    : undefined;
+  const corpus = path.startsWith("/corpora/")
+    ? data.corpora.find((item) => item.id === decodedId(path.slice("/corpora/".length)))
+    : undefined;
+  const route: Route = language
+    ? {title: language.name, page: <LanguageDetail data={data} language={language} />}
+    : corpus
+      ? {title: corpus.name, page: <CorpusDetail data={data} corpus={corpus} />}
+      : routes[path] ?? {title: tx("Page not found", "找不到頁面"), page: <NotFound />};
+  const routeTitle = route.title;
+  const routeDescription = route.description ?? t("home.lede");
   useEffect(() => {
     const canonicalUrl = new URL(routeHref(path), window.location.origin).href;
     document.title = `${routeTitle} | Kakarayan`;
@@ -167,58 +168,14 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
       ?.setAttribute("content", locale === "zh-Hant" ? "zh_TW" : "en_US");
     document
       .querySelector('meta[name="robots"]')
-      ?.setAttribute(
-        "content",
-        `${["/lookup", "/dictionary", "/sentences", "/search"].includes(path) ? "noindex" : "index"},follow,noai,noimageai`,
-      );
+      ?.setAttribute("content", `${path === "/lookup" ? "noindex" : "index"},follow,noai,noimageai`);
   }, [locale, path, routeDescription, routeTitle]);
   useEffect(() => {
     if (previousPath.current !== path) document.getElementById("main")?.focus({preventScroll: true});
     window.scrollTo({top: 0, left: 0, behavior: "instant"});
     previousPath.current = path;
   }, [path]);
-  const page = (() => {
-    if (path.startsWith("/languages/")) {
-      const id = decodedId(path.slice("/languages/".length));
-      const language = data.languages.find((item) => item.id === id);
-      return language ? <LanguageDetail data={data} language={language} /> : <NotFound />;
-    }
-    if (path.startsWith("/corpora/")) {
-      const id = decodedId(path.slice("/corpora/".length));
-      const corpus = data.corpora.find((item) => item.id === id);
-      return corpus ? <CorpusDetail data={data} corpus={corpus} /> : <NotFound />;
-    }
-    switch (path) {
-      case "/":
-        return <Home data={data} />;
-      case "/learn":
-        return <Learn data={data} />;
-      case "/explore":
-        return <Explore data={data} />;
-      case "/lookup":
-        return <Lookup data={data} />;
-      case "/dictionary":
-        return <Lookup data={data} initialKind="dictionary" />;
-      case "/sentences":
-      case "/search":
-        return <Lookup data={data} initialKind="sentences" />;
-      case "/research":
-        return <Research data={data} />;
-      case "/docs":
-      case "/guide":
-        return <Guide data={data} />;
-      case "/downloads":
-        return <Downloads data={data} />;
-      case "/developers":
-        return <Developers data={data} />;
-      case "/models":
-        return <Models data={data} />;
-      case "/about":
-        return <About data={data} />;
-      default:
-        return <NotFound />;
-    }
-  })();
+  const page = route.page;
   return <Layout data={data}><PageBoundary key={path}>{page}</PageBoundary></Layout>;
 }
 
