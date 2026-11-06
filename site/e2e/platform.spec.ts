@@ -123,6 +123,31 @@ test("the release-pinned shell, routes, and locale switch work", {tag: "@product
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
+test("another site cannot operate Kakarayan inside a frame", {tag: "@production-smoke"}, async ({page, baseURL, browserName}) => {
+  const embedder = "http://127.0.0.1:4174/";
+  const target = new URL("learn?tool=practice&language=lang_amis", baseURL).href;
+  // Chromium otherwise blocks a routed page from framing the loopback test server.
+  if (browserName === "chromium") {
+    await page.context().grantPermissions(["local-network-access"], {origin: embedder});
+  }
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/v1/releases/") || /hf\.space|huggingface\.co/u.test(request.url())) {
+      apiRequests.push(request.url());
+    }
+  });
+  await page.route(embedder, (route) => route.fulfill({
+    contentType: "text/html",
+    body: `<!doctype html><iframe src="${target}" allow="microphone; clipboard-write"></iframe>`,
+  }));
+  await page.goto(embedder);
+  const framed = page.frameLocator("iframe");
+  await expect(framed.getByRole("heading", {name: "Open Kakarayan directly"})).toBeVisible();
+  await expect(framed.getByRole("link", {name: "Open Kakarayan"})).toHaveAttribute("target", "_top");
+  await expect(framed.locator("button, input, select, textarea")).toHaveCount(0);
+  expect(apiRequests).toEqual([]);
+});
+
 test("lookup only asks for a translation language when searching Formosan text", async ({page}) => {
   await page.goto("lookup?type=dictionary");
 
