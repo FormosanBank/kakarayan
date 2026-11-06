@@ -7,8 +7,12 @@ import hashlib
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
+
+_DRAFT_LISTING_ATTEMPTS = 12
+_DRAFT_LISTING_DELAY_SECONDS = 5
 
 
 def gh(*arguments: str) -> str:
@@ -133,8 +137,13 @@ def publish_release(directory: Path, repository: str, commit: str) -> None:
             f"Immutable public data from FormosanBank {manifest['source']['commit']}; "
             f"publisher {commit}.",
         )
-        remote = find_release(repository, tag)
-        if remote is None:
+        # The release list, which uploads by tag also rely on, lags new drafts by seconds.
+        for _ in range(_DRAFT_LISTING_ATTEMPTS):
+            remote = find_release(repository, tag)
+            if remote is not None:
+                break
+            time.sleep(_DRAFT_LISTING_DELAY_SECONDS)
+        else:
             raise ValueError(f"Created draft {tag} is not listed")
     if not remote["draft"] or remote.get("prerelease") or remote["target_commitish"] != commit:
         raise ValueError("Only a draft pinned to this exact publisher commit can be resumed")

@@ -40,7 +40,7 @@ def test_resume_uploads_only_missing_identical_assets_then_publishes(
         "target_commitish": commit,
         "assets": [],
     }
-    calls, created, published = [], [], []
+    calls, created, published, listings = [], [], [], []
 
     def api(path, **_kwargs):
         if "/matching-refs/" in path:
@@ -48,7 +48,9 @@ def test_resume_uploads_only_missing_identical_assets_then_publishes(
         if "/commits/" in path:
             return {"sha": "c" * 40}
         if "releases?" in path:
-            return [[remote]] if created else [[]]
+            listings.append(path)
+            # The first listing after creation lags, as GitHub's does.
+            return [[remote]] if created and len(listings) > 2 else [[]]
         # GitHub's releases/tags endpoint never returns drafts, so only lookups by ID work.
         assert path.endswith(f"/releases/{remote['id']}"), path
         return remote
@@ -80,6 +82,7 @@ def test_resume_uploads_only_missing_identical_assets_then_publishes(
         return ""
 
     monkeypatch.setattr(publication, "require_main_ci", lambda *_args: 1)
+    monkeypatch.setattr(publication.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(publication, "api", api)
     monkeypatch.setattr(publication, "gh", gh)
     if wrong_tag:
