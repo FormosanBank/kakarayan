@@ -175,7 +175,7 @@ test("dialect scope is optional and consistent in lookup and learn", async ({pag
   const learnResponse = page.waitForResponse(/\/dictionary\?/u);
   await page.getByRole("button", {name: "Search", exact: true}).click();
   expect(new URL((await learnResponse).url()).searchParams.get("dialect")).toBe("Xiuguluan");
-  await page.getByRole("button", {name: "Sentence lookup", exact: true}).click();
+  await page.getByRole("button", {name: "Sentences", exact: true}).click();
   await expect(page.getByRole("combobox", {name: "Dialect"})).toHaveValue("Xiuguluan");
 });
 
@@ -435,7 +435,7 @@ test("dictionary examples stay in the learning workspace", async ({page}) => {
   const sentenceRequest = new URL((await sentenceResponse).url());
 
   await expect(page).toHaveURL(/\/kakarayan\/learn\?/u);
-  await expect(page.getByRole("button", {name: "Sentence lookup"})).toHaveAttribute(
+  await expect(page.getByRole("button", {name: "Sentences", exact: true})).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -795,7 +795,7 @@ test("tool layouts reflow in both locales and respect reduced motion", async ({p
   await page.emulateMedia({reducedMotion: "reduce"});
   for (const locale of ["en", "zh-Hant"]) {
     await page.goto("lookup");
-    await page.getByRole("button", {name: locale === "en" ? "English" : "Traditional Chinese", exact: true}).click();
+    await page.getByRole("button", {name: locale === "en" ? "EN English" : "繁中 Traditional Chinese", exact: true}).click();
     for (const width of [320, 375, 768, 1280]) {
       await page.setViewportSize({width, height: 900});
       for (const route of ["lookup", "learn", "research?language=lang_amis", "developers", "downloads"]) {
