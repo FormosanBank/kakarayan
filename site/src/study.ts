@@ -45,6 +45,10 @@ const DATABASE = "kakarayan-learning";
 const STORE = "cards";
 const VERSION = 1;
 const DAY = 86_400_000;
+// The largest scheduling values a card may hold. Backups are validated against them and
+// grading caps at them, so every card that can be restored can also be graded.
+const MAX_EASE = 100;
+const MAX_COUNT = 1_000_000;
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -95,25 +99,21 @@ export function scheduleCard(card: StudyCard, grade: Grade, now: Date): StudyCar
   let ease = card.ease;
   let repetitions = card.repetitions;
   let lapses = card.lapses;
-  let dueMs: number;
 
   if (grade === "again") {
     intervalDays = 0;
     ease = Math.max(1.3, ease - 0.2);
     repetitions = 0;
     lapses += 1;
-    dueMs = now.getTime() + 10 * 60_000;
   } else if (grade === "hard") {
     intervalDays = Math.max(1, Math.round(Math.max(1, intervalDays) * 1.2));
     ease = Math.max(1.3, ease - 0.15);
     repetitions += 1;
-    dueMs = now.getTime() + intervalDays * DAY;
   } else if (grade === "easy") {
     intervalDays =
       repetitions === 0 ? 4 : Math.max(4, Math.round(Math.max(1, intervalDays) * ease * 1.3));
     ease += 0.15;
     repetitions += 1;
-    dueMs = now.getTime() + intervalDays * DAY;
   } else {
     intervalDays =
       repetitions === 0
@@ -122,15 +122,16 @@ export function scheduleCard(card: StudyCard, grade: Grade, now: Date): StudyCar
           ? 3
           : Math.max(1, Math.round(Math.max(1, intervalDays) * ease));
     repetitions += 1;
-    dueMs = now.getTime() + intervalDays * DAY;
   }
+  intervalDays = Math.min(intervalDays, MAX_COUNT);
+  const dueMs = now.getTime() + (grade === "again" ? 10 * 60_000 : intervalDays * DAY);
 
   return {
     ...card,
     intervalDays,
-    ease,
-    repetitions,
-    lapses,
+    ease: Math.min(ease, MAX_EASE),
+    repetitions: Math.min(repetitions, MAX_COUNT),
+    lapses: Math.min(lapses, MAX_COUNT),
     dueAt: new Date(dueMs).toISOString(),
     updatedAt: now.toISOString(),
   };
@@ -313,9 +314,9 @@ export function isCard(value: unknown): value is StudyCard {
     stringList(value.audioReferences, 100) &&
     (value.direction === "recognition" || value.direction === "production") &&
     isoDate(value.createdAt) && isoDate(value.updatedAt) && isoDate(value.dueAt) &&
-    typeof value.ease === "number" && Number.isFinite(value.ease) && value.ease >= 1.3 && value.ease <= 100 &&
+    typeof value.ease === "number" && Number.isFinite(value.ease) && value.ease >= 1.3 && value.ease <= MAX_EASE &&
     [value.intervalDays, value.repetitions, value.lapses].every(
-      (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 0 && item <= 1_000_000,
+      (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 0 && item <= MAX_COUNT,
     ) &&
     (value.source === null || (isObject(value.source) &&
       boundedText(value.source.releaseId, 128) && boundedText(value.source.recordId, 256) &&
