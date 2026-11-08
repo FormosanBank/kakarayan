@@ -148,6 +148,14 @@ test("another site cannot operate Kakarayan inside a frame", {tag: "@production-
   expect(apiRequests).toEqual([]);
 });
 
+test("shared links stay inside the app and cannot preload an oversized query", async ({page}) => {
+  await page.goto(`?__kakarayan_route=${encodeURIComponent("/../../account/sign-in")}`);
+  await expect(page.getByRole("heading", {level: 1})).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/kakarayan/");
+  await page.goto(`lookup?type=sentences&q=${"a".repeat(3000)}`);
+  await expect(page.getByRole("textbox", {name: /word or phrase/u})).toHaveValue("a".repeat(2048));
+});
+
 test("lookup only asks for a translation language when searching Formosan text", async ({page}) => {
   await page.goto("lookup?type=dictionary");
 
@@ -527,10 +535,10 @@ test("source audio playback stays inside the XML alignment", async ({page}, test
     const audio = body.audio[0];
     if (!audio) throw new Error("Fixture sentence has no audio evidence");
     audio.playback_urls = [];
-    audio.url = "https://audio.example.test/full.wav";
+    audio.url = "https://klokah.tw/full.wav";
     await route.fulfill({response, json: body});
   });
-  await page.route("https://audio.example.test/full.wav", async (route) => {
+  await page.route("https://klokah.tw/full.wav", async (route) => {
     await route.fulfill({
       body: silentWav(10),
       contentType: "audio/wav",
@@ -548,7 +556,7 @@ test("source audio playback stays inside the XML alignment", async ({page}, test
 
   const player = page.locator(".audio-evidence audio");
   await expect(player).toBeVisible();
-  await expect(player).toHaveAttribute("src", "https://audio.example.test/full.wav#t=1.25,3.75");
+  await expect(player).toHaveAttribute("src", "https://klokah.tw/full.wav#t=1.25,3.75");
   await expect(player).toHaveAttribute("data-clip-start", "1.25");
   await expect(player).toHaveAttribute("data-clip-end", "3.75");
   await expect.poll(() => player.evaluate((audio) => (audio as HTMLAudioElement).currentTime))

@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from "react";
 
 import {summaries} from "../apiClient";
 import {apiErrorMessage, isAbortError} from "../apiErrors";
+import {spreadsheetCell} from "../exportText";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
 import type {AppData} from "../types";
@@ -22,7 +23,7 @@ function rows(result: SummaryResult, kind: TableKind) {
 }
 
 function download(values: Array<{value: string; count: number}>, kind: TableKind) {
-  const csv = `value,count\n${values.map(({value, count}) => `"${(/^[=+@\-\t\r]/u.test(value) ? `'${value}` : value).replaceAll('"', '""')}",${count}`).join("\n")}\n`;
+  const csv = `value,count\n${values.map(({value, count}) => `"${spreadsheetCell(value).replaceAll('"', '""')}",${count}`).join("\n")}\n`;
   const url = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
   const anchor = document.createElement("a");
   anchor.href = url;

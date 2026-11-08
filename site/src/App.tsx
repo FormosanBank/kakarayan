@@ -146,15 +146,18 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
   const corpus = path.startsWith("/corpora/")
     ? data.corpora.find((item) => item.id === decodedId(path.slice("/corpora/".length)))
     : undefined;
-  const route: Route = language
+  const known: Route | undefined = language
     ? {title: language.name, page: <LanguageDetail data={data} language={language} />}
     : corpus
       ? {title: corpus.name, page: <CorpusDetail data={data} corpus={corpus} />}
-      : routes[path] ?? {title: tx("Page not found", "找不到頁面"), page: <NotFound />};
+      : routes[path];
+  const route: Route = known ?? {title: tx("Page not found", "找不到頁面"), page: <NotFound />};
+  const found = known !== undefined;
   const routeTitle = route.title;
   const routeDescription = route.description ?? t("home.lede");
   useEffect(() => {
-    const canonicalUrl = new URL(routeHref(path), window.location.origin).href;
+    // Only a real page gets its own canonical URL; anything else points at the home page.
+    const canonicalUrl = new URL(routeHref(found ? path : "/"), window.location.origin).href;
     document.title = `${routeTitle} | Kakarayan`;
     document.querySelector('meta[name="description"]')?.setAttribute("content", routeDescription);
     document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonicalUrl);
@@ -169,7 +172,7 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
     document
       .querySelector('meta[name="robots"]')
       ?.setAttribute("content", `${path === "/lookup" ? "noindex" : "index"},follow,noai,noimageai`);
-  }, [locale, path, routeDescription, routeTitle]);
+  }, [found, locale, path, routeDescription, routeTitle]);
   useEffect(() => {
     if (previousPath.current !== path) document.getElementById("main")?.focus({preventScroll: true});
     window.scrollTo({top: 0, left: 0, behavior: "instant"});

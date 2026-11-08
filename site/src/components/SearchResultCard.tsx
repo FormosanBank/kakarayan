@@ -2,6 +2,7 @@ import {useEffect, useState} from "react";
 
 import {sentenceDetail} from "../apiClient";
 import {apiErrorMessage} from "../apiErrors";
+import {singleLine} from "../exportText";
 import {useI18n} from "../i18n";
 import {Link} from "../routing";
 import {queryMatchesText} from "../queryMatching";
@@ -153,7 +154,7 @@ function SearchResultDetail({
     `${record.source_path}#${record.xml_id}`,
     `FormosanBank ${data.meta.source.commit}`,
     `Kakarayan ${data.meta.release_id}`,
-  ].join(". ");
+  ].map(singleLine).join(". ");
   const hasAnalysis =
     record.words.length > 0 ||
     record.phonology.length > 0 ||

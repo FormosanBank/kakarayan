@@ -108,6 +108,30 @@ describe("clean route migration", () => {
     expect(window.location.search).toBe("?section=api");
   });
 
+  it("never leaves the app path for a crafted forwarded or hash route", () => {
+    for (const link of [
+      "/?__kakarayan_route=%2F..%2F..%2Faccount%2Fsign-in",
+      "/?__kakarayan_route=%2F%2E%2E%2Fdownloads",
+      "/?__kakarayan_route=%2F%252e%252e%2Flearn",
+      "/?__kakarayan_route=%2F..%2Fkakarayan%2F%2F",
+      "/?__kakarayan_route=%2F%2Fevil.example%2F",
+      "/?__kakarayan_route=%2F%5Cevil.example",
+      "/?__kakarayan_route=%2Flookup%252f..%252f..",
+      "/#/../../learn",
+      "/#//evil.example/path",
+    ]) {
+      window.history.replaceState(null, "", link);
+      prepareRouting();
+      expect(window.location.pathname, link).toBe("/");
+    }
+  });
+
+  it("collapses an alias base such as a doubled slash", () => {
+    window.history.replaceState(null, "", "/learn//deck///?tool=deck");
+    prepareRouting();
+    expect(`${window.location.pathname}${window.location.search}`).toBe("/learn/deck/?tool=deck");
+  });
+
   it("rejects malformed percent encoding forwarded by Pages", () => {
     window.history.replaceState(null, "", "/?__kakarayan_route=%2Flanguages%2F%25ZZ");
     prepareRouting();

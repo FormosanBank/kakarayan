@@ -1,4 +1,4 @@
-import {cardsAsAnkiTsv, cardsAsCsv, manualStudyCard, restoreBackup, scheduleCard, validateBackup, type StudyCard} from "./study";
+import {cardsAsAnkiTsv, cardsAsCsv, isCard, manualStudyCard, restoreBackup, scheduleCard, validateBackup, type StudyCard} from "./study";
 
 const card: StudyCard = {
   id: "card-1",
@@ -56,15 +56,38 @@ describe("local study scheduling", () => {
     expect(easy.dueAt).toBe("2026-02-03T00:00:00.000Z");
   });
 
-  it("protects spreadsheet exports without altering Anki text", () => {
-    expect(cardsAsAnkiTsv([{...card, front: "=1+1"}])).toContain('"=1+1"');
-    expect(cardsAsCsv([{...card, front: "=1+1"}])).toContain("'=1+1");
+  it("can grade every card a backup may contain", () => {
+    const now = new Date("2026-11-04T00:00:00.000Z");
+    const grades = ["again", "hard", "good", "easy"] as const;
+    for (const ease of [1.3, 2.5, 100]) {
+      for (const intervalDays of [0, 1, 1_000_000]) {
+        for (const repetitions of [0, 1, 2, 1_000_000]) {
+          for (const lapses of [0, 1_000_000]) {
+            const extreme = {...card, dueAt: "1970-01-01T00:00:00.000Z", ease, intervalDays, repetitions, lapses};
+            expect(isCard(extreme)).toBe(true);
+            for (const grade of grades) {
+              const next = scheduleCard(extreme, grade, now);
+              expect(isCard(next)).toBe(true);
+              expect(Date.parse(next.dueAt)).toBeGreaterThan(now.getTime());
+            }
+          }
+        }
+      }
+    }
   });
 
-  it("quotes multiline Anki fields with explicit header metadata", () => {
-    const value = cardsAsAnkiTsv([{...card, front: '第一行\n"line 2"\tend'}]);
-    expect(value).toContain("#separator:Tab\n#html:false\n#columns:Front\tBack\tTags\tSource\n#tags column:3\n");
-    expect(value).toContain('"第一行\n""line 2""\tend"\t"five"');
+  it("keeps formulas inert in both exports without altering Anki text", () => {
+    const formula = {...card, front: "=cmd|' /C calc'!A0", back: "-an", tags: ["=1+1"],
+      source: {releaseId: "fb", recordId: "@SUM(1)", sourcePath: "x.xml"}};
+    const anki = cardsAsAnkiTsv([formula]).split("\n")[4]?.split("\t");
+    expect(anki).toEqual(['"&#61;cmd|\' /C calc\'!A0"', '"&#45;an"', `"'=1+1"`, '"&#64;SUM(1)"']);
+    expect(cardsAsCsv([formula])).toContain("'=cmd|' /C calc'!A0,'-an");
+  });
+
+  it("writes Anki fields as escaped HTML with explicit header metadata", () => {
+    const value = cardsAsAnkiTsv([{...card, front: '第一行\n"line 2"\t<b>&'}]);
+    expect(value).toContain("#separator:Tab\n#html:true\n#columns:Front\tBack\tTags\tSource\n#tags column:3\n");
+    expect(value).toContain('"第一行<br>""line 2""\t&lt;b&gt;&amp;"\t"five"');
   });
 
   it("validates the entire backup before attempting a write", async () => {

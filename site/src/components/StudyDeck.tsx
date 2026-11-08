@@ -5,6 +5,7 @@ import {
   cardsAsAnkiTsv,
   cardsAsCsv,
   clearCards,
+  deckErrorMessage,
   deleteCard,
   exportBackup,
   listCards,
@@ -39,6 +40,7 @@ export function StudyDeck({
   const [cards, setCards] = useState<StudyCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [showAnswer, setShowAnswer] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [filter, setFilter] = useState("");
@@ -55,11 +57,11 @@ export function StudyDeck({
         setLoading(false);
       },
       (cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : String(cause));
+        setError(deckErrorMessage(cause, tx));
         setLoading(false);
       },
     );
-  }, []);
+  }, [tx]);
 
   useEffect(reload, [reload]);
   const due = useMemo(
@@ -104,7 +106,7 @@ export function StudyDeck({
       await action();
       setError("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(deckErrorMessage(cause, tx));
     }
   }
 
@@ -123,12 +125,18 @@ export function StudyDeck({
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    setNotice("");
     try {
       if (file.size > 20 * 1024 * 1024) throw new Error(tx("Backup must be 20 MiB or smaller.", "備份不得超過 20 MiB。"));
-      await restoreBackup(JSON.parse(await file.text()) as unknown);
+      const {added, kept} = await restoreBackup(JSON.parse(await file.text()) as unknown);
+      setError("");
+      setNotice(tx(
+        `Added ${number(added)} card${added === 1 ? "" : "s"} from the backup. ${number(kept)} already on this device ${kept === 1 ? "was" : "were"} kept unchanged.`,
+        `已從備份新增 ${number(added)} 張卡片。此裝置上已有的 ${number(kept)} 張保持不變。`,
+      ));
       reload();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(`${deckErrorMessage(cause, tx)} ${tx("No cards from the file were restored.", "檔案中的卡片均未還原。")}`);
     }
   }
 
@@ -164,7 +172,7 @@ export function StudyDeck({
       setError("");
       reload();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(deckErrorMessage(cause, tx));
     }
   }
 
@@ -214,6 +222,7 @@ export function StudyDeck({
         </div>
       </div>
       {error && <p className="callout callout--error">{error}</p>}
+      {notice && <p className="callout callout--info" role="status">{notice}</p>}
       <details className="manual-card">
         <summary>{tx("Create a card", "建立卡片")}</summary>
         <div className="manual-card__form">
@@ -276,7 +285,7 @@ export function StudyDeck({
       {!cards.length && <div className="empty-state">{t("deck.empty")}</div>}
       {current && (
         <article className="review-card">
-          <span>{current.deck} · {tx("local card", "本機卡片")}</span>
+          <span>{current.deck} · {current.restoredAt ? tx("restored card", "還原的卡片") : tx("local card", "本機卡片")}</span>
           <h3>{current.direction === "production" ? current.back : current.front}</h3>
           {!showAnswer ? (
             <button className="button button--primary" onClick={() => setShowAnswer(true)}>
@@ -303,8 +312,10 @@ export function StudyDeck({
           )}
           {current.source && (
             <small>
-              {tx("Source", "來源")} {current.source.recordId} · {tx("release", "資料版本")}{" "}
-              {current.source.releaseId}
+              {current.restoredAt
+                ? tx("Unverified source from a backup file:", "來自備份檔、未經驗證的來源：")
+                : tx("Source", "來源")}{" "}
+              {current.source.recordId} · {tx("release", "資料版本")} {current.source.releaseId}
             </small>
           )}
           {current.audioReferences.length > 0 && (

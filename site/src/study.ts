@@ -1,3 +1,5 @@
+import {trustedAudioUrl} from "./audioUrls";
+import {spreadsheetCell} from "./exportText";
 import type {DictionaryEntry, SearchRecord} from "./types";
 
 export type Grade = "again" | "hard" | "good" | "easy";
@@ -23,6 +25,8 @@ export interface StudyCard {
   ease: number;
   repetitions: number;
   lapses: number;
+  /** Set when the card came from a backup file, whose source the site cannot vouch for. */
+  restoredAt?: string;
 }
 
 export interface StudyBackup {
@@ -44,6 +48,10 @@ const DATABASE = "kakarayan-learning";
 const STORE = "cards";
 const VERSION = 1;
 const DAY = 86_400_000;
+// The largest scheduling values a card may hold. Backups are validated against them and
+// grading caps at them, so every card that can be restored can also be graded.
+const MAX_EASE = 100;
+const MAX_COUNT = 1_000_000;
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -94,25 +102,21 @@ export function scheduleCard(card: StudyCard, grade: Grade, now: Date): StudyCar
   let ease = card.ease;
   let repetitions = card.repetitions;
   let lapses = card.lapses;
-  let dueMs: number;
 
   if (grade === "again") {
     intervalDays = 0;
     ease = Math.max(1.3, ease - 0.2);
     repetitions = 0;
     lapses += 1;
-    dueMs = now.getTime() + 10 * 60_000;
   } else if (grade === "hard") {
     intervalDays = Math.max(1, Math.round(Math.max(1, intervalDays) * 1.2));
     ease = Math.max(1.3, ease - 0.15);
     repetitions += 1;
-    dueMs = now.getTime() + intervalDays * DAY;
   } else if (grade === "easy") {
     intervalDays =
       repetitions === 0 ? 4 : Math.max(4, Math.round(Math.max(1, intervalDays) * ease * 1.3));
     ease += 0.15;
     repetitions += 1;
-    dueMs = now.getTime() + intervalDays * DAY;
   } else {
     intervalDays =
       repetitions === 0
@@ -121,15 +125,16 @@ export function scheduleCard(card: StudyCard, grade: Grade, now: Date): StudyCar
           ? 3
           : Math.max(1, Math.round(Math.max(1, intervalDays) * ease));
     repetitions += 1;
-    dueMs = now.getTime() + intervalDays * DAY;
   }
+  intervalDays = Math.min(intervalDays, MAX_COUNT);
+  const dueMs = now.getTime() + (grade === "again" ? 10 * 60_000 : intervalDays * DAY);
 
   return {
     ...card,
     intervalDays,
-    ease,
-    repetitions,
-    lapses,
+    ease: Math.min(ease, MAX_EASE),
+    repetitions: Math.min(repetitions, MAX_COUNT),
+    lapses: Math.min(lapses, MAX_COUNT),
     dueAt: new Date(dueMs).toISOString(),
     updatedAt: now.toISOString(),
   };
@@ -155,9 +160,8 @@ export function cardFromRecord(
     languageId: record.language_id,
     tags: [record.corpus_id, record.dialect].filter(Boolean),
     direction: "recognition",
-    audioReferences: record.audio
-      .map((item) => item.url || item.source || item.file)
-      .filter(Boolean),
+    audioReferences: record.audio.flatMap((item) =>
+      [item.url, item.source, item.file].map(trustedAudioUrl).find((url) => url !== null) ?? []),
     source: {
       releaseId,
       recordId: record.id,
@@ -242,14 +246,20 @@ export async function listCards(): Promise<StudyCard[]> {
     const transaction = database.transaction(STORE, "readonly");
     const cards: unknown[] = await requestResult(transaction.objectStore(STORE).getAll());
     if (!cards.every(isCard)) throw new Error("Some local cards are invalid. Keep a backup before changing them.");
-    return cards;
+    return cards.map(withTrustedAudio);
   } finally {
     database.close();
   }
 }
 
+// Cards saved before audio hosts were checked, or restored from a file, may name any URL.
+function withTrustedAudio(card: StudyCard): StudyCard {
+  return {...card, audioReferences: card.audioReferences.flatMap((value) => trustedAudioUrl(value) ?? [])};
+}
+
 export async function saveCard(card: StudyCard): Promise<void> {
   if (!isCard(card)) throw new Error("This card has invalid content or scheduling data");
+  card = withTrustedAudio(card);
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readwrite");
@@ -312,10 +322,11 @@ export function isCard(value: unknown): value is StudyCard {
     stringList(value.audioReferences, 100) &&
     (value.direction === "recognition" || value.direction === "production") &&
     isoDate(value.createdAt) && isoDate(value.updatedAt) && isoDate(value.dueAt) &&
-    typeof value.ease === "number" && Number.isFinite(value.ease) && value.ease >= 1.3 && value.ease <= 100 &&
+    typeof value.ease === "number" && Number.isFinite(value.ease) && value.ease >= 1.3 && value.ease <= MAX_EASE &&
     [value.intervalDays, value.repetitions, value.lapses].every(
-      (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 0 && item <= 1_000_000,
+      (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 0 && item <= MAX_COUNT,
     ) &&
+    (value.restoredAt === undefined || isoDate(value.restoredAt)) &&
     (value.source === null || (isObject(value.source) &&
       boundedText(value.source.releaseId, 128) && boundedText(value.source.recordId, 256) &&
       boundedText(value.source.sourcePath, 4_096)));
@@ -331,43 +342,74 @@ export function validateBackup(value: unknown): StudyBackup {
   return {schemaVersion: 1, exportedAt: value.exportedAt, cards: value.cards};
 }
 
-export async function restoreBackup(value: unknown): Promise<number> {
+export interface RestoreResult {
+  added: number;
+  kept: number;
+}
+
+/** Adds the backup's new cards. Cards already on this device are never replaced. */
+export async function restoreBackup(value: unknown): Promise<RestoreResult> {
   const backup = validateBackup(value);
+  const restoredAt = new Date().toISOString();
   const database = await openDatabase();
   try {
-    // Existing IDs are replaced by the backup. New IDs are added atomically.
     const transaction = database.transaction(STORE, "readwrite");
     const done = transactionDone(transaction);
+    const store = transaction.objectStore(STORE);
+    let added = 0;
     try {
-      for (const card of backup.cards) transaction.objectStore(STORE).put(card);
+      const existing = new Set(await requestResult(store.getAllKeys()));
+      for (const card of backup.cards) {
+        if (existing.has(card.id)) continue;
+        store.put(withTrustedAudio({...card, restoredAt}));
+        added += 1;
+      }
     } catch (cause) {
       transaction.abort();
       await done.catch(() => undefined);
       throw cause;
     }
     await done;
+    return {added, kept: backup.cards.length - added};
   } finally {
     database.close();
   }
-  return backup.cards.length;
 }
 
-function spreadsheetCell(value: string): string {
-  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+type Translate = (english: string, traditionalChinese: string) => string;
+
+/** A refused browser write can carry an empty message, as a full storage quota does. */
+export function deckErrorMessage(cause: unknown, tx: Translate): string {
+  if (!(cause instanceof Error)) return String(cause);
+  if (cause.message) return cause.message;
+  return cause.name === "QuotaExceededError"
+    ? tx("This browser has no storage space left for Kakarayan cards.", "此瀏覽器已沒有空間可儲存 Kakarayan 卡片。")
+    : tx(`The browser refused to store the cards (${cause.name}).`, `瀏覽器拒絕儲存卡片（${cause.name}）。`);
+}
+
+// Anki reads these fields as HTML, so a leading formula character can be written as an
+// entity: Anki shows the original text, and a spreadsheet opening the file sees inert text.
+function ankiField(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replace(/\r\n|\r|\n/gu, "<br>")
+    .replace(/^[=+\-@\t]/u, (char) => `&#${char.codePointAt(0)};`);
 }
 
 export function cardsAsAnkiTsv(cards: StudyCard[]): string {
   return [
     "#separator:Tab",
-    "#html:false",
+    "#html:true",
     "#columns:Front\tBack\tTags\tSource",
     "#tags column:3",
     ...cards.map((card) =>
       [
-        card.front,
-        card.back,
-        card.tags.join(" "),
-        card.source?.recordId ?? "",
+        ankiField(card.front),
+        ankiField(card.back),
+        spreadsheetCell(card.tags.join(" ")),
+        ankiField(card.source?.recordId ?? ""),
       ].map((value) => `"${value.replaceAll('"', '""')}"`).join("\t"),
     ),
   ].join("\n");

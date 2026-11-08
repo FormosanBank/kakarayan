@@ -6,15 +6,29 @@ const scope = self.registration.scope;
 const entries = new Map(config.entries.map((entry) => [new URL(entry.path, scope).href, entry]));
 const required = config.entries.filter((entry) => entry.required);
 
-async function verified(entry) {
-  const response = await fetch(new URL(entry.path, scope), {cache: "no-store"});
-  if (!response.ok) throw new Error("Shell resource unavailable");
+async function matches(response, entry) {
+  if (!response.ok) return false;
   const bytes = await response.clone().arrayBuffer();
-  if (bytes.byteLength !== entry.bytes) throw new Error("Shell size mismatch");
+  if (bytes.byteLength !== entry.bytes) return false;
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
     .map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  if (hash !== entry.sha256) throw new Error("Shell generation mismatch");
+  return hash === entry.sha256;
+}
+
+async function verified(entry) {
+  const response = await fetch(new URL(entry.path, scope), {cache: "no-store"});
+  if (!(await matches(response, entry))) throw new Error("Shell resource does not match this generation");
   return response;
+}
+
+// The host serves the same bytes under aliases such as //assets/x.js or api/v1%2fmeta.json.
+// Each alias resolves to its canonical entry, so no alias bypasses the manifest.
+function canonicalPath(pathname) {
+  try {
+    return decodeURIComponent(pathname).replace(/\/{2,}/gu, "/");
+  } catch {
+    return null;
+  }
 }
 
 self.addEventListener("install", (event) => {
@@ -52,8 +66,9 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type !== "ACTIVATE") return;
   event.waitUntil((async () => {
+    // Only the visitor's own tabs count. A page another site frames cannot hold an update back.
     const tabs = (await self.clients.matchAll({type: "window", includeUncontrolled: true}))
-      .filter((client) => client.url.startsWith(scope));
+      .filter((client) => client.frameType === "top-level" && client.url.startsWith(scope));
     if (tabs.length > 1) {
       event.ports[0]?.postMessage({status: "other_tabs"});
       return;
@@ -67,13 +82,23 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
   if (request.method !== "GET" || !url.href.startsWith(scope)) return;
-  const key = request.mode === "navigate" ? new URL("./", scope).href : new URL(url.pathname, scope).href;
-  const entry = entries.get(key);
-  if (!entry) return; // No queries, exports, audio, model calls, or arbitrary paths.
+  const path = canonicalPath(url.pathname);
+  const key = request.mode === "navigate" ? new URL("./", scope).href : path && new URL(path, scope).href;
+  const entry = key && entries.get(key);
+  if (!entry) {
+    // Unlisted canonical files (robots.txt, sitemap.xml) pass through. Aliases and unknown
+    // code never do, because their bytes cannot be checked.
+    const unverifiable = path !== url.pathname || new URL(path ?? "", scope).href.startsWith(new URL("assets/", scope).href);
+    if (request.mode !== "navigate" && unverifiable) {
+      event.respondWith(new Response("This resource is not part of the installed site.", {status: 404}));
+    }
+    return;
+  }
   const response = (async () => {
     const cache = await caches.open(cacheName);
     const cached = await cache.match(key);
-    if (cached) return cached;
+    if (cached && await matches(cached, entry)) return cached;
+    if (cached) await cache.delete(key);
     try {
       const fetched = await verified(entry);
       try { await cache.put(key, fetched.clone()); }

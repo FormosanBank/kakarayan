@@ -308,7 +308,7 @@ export function Recorder({
       if (next.signal.aborted || controller.current !== next || !alive.current) return;
       setAsrResult({text: output.text, reference, language, audioName});
       setStage("complete");
-      setStatus(output.metadata);
+      setStatus(tx("Automatic transcript ready.", "自動轉錄完成。"));
     } catch (cause) {
       if (next.signal.aborted || controller.current !== next || !alive.current) return;
       if (cause instanceof DOMException && cause.name === "AbortError") {

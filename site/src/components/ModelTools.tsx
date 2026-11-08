@@ -16,7 +16,6 @@ const directions: TranslationRequest["direction"][] = [
 
 interface TranslationResult {
   text: string;
-  metadata: string;
   request: Readonly<TranslationRequest>;
   languageId: string;
   modelId: string;
@@ -316,7 +315,7 @@ export function TranslationTool({
         <div className="machine-output">
           <span>{tx("Machine output", "機器輸出")}</span>
           <p>{result.text}</p>
-          {result.metadata && <small>{result.metadata}</small>}
+          {result.modelId && <small>{tx("Model", "模型")}: {result.modelId}</small>}
           <div className="button-row">
             <button className="button button--quiet" onClick={copyResult}>{tx("Copy", "複製")}</button>
             <button className="button button--quiet" onClick={saveResult}>{tx("Save as labelled draft", "儲存為已標示草稿")}</button>
