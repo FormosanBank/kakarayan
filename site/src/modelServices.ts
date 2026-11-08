@@ -38,6 +38,32 @@ interface GradioClient {
 }
 
 const connections = new Map<string, Promise<GradioClient>>();
+const RUN_HISTORY_PREFIX = "gradio:run-history:";
+
+/** Removes run records that earlier versions let the Space client keep in this browser. */
+export function forgetModelRunHistory(): void {
+  try {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith(RUN_HISTORY_PREFIX)) localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage can be unavailable in private windows; nothing was kept there either.
+  }
+}
+
+// The Space client copies the page's query string, which holds search terms and link
+// parameters, into its request URLs. It reads it once when a job is submitted, so the
+// address is hidden for that synchronous call only.
+function submitWithoutPageQuery<T>(submit: () => T): T {
+  const {pathname, search, hash} = window.location;
+  if (!search) return submit();
+  window.history.replaceState(window.history.state, "", `${pathname}${hash}`);
+  try {
+    return submit();
+  } finally {
+    window.history.replaceState(window.history.state, "", `${pathname}${search}${hash}`);
+  }
+}
 
 async function modelClient(
   space: string,
@@ -48,6 +74,8 @@ async function modelClient(
   const {Client} = await import("@gradio/client");
   const connection = Client.connect(space, {
     events: ["data", "status"],
+    // Kakarayan does not store model input or output; neither may the client.
+    record_history: false,
     status_callback: (status) => {
       if (status.status === "sleeping" || status.status === "starting") {
         onStage("connecting", "The public Space is waking up. This can take a few minutes.");
@@ -113,7 +141,7 @@ async function runGradio(
   let result: unknown[] | null = null;
   try {
     const client = await Promise.race([connection, interruption]);
-    const submitted = client.submit(endpoint, payload);
+    const submitted = submitWithoutPageQuery(() => client.submit(endpoint, payload));
     job = submitted;
     const consume = async () => {
       for await (const event of submitted) {
@@ -203,7 +231,8 @@ export async function transcribe(
   const data = await runGradio(
     service.space,
     service.endpoint,
-    {language_name: language, audio_path: handle_file(audio)},
+    // A chosen file's own name stays on the device; the Space gets an unnamed blob.
+    {language_name: language, audio_path: handle_file(new Blob([audio], {type: audio.type}))},
     options,
   );
   return modelText(data, "speech recognition");
