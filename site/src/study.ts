@@ -1,3 +1,4 @@
+import {trustedAudioUrl} from "./audioUrls";
 import {spreadsheetCell} from "./exportText";
 import type {DictionaryEntry, SearchRecord} from "./types";
 
@@ -157,9 +158,8 @@ export function cardFromRecord(
     languageId: record.language_id,
     tags: [record.corpus_id, record.dialect].filter(Boolean),
     direction: "recognition",
-    audioReferences: record.audio
-      .map((item) => item.url || item.source || item.file)
-      .filter(Boolean),
+    audioReferences: record.audio.flatMap((item) =>
+      [item.url, item.source, item.file].map(trustedAudioUrl).find((url) => url !== null) ?? []),
     source: {
       releaseId,
       recordId: record.id,
@@ -244,14 +244,20 @@ export async function listCards(): Promise<StudyCard[]> {
     const transaction = database.transaction(STORE, "readonly");
     const cards: unknown[] = await requestResult(transaction.objectStore(STORE).getAll());
     if (!cards.every(isCard)) throw new Error("Some local cards are invalid. Keep a backup before changing them.");
-    return cards;
+    return cards.map(withTrustedAudio);
   } finally {
     database.close();
   }
 }
 
+// Cards saved before audio hosts were checked, or restored from a file, may name any URL.
+function withTrustedAudio(card: StudyCard): StudyCard {
+  return {...card, audioReferences: card.audioReferences.flatMap((value) => trustedAudioUrl(value) ?? [])};
+}
+
 export async function saveCard(card: StudyCard): Promise<void> {
   if (!isCard(card)) throw new Error("This card has invalid content or scheduling data");
+  card = withTrustedAudio(card);
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE, "readwrite");
@@ -341,7 +347,7 @@ export async function restoreBackup(value: unknown): Promise<number> {
     const transaction = database.transaction(STORE, "readwrite");
     const done = transactionDone(transaction);
     try {
-      for (const card of backup.cards) transaction.objectStore(STORE).put(card);
+      for (const card of backup.cards) transaction.objectStore(STORE).put(withTrustedAudio(card));
     } catch (cause) {
       transaction.abort();
       await done.catch(() => undefined);

@@ -535,10 +535,10 @@ test("source audio playback stays inside the XML alignment", async ({page}, test
     const audio = body.audio[0];
     if (!audio) throw new Error("Fixture sentence has no audio evidence");
     audio.playback_urls = [];
-    audio.url = "https://audio.example.test/full.wav";
+    audio.url = "https://klokah.tw/full.wav";
     await route.fulfill({response, json: body});
   });
-  await page.route("https://audio.example.test/full.wav", async (route) => {
+  await page.route("https://klokah.tw/full.wav", async (route) => {
     await route.fulfill({
       body: silentWav(10),
       contentType: "audio/wav",
@@ -556,7 +556,7 @@ test("source audio playback stays inside the XML alignment", async ({page}, test
 
   const player = page.locator(".audio-evidence audio");
   await expect(player).toBeVisible();
-  await expect(player).toHaveAttribute("src", "https://audio.example.test/full.wav#t=1.25,3.75");
+  await expect(player).toHaveAttribute("src", "https://klokah.tw/full.wav#t=1.25,3.75");
   await expect(player).toHaveAttribute("data-clip-start", "1.25");
   await expect(player).toHaveAttribute("data-clip-end", "3.75");
   await expect.poll(() => player.evaluate((audio) => (audio as HTMLAudioElement).currentTime))
