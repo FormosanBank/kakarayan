@@ -25,6 +25,8 @@ export interface StudyCard {
   ease: number;
   repetitions: number;
   lapses: number;
+  /** Set when the card came from a backup file, whose source the site cannot vouch for. */
+  restoredAt?: string;
 }
 
 export interface StudyBackup {
@@ -324,6 +326,7 @@ export function isCard(value: unknown): value is StudyCard {
     [value.intervalDays, value.repetitions, value.lapses].every(
       (item) => typeof item === "number" && Number.isSafeInteger(item) && item >= 0 && item <= MAX_COUNT,
     ) &&
+    (value.restoredAt === undefined || isoDate(value.restoredAt)) &&
     (value.source === null || (isObject(value.source) &&
       boundedText(value.source.releaseId, 128) && boundedText(value.source.recordId, 256) &&
       boundedText(value.source.sourcePath, 4_096)));
@@ -339,25 +342,49 @@ export function validateBackup(value: unknown): StudyBackup {
   return {schemaVersion: 1, exportedAt: value.exportedAt, cards: value.cards};
 }
 
-export async function restoreBackup(value: unknown): Promise<number> {
+export interface RestoreResult {
+  added: number;
+  kept: number;
+}
+
+/** Adds the backup's new cards. Cards already on this device are never replaced. */
+export async function restoreBackup(value: unknown): Promise<RestoreResult> {
   const backup = validateBackup(value);
+  const restoredAt = new Date().toISOString();
   const database = await openDatabase();
   try {
-    // Existing IDs are replaced by the backup. New IDs are added atomically.
     const transaction = database.transaction(STORE, "readwrite");
     const done = transactionDone(transaction);
+    const store = transaction.objectStore(STORE);
+    let added = 0;
     try {
-      for (const card of backup.cards) transaction.objectStore(STORE).put(withTrustedAudio(card));
+      const existing = new Set(await requestResult(store.getAllKeys()));
+      for (const card of backup.cards) {
+        if (existing.has(card.id)) continue;
+        store.put(withTrustedAudio({...card, restoredAt}));
+        added += 1;
+      }
     } catch (cause) {
       transaction.abort();
       await done.catch(() => undefined);
       throw cause;
     }
     await done;
+    return {added, kept: backup.cards.length - added};
   } finally {
     database.close();
   }
-  return backup.cards.length;
+}
+
+type Translate = (english: string, traditionalChinese: string) => string;
+
+/** A refused browser write can carry an empty message, as a full storage quota does. */
+export function deckErrorMessage(cause: unknown, tx: Translate): string {
+  if (!(cause instanceof Error)) return String(cause);
+  if (cause.message) return cause.message;
+  return cause.name === "QuotaExceededError"
+    ? tx("This browser has no storage space left for Kakarayan cards.", "此瀏覽器已沒有空間可儲存 Kakarayan 卡片。")
+    : tx(`The browser refused to store the cards (${cause.name}).`, `瀏覽器拒絕儲存卡片（${cause.name}）。`);
 }
 
 // Anki reads these fields as HTML, so a leading formula character can be written as an

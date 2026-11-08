@@ -4,7 +4,7 @@ import {concordance, dictionary, translationLanguages} from "../apiClient";
 import {apiErrorMessage, isAbortError} from "../apiErrors";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
-import {cardFromDictionaryEntry, cardFromRecord, saveCard} from "../study";
+import {cardFromDictionaryEntry, cardFromRecord, deckErrorMessage, saveCard} from "../study";
 import {translationLanguageName} from "../translationLanguages";
 import type {
   AppData,
@@ -286,7 +286,7 @@ export function SearchTool({
       );
       setNotice(tx(`${entry.display_form} saved.`, `已儲存「${entry.display_form}」。`));
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(deckErrorMessage(cause, tx));
     }
   }
 
@@ -295,7 +295,7 @@ export function SearchTool({
       await saveCard(cardFromRecord(record, data.meta.release_id, resultTranslationLanguage));
       setNotice(tx("Sentence saved.", "已儲存句子。"));
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(deckErrorMessage(cause, tx));
     }
   }
 
