@@ -148,6 +148,14 @@ test("another site cannot operate Kakarayan inside a frame", {tag: "@production-
   expect(apiRequests).toEqual([]);
 });
 
+test("shared links stay inside the app and cannot preload an oversized query", async ({page}) => {
+  await page.goto(`?__kakarayan_route=${encodeURIComponent("/../../account/sign-in")}`);
+  await expect(page.getByRole("heading", {level: 1})).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/kakarayan/");
+  await page.goto(`lookup?type=sentences&q=${"a".repeat(3000)}`);
+  await expect(page.getByRole("textbox", {name: /word or phrase/u})).toHaveValue("a".repeat(2048));
+});
+
 test("lookup only asks for a translation language when searching Formosan text", async ({page}) => {
   await page.goto("lookup?type=dictionary");
 
