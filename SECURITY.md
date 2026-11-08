@@ -36,6 +36,14 @@ For a corpus correction, attribution concern, rights request, or takedown, follo
   line, source BibTeX is offered only when it is balanced entries without TeX commands
   beyond accents and formatting, and model services cannot supply their own attribution
   (`site/src/exportText.ts`).
+- Shared links can only name routes under `/kakarayan/`, and the installed site checks every
+  shell file against its build manifest, including cache hits and path aliases.
+- Record audio plays and is saved only from FormosanBank's Hugging Face mirror and the
+  corpora's own audio hosts (`site/src/audioUrls.ts`, mirrored in the page's `media-src`).
+- Restoring a deck backup only adds cards that are not already on the device, and restored
+  citations are shown as unverified.
+- Model services receive only the consented text or an unnamed audio blob. The page's query
+  string is not forwarded, and the Space client keeps no run history.
 - Query work, page size, custom export rows, and export bytes are bounded.
 - Operational records contain route templates and durations, not raw queries, sentence
   text, recordings, or model input.
