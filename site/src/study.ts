@@ -1,3 +1,4 @@
+import {spreadsheetCell} from "./exportText";
 import type {DictionaryEntry, SearchRecord} from "./types";
 
 export type Grade = "again" | "hard" | "good" | "easy";
@@ -352,22 +353,29 @@ export async function restoreBackup(value: unknown): Promise<number> {
   return backup.cards.length;
 }
 
-function spreadsheetCell(value: string): string {
-  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+// Anki reads these fields as HTML, so a leading formula character can be written as an
+// entity: Anki shows the original text, and a spreadsheet opening the file sees inert text.
+function ankiField(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replace(/\r\n|\r|\n/gu, "<br>")
+    .replace(/^[=+\-@\t]/u, (char) => `&#${char.codePointAt(0)};`);
 }
 
 export function cardsAsAnkiTsv(cards: StudyCard[]): string {
   return [
     "#separator:Tab",
-    "#html:false",
+    "#html:true",
     "#columns:Front\tBack\tTags\tSource",
     "#tags column:3",
     ...cards.map((card) =>
       [
-        card.front,
-        card.back,
-        card.tags.join(" "),
-        card.source?.recordId ?? "",
+        ankiField(card.front),
+        ankiField(card.back),
+        spreadsheetCell(card.tags.join(" ")),
+        ankiField(card.source?.recordId ?? ""),
       ].map((value) => `"${value.replaceAll('"', '""')}"`).join("\t"),
     ),
   ].join("\n");

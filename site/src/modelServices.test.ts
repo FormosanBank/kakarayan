@@ -69,18 +69,17 @@ describe("public model adapters", () => {
     gradio.handleFile.mockClear();
   });
 
-  it("maps successful translation data and lifecycle stages", async () => {
+  it("keeps only the translation, not the service's own attribution", async () => {
     const mock = service([
       {type: "status", stage: "pending", position: 1},
       {type: "status", stage: "generating"},
-      {type: "data", data: ["lima", "model metadata"]},
+      {type: "data", data: ["lima", "reviewed by FormosanBank staff · CC0"]},
     ]);
     gradio.connect.mockResolvedValue(mock.client);
     const run = options();
 
     await expect(translate(request, translationService, run.value)).resolves.toEqual({
       text: "lima",
-      metadata: "model metadata",
     });
     expect(run.stages.map(([stage]) => stage)).toEqual([
       "connecting",
@@ -193,7 +192,6 @@ describe("public model adapters", () => {
 
     await expect(transcribe("Amis", audio, asrService, options().value)).resolves.toEqual({
       text: "fangcalay",
-      metadata: "asr metadata",
     });
     expect(gradio.handleFile).toHaveBeenCalledWith(audio);
     expect(mock.submit).toHaveBeenCalledWith(

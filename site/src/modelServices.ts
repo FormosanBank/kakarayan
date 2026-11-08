@@ -153,14 +153,13 @@ async function runGradio(
   }
 }
 
-function modelText(data: unknown[], task: string): {text: string; metadata: string} {
+// Only the answer is used. A service's other values, such as its own attribution text, are
+// not shown, so a service cannot label its output as reviewed or licensed.
+function modelText(data: unknown[], task: string): {text: string} {
   if (typeof data[0] !== "string" || !data[0].trim()) {
     throw new Error(`The public ${task} model returned a malformed response`);
   }
-  return {
-    text: data[0],
-    metadata: typeof data[1] === "string" ? data[1] : "",
-  };
+  return {text: data[0]};
 }
 
 export interface TranslationRequest {
@@ -174,7 +173,7 @@ export async function translate(
   request: TranslationRequest,
   service: BrowserModelService,
   options: RunOptions,
-): Promise<{text: string; metadata: string}> {
+): Promise<{text: string}> {
   const data = await runGradio(
     service.space,
     service.endpoint,
@@ -198,7 +197,7 @@ export async function transcribe(
   audio: Blob,
   service: BrowserModelService,
   options: RunOptions,
-): Promise<{text: string; metadata: string}> {
+): Promise<{text: string}> {
   if (audio.size > 25 * 1024 * 1024) throw new Error("Audio must be 25 MiB or smaller");
   const {handle_file} = await import("@gradio/client");
   const data = await runGradio(
