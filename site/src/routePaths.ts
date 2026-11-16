@@ -6,21 +6,42 @@ export function routeHref(route: string): string {
   return `${basePath}${normalized}` || "/";
 }
 
-function isSafeForwardedRoute(value: string): boolean {
-  return value.startsWith("/") && !value.startsWith("//") && !value.includes("\\");
+// A shared link names an in-app route. It must stay under the base path once the browser
+// resolves it, so empty, dot, and backslash segments are refused. Browsers read %2e as a
+// dot, and decoding exposes encoded separators, so both forms are checked.
+function escapesBase(path: string): boolean {
+  const segments = path.slice(1).split("/");
+  return path.includes("\\") || segments.some((segment, index) =>
+    segment === "." || segment === ".." || (segment === "" && index < segments.length - 1));
+}
+
+function inAppRoute(value: string): string | null {
+  if (!value.startsWith("/")) return null;
+  const pathEnd = value.search(/[?#]/u);
+  const path = pathEnd === -1 ? value : value.slice(0, pathEnd);
+  if (escapesBase(path.replace(/%2e/giu, "."))) return null;
+  try {
+    if (escapesBase(decodeURIComponent(path))) return null;
+  } catch {
+    // Malformed escapes cannot be decoded by the router either; the page shows not found.
+  }
+  return value;
 }
 
 export function prepareRouting(): void {
   const parameters = new URLSearchParams(window.location.search);
-  const forwardedRoute = parameters.get(pagesRouteParameter);
-  if (forwardedRoute && isSafeForwardedRoute(forwardedRoute)) {
-    window.history.replaceState(window.history.state, "", routeHref(forwardedRoute));
+  const forwarded = parameters.get(pagesRouteParameter);
+  const legacyHash = window.location.hash.replace(/^#/u, "");
+  const route = forwarded !== null ? inAppRoute(forwarded) : inAppRoute(legacyHash);
+  if (route) {
+    window.history.replaceState(window.history.state, "", routeHref(route));
     return;
   }
-
-  const legacyHash = window.location.hash.replace(/^#/, "");
-  if (legacyHash.startsWith("/")) {
-    window.history.replaceState(window.history.state, "", routeHref(legacyHash));
+  // An alias such as /kakarayan// serves the same shell; settle on the one real path.
+  const {pathname, search, hash} = window.location;
+  const canonical = pathname.replace(/\/{2,}/gu, "/");
+  if (canonical !== pathname) {
+    window.history.replaceState(window.history.state, "", `${canonical}${search}${hash}`);
   }
 }
 

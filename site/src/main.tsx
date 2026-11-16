@@ -3,6 +3,7 @@ import {createRoot} from "react-dom/client";
 
 import {App} from "./App";
 import {I18nProvider} from "./i18n";
+import {forgetModelRunHistory} from "./modelServices";
 import {prepareRouting} from "./routePaths";
 import "./styles.css";
 
@@ -31,6 +32,7 @@ const root = document.getElementById("root")!;
 
 if (window.top === window.self) {
   prepareRouting();
+  forgetModelRunHistory();
   createRoot(root).render(
     <StrictMode>
       <I18nProvider>

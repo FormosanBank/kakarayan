@@ -4,7 +4,7 @@ import {concordance, dictionary, translationLanguages} from "../apiClient";
 import {apiErrorMessage, isAbortError} from "../apiErrors";
 import {useI18n} from "../i18n";
 import {useSearchParams} from "../routing";
-import {cardFromDictionaryEntry, cardFromRecord, saveCard} from "../study";
+import {cardFromDictionaryEntry, cardFromRecord, deckErrorMessage, saveCard} from "../study";
 import {translationLanguageName} from "../translationLanguages";
 import type {
   AppData,
@@ -21,6 +21,8 @@ import {LoadingState} from "./LoadingState";
 import {SearchResultCard} from "./SearchResultCard";
 
 export type LookupKind = "dictionary" | "sentences";
+// Matches the query box limit, so a shared link cannot preload a longer query.
+const MAX_QUERY_LENGTH = 2048;
 const MATCH_MODES: MatchMode[] = ["exact", "prefix", "contains"];
 const REQUIREMENTS: TierRequirement[] = [
   "translation",
@@ -60,7 +62,7 @@ export function SearchTool({
   const [params, setParams] = useSearchParams();
   const radioName = useId();
   const amis = data.languages.find((language) => language.name === "Amis");
-  const [query, setQuery] = useState(initialQuery ?? params.get("q") ?? "");
+  const [query, setQuery] = useState((initialQuery ?? params.get("q") ?? "").slice(0, MAX_QUERY_LENGTH));
   const [languageId, setLanguageId] = useState(
     selectedLanguageId ?? data.languages.find((item) => item.id === params.get("language"))?.id ?? amis?.id ?? data.languages[0]?.id ?? "",
   );
@@ -143,7 +145,7 @@ export function SearchTool({
     setLanguageId(id);
     setCorpusId(data.corpora.find((item) => item.id === params.get("corpus") && item.languages.includes(id))?.id ?? "");
     setDialect(selectedDialect ?? language?.dialects.find((value) => value === params.get("dialect")) ?? "");
-    setQuery(params.get("q") ?? "");
+    setQuery((params.get("q") ?? "").slice(0, MAX_QUERY_LENGTH));
     setDirection(params.get("direction") === "translation" ? "translation" : "formosan");
     setTranslationLanguage(params.get("target") ?? "eng");
     setMatch(MATCH_MODES.find((value) => value === params.get("mode")) ?? (kind === "sentences" ? "contains" : "exact"));
@@ -284,7 +286,7 @@ export function SearchTool({
       );
       setNotice(tx(`${entry.display_form} saved.`, `已儲存「${entry.display_form}」。`));
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(deckErrorMessage(cause, tx));
     }
   }
 
@@ -293,7 +295,7 @@ export function SearchTool({
       await saveCard(cardFromRecord(record, data.meta.release_id, resultTranslationLanguage));
       setNotice(tx("Sentence saved.", "已儲存句子。"));
     } catch (cause) {
-      setNotice(cause instanceof Error ? cause.message : String(cause));
+      setNotice(deckErrorMessage(cause, tx));
     }
   }
 
@@ -379,7 +381,7 @@ export function SearchTool({
             className={`field field--query search-form__query ${direction === "translation" ? "search-form__query--wide" : ""}`}
           >
             <label htmlFor={`query-${kind}`}>{queryLabel}</label>
-            <input id={`query-${kind}`} value={query} maxLength={2048} onChange={(event) => {
+            <input id={`query-${kind}`} value={query} maxLength={MAX_QUERY_LENGTH} onChange={(event) => {
               resetResults();
               setQuery(event.target.value);
             }} autoComplete="off" />

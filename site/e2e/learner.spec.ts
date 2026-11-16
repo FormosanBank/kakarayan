@@ -87,36 +87,42 @@ test("local study data backs up and restores without losing fields", async ({pag
   });
   await expect(page.getByRole("heading", {name: "practice front"})).toBeVisible();
 
+  await expect(page.locator(".review-card")).toContainText("restored card");
+
   const original = backup.cards[0];
   if (!original || typeof original !== "object") throw new Error("Missing backup card");
-  const replacement = {...original, front: "restored prompt"};
-  const added = {...original, id: "second-card", front: "second prompt"};
+  // A shared file must not replace cards already on the device or carry arbitrary audio.
+  const replacement = {...original, front: "replaced prompt"};
+  const added = {...original, id: "second-card", front: "second prompt",
+    audioReferences: ["javascript:alert(1)", "https://klokah.tw/a.mp3", "https://rogue.example/x.mp3"]};
   await page.evaluate(() => {
     const put = IDBObjectStore.prototype.put;
-    let calls = 0;
-    IDBObjectStore.prototype.put = function (value: unknown, key?: IDBValidKey) {
-      calls += 1;
-      if (calls === 2) {
-        IDBObjectStore.prototype.put = put;
-        throw new DOMException("Injected full storage", "QuotaExceededError");
-      }
-      return put.call(this, value, key);
+    IDBObjectStore.prototype.put = function () {
+      IDBObjectStore.prototype.put = put;
+      // A full storage quota reports an empty message.
+      throw new DOMException("", "QuotaExceededError");
     };
   });
   const twoCards = {...backup, cards: [replacement, added]};
   const file = {name: "two-cards.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(twoCards))};
   await page.locator('input[type="file"][accept*="json"]').setInputFiles(file);
-  await expect(page.locator(".study-deck .callout--error")).toContainText("Injected full storage");
+  await expect(page.locator(".study-deck .callout--error")).toHaveText(
+    "This browser has no storage space left for Kakarayan cards. No cards from the file were restored.",
+  );
   await page.reload();
   await expect(page.getByRole("heading", {name: "practice front"})).toBeVisible();
   await expect(page.locator(".deck-toolbar")).toContainText("1 cards");
   await page.locator('input[type="file"][accept*="json"]').setInputFiles(file);
+  await expect(page.getByRole("status").filter({hasText: "Added 1 card"})).toContainText("1 already on this device was kept unchanged.");
   await expect(page.locator(".deck-toolbar")).toContainText("2 cards");
   const updatedDownload = page.waitForEvent("download");
   await page.getByRole("button", {name: "Export backup"}).click();
   const updatedPath = await (await updatedDownload).path();
   if (!updatedPath) throw new Error("Missing restored backup");
-  expect(JSON.parse(await readFile(updatedPath, "utf8")).cards).toEqual(expect.arrayContaining([replacement, added]));
+  const cards = JSON.parse(await readFile(updatedPath, "utf8")).cards as Array<Record<string, unknown>>;
+  expect(cards.map((card) => card.front).sort()).toEqual(["practice front", "second prompt"]);
+  expect(cards.find((card) => card.id === "second-card")?.audioReferences).toEqual(["https://klokah.tw/a.mp3"]);
+  expect(cards.every((card) => typeof card.restoredAt === "string")).toBe(true);
 });
 
 test("microphone denial is recoverable and local audio can be deleted", async ({

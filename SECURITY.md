@@ -31,6 +31,19 @@ For a corpus correction, attribution concern, rights request, or takedown, follo
   deck controls cannot be clickjacked. GitHub Pages cannot send `frame-ancestors` or
   `X-Frame-Options` headers, so the check is in `site/src/main.tsx`. Add those headers too
   if the site moves behind a host or CDN that can set them.
+- Files and clipboard text built from corpus, model, or imported deck text cannot change
+  their own structure: spreadsheet formulas are inert, RIS and citation values stay on one
+  line, source BibTeX is offered only when it is balanced entries without TeX commands
+  beyond accents and formatting, and model services cannot supply their own attribution
+  (`site/src/exportText.ts`).
+- Shared links can only name routes under `/kakarayan/`, and the installed site checks every
+  shell file against its build manifest, including cache hits and path aliases.
+- Record audio plays and is saved only from FormosanBank's Hugging Face mirror and the
+  corpora's own audio hosts (`site/src/audioUrls.ts`, mirrored in the page's `media-src`).
+- Restoring a deck backup only adds cards that are not already on the device, and restored
+  citations are shown as unverified.
+- Model services receive only the consented text or an unnamed audio blob. The page's query
+  string is not forwarded, and the Space client keeps no run history.
 - Query work, page size, custom export rows, and export bytes are bounded.
 - Operational records contain route templates and durations, not raw queries, sentence
   text, recordings, or model input.

@@ -3,6 +3,7 @@ import {useState} from "react";
 import {PageIntro, StatusBadge} from "../components/Layout";
 import {useI18n} from "../i18n";
 import {DOCS_CORPUS_PAGES} from "../docs";
+import {risRecord, safeBibtex} from "../exportText";
 import {Link} from "../routing";
 import type {AppData, Corpus, Counts, Language} from "../types";
 
@@ -133,6 +134,7 @@ export function LanguageDetail({
 export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
   const {languageName, number, tx} = useI18n();
   const rights = data.rights.entries.find((entry) => entry.id === corpus.rights_id);
+  const bibtex = safeBibtex(corpus.bibtex_citation);
   const languages = corpus.languages
     .map((id) => data.languages.find((language) => language.id === id))
     .filter((language): language is Language => Boolean(language));
@@ -220,12 +222,10 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
           )}
         </p>
         <div className="button-row">
-          {corpus.bibtex_citation && (
+          {bibtex && (
             <button
               className="button button--quiet"
-              onClick={() =>
-                downloadText(corpus.bibtex_citation, `${corpus.id}.bib`, "application/x-bibtex")
-              }
+              onClick={() => downloadText(bibtex, `${corpus.id}.bib`, "application/x-bibtex")}
             >
               {tx("Download source BibTeX", "下載來源 BibTeX")}
             </button>
@@ -235,14 +235,12 @@ export function CorpusDetail({data, corpus}: {data: AppData; corpus: Corpus}) {
               className="button button--quiet"
               onClick={() =>
                 downloadText(
-                  [
-                    "TY  - GEN",
-                    `T1  - ${corpus.name}`,
-                    `N1  - ${corpus.citation}`,
-                    `UR  - https://github.com/FormosanBank/FormosanBank/tree/${data.meta.source.commit}/${corpus.source_path}`,
-                    `Y2  - ${data.meta.generated_at.slice(0, 10)}`,
-                    "ER  -",
-                  ].join("\n"),
+                  risRecord([
+                    ["T1", corpus.name],
+                    ["N1", corpus.citation],
+                    ["UR", `https://github.com/FormosanBank/FormosanBank/tree/${data.meta.source.commit}/${corpus.source_path}`],
+                    ["Y2", data.meta.generated_at.slice(0, 10)],
+                  ]),
                   `${corpus.id}.ris`,
                   "application/x-research-info-systems",
                 )

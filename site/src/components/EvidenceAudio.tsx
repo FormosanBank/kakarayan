@@ -1,5 +1,6 @@
 import {useState, type SyntheticEvent} from "react";
 
+import {trustedAudioUrl} from "../audioUrls";
 import {useI18n} from "../i18n";
 import type {SearchRecord} from "../types";
 
@@ -12,18 +13,11 @@ type PlaybackCandidate = {
 };
 
 const TIME_TOLERANCE_SECONDS = 0.05;
+// The mirror and source copies of one clip; a record cannot drive a longer request series.
+const MAX_CANDIDATES = 3;
 
 function nonNegative(value: number | null): number | null {
   return value !== null && Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function publicUrl(value: string): string | null {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
-  } catch {
-    return null;
-  }
 }
 
 function addCandidate(
@@ -33,8 +27,8 @@ function addCandidate(
   start: number,
   end: number | null,
 ) {
-  const url = publicUrl(value);
-  if (!url || seen.has(url)) return;
+  const url = trustedAudioUrl(value);
+  if (!url || seen.has(url) || candidates.length >= MAX_CANDIDATES) return;
   seen.add(url);
   candidates.push({end, start, url});
 }

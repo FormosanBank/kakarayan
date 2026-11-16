@@ -59,10 +59,10 @@ describe("learner request and draft safety", () => {
     ));
   }
   function pending() {
-    let complete: (value: {text: string; metadata: string}) => void = () => undefined;
-    const promise = new Promise<{text: string; metadata: string}>((resolve) => { complete = resolve; });
+    let complete: (value: {text: string}) => void = () => undefined;
+    const promise = new Promise<{text: string}>((resolve) => { complete = resolve; });
     vi.mocked(translate).mockReturnValueOnce(promise);
-    return () => complete({text: "lima", metadata: "Fixture"});
+    return () => complete({text: "lima"});
   }
 
   it("discards late responses after language or input changes and resets consent", async () => {
@@ -81,7 +81,7 @@ describe("learner request and draft safety", () => {
   it("saves the submitted context and preserves the draft when storage fails", async () => {
     await render();
     await enter("five");
-    vi.mocked(translate).mockResolvedValueOnce({text: "lima", metadata: "Fixture"});
+    vi.mocked(translate).mockResolvedValueOnce({text: "lima"});
     await submit();
     vi.mocked(saveCard).mockRejectedValueOnce(new Error("quota"));
     const save = [...container.querySelectorAll("button")].find((item) => item.textContent?.includes("Save as"));

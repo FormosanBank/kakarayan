@@ -10,6 +10,7 @@ vi.mock("@gradio/client", () => ({
 
 import {
   closeModelServiceConnections,
+  forgetModelRunHistory,
   transcribe,
   translate,
   type ServiceStage,
@@ -69,18 +70,17 @@ describe("public model adapters", () => {
     gradio.handleFile.mockClear();
   });
 
-  it("maps successful translation data and lifecycle stages", async () => {
+  it("keeps only the translation, not the service's own attribution", async () => {
     const mock = service([
       {type: "status", stage: "pending", position: 1},
       {type: "status", stage: "generating"},
-      {type: "data", data: ["lima", "model metadata"]},
+      {type: "data", data: ["lima", "reviewed by FormosanBank staff · CC0"]},
     ]);
     gradio.connect.mockResolvedValue(mock.client);
     const run = options();
 
     await expect(translate(request, translationService, run.value)).resolves.toEqual({
       text: "lima",
-      metadata: "model metadata",
     });
     expect(run.stages.map(([stage]) => stage)).toEqual([
       "connecting",
@@ -186,6 +186,37 @@ describe("public model adapters", () => {
     );
   });
 
+  it("sends model services only the consented input", async () => {
+    window.history.replaceState(null, "", "/learn?tool=practice&q=private%20search&evil=1#top");
+    let submittedSearch = "unset";
+    const mock = service([{type: "data", data: ["fangcalay"]}]);
+    mock.submit.mockImplementation(() => {
+      submittedSearch = window.location.search;
+      return {cancel: vi.fn(), async *[Symbol.asyncIterator]() { yield {type: "data", data: ["fangcalay"]}; }};
+    });
+    gradio.connect.mockResolvedValue(mock.client);
+    const audio = new File(["audio"], "my private note.wav", {type: "audio/wav"});
+
+    await transcribe("Amis", audio, asrService, options().value);
+    expect(gradio.connect).toHaveBeenCalledWith(asrService.space, expect.objectContaining({record_history: false}));
+    expect(submittedSearch).toBe("");
+    expect(`${window.location.pathname}${window.location.search}${window.location.hash}`)
+      .toBe("/learn?tool=practice&q=private%20search&evil=1#top");
+    const uploaded = gradio.handleFile.mock.calls.at(-1)?.[0];
+    expect(uploaded).not.toBeInstanceOf(File);
+    expect(uploaded?.type).toBe("audio/wav");
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("forgets run records earlier versions let the client keep", () => {
+    localStorage.setItem("gradio:run-history:v2:asr-app-1", "[{\"inputs\":[\"private\"]}]");
+    localStorage.setItem("gradio:run-history:replay:v2:x", "[]");
+    localStorage.setItem("kakarayan-locale", "en");
+    forgetModelRunHistory();
+    expect(Object.keys(localStorage)).toEqual(["kakarayan-locale"]);
+    localStorage.clear();
+  });
+
   it("maps ASR output and refuses oversized audio before upload", async () => {
     const mock = service([{type: "data", data: ["fangcalay", "asr metadata"]}]);
     gradio.connect.mockResolvedValue(mock.client);
@@ -193,9 +224,8 @@ describe("public model adapters", () => {
 
     await expect(transcribe("Amis", audio, asrService, options().value)).resolves.toEqual({
       text: "fangcalay",
-      metadata: "asr metadata",
     });
-    expect(gradio.handleFile).toHaveBeenCalledWith(audio);
+    expect(gradio.handleFile).toHaveBeenCalledWith(expect.any(Blob));
     expect(mock.submit).toHaveBeenCalledWith(
       "/transcribe",
       expect.objectContaining({language_name: "Amis"}),

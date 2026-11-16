@@ -92,7 +92,7 @@ describe("translation progress", () => {
       return new Promise((resolve) => {
         finish = () => {
           options.onStage("complete");
-          resolve({text: "lima", metadata: ""});
+          resolve({text: "lima"});
         };
       });
     });
