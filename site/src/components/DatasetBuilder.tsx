@@ -112,7 +112,10 @@ export function DatasetBuilder({data, active = true}: {data: AppData; active?: b
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const value = pendingScope.current;
-      acceptedScope.current = datasetScopeToUrl(value).toString();
+      const next = datasetScopeToUrl(value).toString();
+      // Opening the page does not rewrite a clean URL with every default.
+      if (next === acceptedScope.current) return;
+      acceptedScope.current = next;
       setUrlParams(datasetScopeToUrl(value, currentParams.current.get("view") ?? "builder", currentParams.current));
     }, 300);
     return () => window.clearTimeout(timer);

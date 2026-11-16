@@ -1,4 +1,4 @@
-import {Component, useEffect, useRef, useState, type PropsWithChildren, type ReactNode} from "react";
+import {Component, lazy, Suspense, useEffect, useRef, useState, type PropsWithChildren, type ReactNode} from "react";
 
 import {Layout} from "./components/Layout";
 import {Diagnostics} from "./components/Diagnostics";
@@ -10,7 +10,6 @@ import {DOCS_BASE_URL} from "./docs";
 import {useI18n} from "./i18n";
 import {About} from "./pages/About";
 import {CorpusDetail, LanguageDetail} from "./pages/CatalogueDetail";
-import {Developers} from "./pages/Developers";
 import {Downloads} from "./pages/Downloads";
 import {Explore} from "./pages/Explore";
 import {Guide} from "./pages/Guide";
@@ -18,9 +17,12 @@ import {Home} from "./pages/Home";
 import {Learn} from "./pages/Learn";
 import {Lookup} from "./pages/Lookup";
 import {Models} from "./pages/Models";
-import {Research} from "./pages/Research";
 import {routeHref} from "./routePaths";
 import {Link, RoutingProvider, useRoutePath} from "./routing";
+
+// The specialist developer and dataset tools load on demand, keeping the learner pages fast.
+const Developers = lazy(() => import("./pages/Developers").then((page) => ({default: page.Developers})));
+const Research = lazy(() => import("./pages/Research").then((page) => ({default: page.Research})));
 
 function decodedId(value: string): string {
   try { return decodeURIComponent(value); } catch { return ""; }
@@ -179,7 +181,13 @@ function RouteContent({data}: {data: NonNullable<ReturnType<typeof useAppData>["
     previousPath.current = path;
   }, [path]);
   const page = route.page;
-  return <Layout data={data}><PageBoundary key={path}>{page}</PageBoundary></Layout>;
+  return (
+    <Layout data={data}>
+      <PageBoundary key={path}>
+        <Suspense fallback={<LoadingState kind="page" label={t("common.loading")} />}>{page}</Suspense>
+      </PageBoundary>
+    </Layout>
+  );
 }
 
 class PageBoundary extends Component<PropsWithChildren, {failed: boolean}> {
